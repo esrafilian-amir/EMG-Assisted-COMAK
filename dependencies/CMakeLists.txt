@@ -3,13 +3,9 @@
 # OpenSim does not use this file directly.
 
 # We require a version of CMake that supports Visual Studio 2015.
-<<<<<<< HEAD
-cmake_minimum_required(VERSION 3.12)
-=======
 cmake_minimum_required(VERSION 3.5)
 
 project(OpenSimDependencies)
->>>>>>> upstream/main
 
 include(ExternalProject)
 include(CMakeParseArguments)
@@ -207,7 +203,6 @@ AddDependency(NAME       spdlog
                          -DSPDLOG_BUILD_EXAMPLE:BOOL=OFF
                          -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON)
 
-<<<<<<< HEAD
 AddDependency(NAME hdf5
               DEFAULT ON
               GIT_URL https://github.com/HDFGroup/hdf5.git
@@ -217,13 +212,11 @@ AddDependency(NAME hdf5
                          -DHDF5_CPP_LIB:BOOL=ON
                          -DHDF5_BUILD_EXAMPLES:BOOL=OFF
                          -DHDF5_BUILD_TOOLS:BOOL=OFF)
-=======
 AddDependency(NAME       catch2
               DEFAULT    ON
               GIT_URL    https://github.com/catchorg/Catch2.git
               GIT_TAG    v3.5.0)
 
->>>>>>> upstream/main
 # Moco settings.
 # --------------
 option(OPENSIM_WITH_CASADI
