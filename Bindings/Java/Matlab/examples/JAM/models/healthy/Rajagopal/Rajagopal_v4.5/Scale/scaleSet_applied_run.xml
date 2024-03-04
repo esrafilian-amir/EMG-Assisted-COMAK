@@ -18,6 +18,31 @@
 				<apply>true</apply>
 			</Scale>
 			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>tibia_prox_r</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>med_cond_r</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>lat_cond_r</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>tibial_plat_r</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>tibial_plat_r_geom_frame_1</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
 				<scales> 1.0727245170042216671 1.0727245170042216671 1.0727245170042216671</scales>
 				<segment>tibia_r</segment>
 				<apply>true</apply>
@@ -45,6 +70,31 @@
 			<Scale>
 				<scales> 1.1089045059995883413 1.1089045059995883413 1.1089045059995883413</scales>
 				<segment>femur_l</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>tibia_prox_l</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>med_cond_l</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>lat_cond_l</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>tibial_plat_l</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>tibial_plat_l_geom_frame_1</segment>
 				<apply>true</apply>
 			</Scale>
 			<Scale>
@@ -144,6 +194,46 @@
 			</Scale>
 			<Scale>
 				<scales> 1 1 1</scales>
+				<segment>tibia_prox_r_offset</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>tibia_prox_r_offset</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>med_cond_r_offset</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>tibia_prox_r_offset</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>lat_cond_r_offset</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>med_cond_r_offset</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>tibial_plat_r_offset</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>tibial_plat_r_offset</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
 				<segment>tibia_r_offset</segment>
 				<apply>true</apply>
 			</Scale>
@@ -159,7 +249,7 @@
 			</Scale>
 			<Scale>
 				<scales> 1 1 1</scales>
-				<segment>tibia_r_offset</segment>
+				<segment>tibia_prox_r_offset</segment>
 				<apply>true</apply>
 			</Scale>
 			<Scale>
@@ -200,6 +290,46 @@
 			<Scale>
 				<scales> 1 1 1</scales>
 				<segment>femur_l_offset</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>tibia_prox_l_offset</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>tibia_prox_l_offset</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>med_cond_l_offset</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>tibia_prox_l_offset</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>lat_cond_l_offset</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>med_cond_l_offset</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>tibial_plat_l_offset</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>tibial_plat_l_offset</segment>
 				<apply>true</apply>
 			</Scale>
 			<Scale>
@@ -335,6 +465,11 @@
 			<Scale>
 				<scales> 1 1 1</scales>
 				<segment>hand_l_offset</segment>
+				<apply>true</apply>
+			</Scale>
+			<Scale>
+				<scales> 1 1 1</scales>
+				<segment>lat_cond_r_offset</segment>
 				<apply>true</apply>
 			</Scale>
 		</objects>

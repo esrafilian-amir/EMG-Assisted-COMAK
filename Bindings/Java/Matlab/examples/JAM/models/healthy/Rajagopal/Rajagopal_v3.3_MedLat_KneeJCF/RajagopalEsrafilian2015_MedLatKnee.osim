@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <OpenSimDocument Version="30000">
-	<Model name="FullBodyModel_MuscleActuatedLowerLimb_TorqueActuatedUpperBody">
+	<Model name="RajagopalEsrafilian2015_MedLatKnee">
 		<defaults>
 			<ControlLinear name="default">
 				<is_model_control>true</is_model_control>
@@ -1147,11 +1147,11 @@
 					</WrapObjectSet>
 				</Body>
 				<Body name="tibia_prox_r">
-					<mass>3.7075</mass>
-					<mass_center> 0 -0.1867 0</mass_center>
-					<inertia_xx>0.0504</inertia_xx>
-					<inertia_yy>0.0051</inertia_yy>
-					<inertia_zz>0.0511</inertia_zz>
+					<mass>0</mass>
+					<mass_center> 0 0 0</mass_center>
+					<inertia_xx>0</inertia_xx>
+					<inertia_yy>0</inertia_yy>
+					<inertia_zz>0</inertia_zz>
 					<inertia_xy>0</inertia_xy>
 					<inertia_xz>0</inertia_xz>
 					<inertia_yz>0</inertia_yz>
@@ -1882,11 +1882,11 @@
 					</WrapObjectSet>
 				</Body>
 				<Body name="tibia_r">
-					<mass>0</mass>
-					<mass_center> 0 0 0</mass_center>
-					<inertia_xx>0</inertia_xx>
-					<inertia_yy>0</inertia_yy>
-					<inertia_zz>0</inertia_zz>
+					<mass>3.7075</mass>
+					<mass_center> 0 -0.1867 0</mass_center>
+					<inertia_xx>0.0504</inertia_xx>
+					<inertia_yy>0.0051</inertia_yy>
+					<inertia_zz>0.0511</inertia_zz>
 					<inertia_xy>0</inertia_xy>
 					<inertia_xz>0</inertia_xz>
 					<inertia_yz>0</inertia_yz>
@@ -2788,11 +2788,11 @@
 					</WrapObjectSet>
 				</Body>
 				<Body name="tibia_prox_l">
-					<mass>3.7075</mass>
-					<mass_center> 0 -0.1867 0</mass_center>
-					<inertia_xx>0.0504</inertia_xx>
-					<inertia_yy>0.0051</inertia_yy>
-					<inertia_zz>0.0511</inertia_zz>
+					<mass>0</mass>
+					<mass_center> 0 0 0</mass_center>
+					<inertia_xx>0</inertia_xx>
+					<inertia_yy>0</inertia_yy>
+					<inertia_zz>0</inertia_zz>
 					<inertia_xy>0</inertia_xy>
 					<inertia_xz>0</inertia_xz>
 					<inertia_yz>0</inertia_yz>
@@ -3523,11 +3523,11 @@
 					</WrapObjectSet>
 				</Body>
 				<Body name="tibia_l">
-					<mass>0</mass>
-					<mass_center> 0 0 0</mass_center>
-					<inertia_xx>0</inertia_xx>
-					<inertia_yy>0</inertia_yy>
-					<inertia_zz>0</inertia_zz>
+					<mass>3.7075</mass>
+					<mass_center> 0 -0.1867 0</mass_center>
+					<inertia_xx>0.0504</inertia_xx>
+					<inertia_yy>0.0051</inertia_yy>
+					<inertia_zz>0.0511</inertia_zz>
 					<inertia_xy>0</inertia_xy>
 					<inertia_xz>0</inertia_xz>
 					<inertia_yz>0</inertia_yz>
