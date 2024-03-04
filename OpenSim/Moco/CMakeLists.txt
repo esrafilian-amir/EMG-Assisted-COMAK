@@ -34,6 +34,8 @@ set(MOCO_SOURCES
         MocoGoal/MocoSumSquaredStateGoal.cpp
         MocoGoal/MocoContactTrackingGoal.cpp
         MocoGoal/MocoContactTrackingGoal.h
+        MocoGoal/MocoContactImpulseTrackingGoal.cpp
+        MocoGoal/MocoContactImpulseTrackingGoal.h
         MocoGoal/MocoControlGoal.h
         MocoGoal/MocoControlGoal.cpp
         MocoGoal/MocoControlTrackingGoal.h
@@ -118,6 +120,10 @@ if(OPENSIM_WITH_CASADI)
             MocoCasADiSolver/CasOCTrapezoidal.cpp
             MocoCasADiSolver/CasOCHermiteSimpson.h
             MocoCasADiSolver/CasOCHermiteSimpson.cpp
+            MocoCasADiSolver/CasOCLegendreGauss.h
+            MocoCasADiSolver/CasOCLegendreGauss.cpp
+            MocoCasADiSolver/CasOCLegendreGaussRadau.h
+            MocoCasADiSolver/CasOCLegendreGaussRadau.cpp
             MocoCasADiSolver/CasOCIterate.h
             MocoCasADiSolver/MocoCasOCProblem.h
             MocoCasADiSolver/MocoCasOCProblem.cpp

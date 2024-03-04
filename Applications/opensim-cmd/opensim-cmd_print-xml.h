@@ -65,7 +65,7 @@ Description:
 
   The template file is written to <output-file> if provided. Otherwise, the
   file is written to the current directory with the name
-  `default_Setup_<tool-class-name>.xml` when given a Tool name, or 
+  `default_Setup_<tool-class-name>.xml` when given a Tool name, or
   `default_<class-name>.xml` otherwise.
 
   You can run a Tool setup file with `opensim-cmd run-tool`.
@@ -73,7 +73,7 @@ Description:
 Examples:
   opensim-cmd print-xml cmc
   opensim-cmd print-xml Analyze
-  opensim-cmd print-xml Millard2012EquilibriumMuscle 
+  opensim-cmd print-xml Millard2012EquilibriumMuscle
 )";
 
 int print_xml(int argc, const char** argv) {

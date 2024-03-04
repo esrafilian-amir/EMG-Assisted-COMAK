@@ -1,306 +1,132 @@
-OpenSim Core
-============
-![continuous-integration](https://github.com/opensim-org/opensim-core/workflows/continuous-integration/badge.svg)[![ZenHub][zenhub_image]][zenhub]
+<!-- OpenSim Logo -->
+<p align=center>
+    <a href="https://opensim.stanford.edu/">
+        <img src="https://drive.google.com/uc?id=1urYfucgR4pCM5OeXySMBVc3i5oGfYRAf" alt="OpenSim Logo">
+</p>
 
-**NOTE: This repository cannot be used to build OpenSim 3.x or earlier. For OpenSim 3.x, see [here](http://simtk-confluence.stanford.edu:8080/display/OpenSim/Building+OpenSim+from+Source).**
+<!-- Badges -->
+<p align=center>
+    <a href="https://github.com/opensim-org/opensim-core/actions">
+        <img src="https://github.com/opensim-org/opensim-core/workflows/continuous-integration/badge.svg" alt="Continuous Integration Badge">
+    </a>
+    <a href="https://github.com/opensim-org/opensim-core/releases">
+        <img src="https://img.shields.io/github/v/release/opensim-org/opensim-core?include_prereleases" alt="Releases Badge">
+    </a>
+    <a href="https://github.com/opensim-org/opensim-core/blob/master/LICENSE.txt">
+        <img src="https://img.shields.io/hexpm/l/apa" alt="License Badge">
+    </a>
+    <a href="https://github.com/opensim-org/opensim-core/wiki/Build-Instructions">
+        <img src="https://img.shields.io/badge/platform-windows%20%7C%20macos%20%7C%20linux-lightgrey" alt="Supported Platforms Badge">
+    </a>
+    <a href="https://github.com/opensim-org/opensim-core/graphs/contributors">
+        <img src="https://img.shields.io/github/contributors/opensim-org/opensim-core" alt="ZenHub Badge">
+    </a>
+    <a href="https://zenhub.com">
+        <img src="https://img.shields.io/badge/Shipping%20faster%20with-ZenHub-blueviolet" alt="ZenHub Badge">
+    </a>
+</p>
 
-OpenSim is software that lets users develop models of musculoskeletal
-structures and create dynamic simulations of movement, such as this one:
+---
 
-![Simulation of human running by Sam Hamner (doi:
-10.1016/j.jbiomech.2010.06.025)][running_gif]
+**NOTE: This repository contains the source code of OpenSim 4.x. For OpenSim 3.x or earlier, see [this link](https://simtk-confluence.stanford.edu/display/OpenSim/Building+OpenSim+from+Source).**
+
+OpenSim is software that lets users develop models of musculoskeletal structures and create dynamic simulations of movement, such as this one:
+
+<!-- OpenSim Simulation -->
+<p align="center">
+    <img src="doc/images/opensim_running.gif" alt=Simulation of human running by Sam Hamner (doi:10.1016/j.jbiomech.2010.06.025)¨>
+</p>
 
 More information can be found at our websites:
 
-* [OpenSim website](http://opensim.stanford.edu); in particular, the [support
-  page](http://opensim.stanford.edu/support/index.html).
-* [SimTK project website](https://simtk.org/home/opensim)
+* [OpenSim website](http://opensim.stanford.edu), in particular the [support page](http://opensim.stanford.edu/support/index.html).
+* [SimTK project website](https://simtk.org/home/opensim).
 
-This repository contains the source code for OpenSim's C++ libraries, C++
-examples, command-line applications (inverse kinematics, computed muscle
-control, etc.), and Java and Python wrapping. This repository does *not*
-include source code for the OpenSim GUI.
+This repository contains:
 
-
-Table of contents
------------------
-- [Simple Example](#simple-example)
-- [Building from the source code](#building-from-the-source-code)
-  - [On Windows using Microsoft Visual Studio](#on-windows-using-visual-studio).
-  - [On Mac OSX using Xcode](#on-mac-osx-using-xcode).
-  - [On Ubuntu using Unix Makefiles](#on-ubuntu-using-unix-makefiles).
-
-
-Simple example
---------------
-Let's simulate a simple arm whose elbow is actuated by a muscle, using
-the C++ interface 
-
-<details open>
-<summary>C++</summary>
-
-```cpp
-#include <OpenSim/OpenSim.h>
-using namespace SimTK;
-using namespace OpenSim;
-
-int main() {
-    Model model;
-    model.setName("bicep_curl");
-    model.setUseVisualizer(true);
-
-    // Create two links, each with a mass of 1 kg, center of mass at the body's
-    // origin, and moments and products of inertia corresponding to an
-    // ellipsoid with radii of 0.1, 0.5 and 0.1, in the x, y and z directions,
-    // respectively.
-    OpenSim::Body* humerus = new OpenSim::Body(
-        "humerus", 1.0, Vec3(0), Inertia(0.052, 0.004, 0.052));
-    OpenSim::Body* radius  = new OpenSim::Body(
-        "radius",  1.0, Vec3(0), Inertia(0.052, 0.004, 0.052));
-
-    // Connect the bodies with pin joints. Assume each body is 1 m long.
-    PinJoint* shoulder = new PinJoint("shoulder",
-            // Parent body, location in parent, orientation in parent.
-            model.getGround(), Vec3(0), Vec3(0),
-            // Child body, location in child, orientation in child.
-            *humerus, Vec3(0, 0.5, 0), Vec3(0));
-    PinJoint* elbow = new PinJoint("elbow",
-            *humerus, Vec3(0, -0.5, 0), Vec3(0),
-            *radius, Vec3(0, 0.5, 0), Vec3(0));
-
-    // Add a muscle that flexes the elbow.
-    Millard2012EquilibriumMuscle* biceps = new
-        Millard2012EquilibriumMuscle("biceps", 200, 0.6, 0.55, 0);
-    biceps->addNewPathPoint("origin",    *humerus, Vec3(0, 0.3, 0));
-    biceps->addNewPathPoint("insertion", *radius,  Vec3(0, 0.2, 0));
-
-    // Add a controller that specifies the excitation of the muscle.
-    PrescribedController* brain = new PrescribedController();
-    brain->addActuator(*biceps);
-    // Muscle excitation is 0.3 for the first 0.5 seconds, then increases to 1.
-    brain->prescribeControlForActuator("biceps",
-            new StepFunction(0.5, 3, 0.3, 1));
-
-    // Add components to the model.
-    model.addBody(humerus);    model.addBody(radius);
-    model.addJoint(shoulder);  model.addJoint(elbow);
-    model.addForce(biceps);
-    model.addController(brain);
-
-    // Add a console reporter to print the muscle fiber force and elbow angle.
-    ConsoleReporter* reporter = new ConsoleReporter();
-    reporter->set_report_time_interval(1.0);
-    reporter->addToReport(biceps->getOutput("fiber_force"));
-    reporter->addToReport(
-        elbow->getCoordinate(PinJoint::Coord::RotationZ).getOutput("value"),
-        "elbow_angle");
-    model.addComponent(reporter);
-
-    // Add display geometry.
-    Ellipsoid bodyGeometry(0.1, 0.5, 0.1);
-    bodyGeometry.setColor(Gray);
-    // Attach an ellipsoid to a frame located at the center of each body.
-    PhysicalOffsetFrame* humerusCenter = new PhysicalOffsetFrame(
-        "humerusCenter", *humerus, Transform(Vec3(0)));
-    humerus->addComponent(humerusCenter);
-    humerusCenter->attachGeometry(bodyGeometry.clone());
-    PhysicalOffsetFrame* radiusCenter = new PhysicalOffsetFrame(
-        "radiusCenter", *radius, Transform(Vec3(0)));
-    radius->addComponent(radiusCenter);
-    radiusCenter->attachGeometry(bodyGeometry.clone());
-
-    // Configure the model.
-    State& state = model.initSystem();
-    // Fix the shoulder at its default angle and begin with the elbow flexed.
-    shoulder->getCoordinate().setLocked(state, true);
-    elbow->getCoordinate().setValue(state, 0.5 * Pi);
-    model.equilibrateMuscles(state);
-
-    // Configure the visualizer.
-    model.updMatterSubsystem().setShowDefaultGeometry(true);
-    Visualizer& viz = model.updVisualizer().updSimbodyVisualizer();
-    viz.setBackgroundType(viz.SolidColor);
-    viz.setBackgroundColor(White);
-
-    // Simulate.
-    simulate(model, state, 5.0);
-
-    return 0;
-};
-```
-</details>
-
-
-This code produces the following animation:
-
-![Simulation of an arm actuated by a muscle][simple_example_gif]
-
-and prints the following information to the console:
-```
-[reporter]
-              | /forceset/bice|               |
-          time| ps|fiber_force|    elbow_angle|
---------------| --------------| --------------|
-           0.0|     0.59048448|      1.5707963|
-           1.0|      24.574034|     0.91820573|
-           2.0|      21.418144|      1.4289945|
-           3.0|      17.584893|      1.5105765|
-           4.0|      17.688588|      1.5090021|
-           5.0|      17.590774|      1.5067387| 
-```
-
-Expand to see Python and Matlab versions of the above example example:
-
-<details>
-<summary>Python</summary>
+ - OpenSim's C++ libraries.
+ - OpenSim's C++ examples.
+ - OpenSim's command-line applications (inverse kinematics, computed muscle control, etc.).
+ - OpenSim's Java and Python bindings.
  
-```py
-import opensim as osim 
+This repository does *not* include source code for the OpenSim GUI. The source code for the Opensim GUI can be found [here](https://github.com/opensim-org/opensim-gui).
 
-arm = osim.Model()
-arm.setName("bicep_curl")
-arm.setUseVisualizer(True)
+## Download and Setup
 
-# ---------------------------------------------------------------------------
-# Create two links, each with a mass of 1 kg, center of mass at the body's
-# origin, and moments and products of inertia corresponding to an ellipsoid
-# with radii of 0.1, 0.5 and 0.1, in the x, y and z directions, respectively.
-# ---------------------------------------------------------------------------
+Depending on your needs, there are different ways of downloading and setting up OpenSim:
 
-humerus = osim.Body("humerus",
-                    1.0,
-                    osim.Vec3(0),
-                    osim.Inertia(0.052, 0.004, 0.052))
-radius = osim.Body("radius",
-                   1.0,
-                   osim.Vec3(0),
-                   osim.Inertia(0.052, 0.004, 0.052))
+- **OpenSim GUI**
+  - [Download page](https://simtk.org/frs/?group_id=91)
+  - [Scripting in the GUI](https://simtk-confluence.stanford.edu/display/OpenSim/Scripting+in+the+GUI)
+- **Matlab and Python Scripting**
+  - [Setup Instructions](https://simtk-confluence.stanford.edu/display/OpenSim/Scripting)
+- **Scripting in Conda**
+  - [Conda Package](https://anaconda.org/opensim-org/opensim)
+  - [Source Code](https://github.com/opensim-org/conda-opensim)
+  - [More Info](https://simtk-confluence.stanford.edu/display/OpenSim/Conda+Package)
+- **C++ Development**
+  - [Build Instructions](https://github.com/opensim-org/opensim-core/wiki/Build-Instructions) for Windows, macOS, and Linux (Ubuntu and Debian).
+  - [Developer's Guide](https://simtk-confluence.stanford.edu/display/OpenSim/Developer%27s+Guide)
+  - [API Reference](https://simtk.org/api_docs/opensim/api_docs)
+- **Looking for help?**
+  - [Ask a question](https://simtk.org/plugins/phpBB/indexPhpbb.php?group_id=91&pluginname=phpBB)
+  - [Submit an Issue](https://github.com/opensim-org/opensim-core/issues)
 
-# ---------------------------------------------------------------------------
-# Connect the bodies with pin joints. Assume each body is 1m long.
-# ---------------------------------------------------------------------------
+## Documentation
 
-shoulder = osim.PinJoint("shoulder",
-                         arm.getGround(), # PhysicalFrame
-                         osim.Vec3(0),
-                         osim.Vec3(0),
-                         humerus, # PhysicalFrame
-                         osim.Vec3(0, 0.5, 0),
-                         osim.Vec3(0))
+OpenSim's documentation can be found in our [Documentation](https://simtk-confluence.stanford.edu/display/OpenSim/Documentation) website. 
+OpenSim's C++ API reference can be found [here](https://simtk.org/api_docs/opensim/api_docs/).
 
-elbow = osim.PinJoint("elbow",
-                      humerus, # PhysicalFrame
-                      osim.Vec3(0, -0.5, 0),
-                      osim.Vec3(0),
-                      radius, # PhysicalFrame
-                      osim.Vec3(0, 0.5, 0),
-                      osim.Vec3(0))
+A simple example of an elbow simulation in C++, Python and Matlab can be found in the [OpenSim API Example](https://github.com/opensim-org/opensim-core/wiki/OpenSim-API-Example) page of this repository's wiki.
 
-# ---------------------------------------------------------------------------
-# Add a muscle that flexes the elbow (actuator for robotics people).
-# ---------------------------------------------------------------------------
+Examples and Tutorials for OpenSim can be found in the [Examples and tutorials](https://simtk-confluence.stanford.edu/display/OpenSim/Examples+and+Tutorials) website. These tutorials move from introductory to more advanced, so you can learn OpenSim in a progressive way. Additional OpenSim-based tutorials, homework problems, and project ideas are available on the [Biomechanics of Movement classroom site](https://simtk-confluence-homeworks.stanford.edu/pages/viewpage.action?pageId=5537857). 
 
-biceps = osim.Millard2012EquilibriumMuscle("biceps",  # Muscle name
-                                           100.0,  # Max isometric force
-                                           0.6,  # Optimal fibre length
-                                           0.55,  # Tendon slack length
-                                           0.0)  # Pennation angle
-biceps.addNewPathPoint("origin",
-                       humerus,
-                       osim.Vec3(0, 0.3, 0))
+## Releases [![GitHub release (latest by date including pre-releases)](https://img.shields.io/github/v/release/opensim-org/opensim-core?include_prereleases)](https://github.com/opensim-org/opensim-core/releases)
 
-biceps.addNewPathPoint("insertion",
-                       radius,
-                       osim.Vec3(0, 0.2, 0))
+This repository contains releases for OpenSim 4.x. You can find all of the OpenSim's releases in the [Releases](https://github.com/opensim-org/opensim-core/releases) page of this repository.
 
-# ---------------------------------------------------------------------------
-# Add a controller that specifies the excitation of the muscle.
-# ---------------------------------------------------------------------------
+## Build instructions [![platforms](https://img.shields.io/badge/platform-windows%20%7C%20macos%20%7C%20linux-lightgrey)](https://github.com/opensim-org/opensim-core/wiki/Build-Instructions)
 
-brain = osim.PrescribedController()
-brain.addActuator(biceps)
-brain.prescribeControlForActuator("biceps",
-                                  osim.StepFunction(0.5, 3.0, 0.3, 1.0))
+We provide scripts to build OpenSim on Windows, macOS and Linux (Ubuntu and Debian). The instructions to download and execute the scripts can be found in the [Build Instructions](https://github.com/opensim-org/opensim-core/wiki/Build-Instructions) page of this repository's wiki.
 
-# ---------------------------------------------------------------------------
-# Build model with components created above.
-# ---------------------------------------------------------------------------
+## Contribute [![GitHub contributors](https://img.shields.io/github/contributors/opensim-org/opensim-core)](https://github.com/opensim-org/opensim-core/graphs/contributors)
 
-arm.addBody(humerus)
-arm.addBody(radius)
-arm.addJoint(shoulder) # Now required in OpenSim4.0
-arm.addJoint(elbow)
-arm.addForce(biceps)
-arm.addController(brain)
+There are many ways in which you can participate in this project. For example:
 
-# ---------------------------------------------------------------------------
-# Add a console reporter to print the muscle fibre force and elbow angle.
-# ---------------------------------------------------------------------------
+ - Report bugs and request features by submitting a [GitHub Issue](https://github.com/opensim-org/opensim-core/issues).
+ - Ask and answer questions on our [Forum](https://simtk.org/plugins/phpBB/indexPhpbb.php?group_id=91&pluginname=phpBB).
+ - Review and test new [Pull Requests](https://github.com/opensim-org/opensim-core/pulls).
+ - Review the [Documentation](https://simtk-confluence.stanford.edu:8443/display/OpenSim/Documentation) and the [Wiki](https://github.com/opensim-org/opensim-core/wiki) by reporting typos, confusing explanations and adding/suggesting new content.
+ - Fix bugs and contribute to OpenSim's source code by creating a [Pull Requests](https://github.com/opensim-org/opensim-core/pulls).
 
-# We want to write our simulation results to the console.
-reporter = osim.ConsoleReporter()
-reporter.set_report_time_interval(1.0)
-reporter.addToReport(biceps.getOutput("fiber_force"))
-elbow_coord = elbow.getCoordinate().getOutput("value")
-reporter.addToReport(elbow_coord, "elbow_angle")
-arm.addComponent(reporter)
+Please, read our [Developer's guide](https://simtk-confluence.stanford.edu:8443/display/OpenSim/Developer%27s+Guide), [Developer's Guidelines](https://github.com/opensim-org/opensim-core/blob/master/DEVELOPING.md) and our [Code of Conduct](https://github.com/opensim-org/opensim-core/blob/master/CODE_OF_CONDUCT.md) before making a pull request. 
 
-# ---------------------------------------------------------------------------
-# Add display geometry. 
-# ---------------------------------------------------------------------------
+## License [![License](https://img.shields.io/hexpm/l/apa)](https://github.com/opensim-org/opensim-core/blob/master/LICENSE.txt)
 
-bodyGeometry = osim.Ellipsoid(0.1, 0.5, 0.1)
-bodyGeometry.setColor(osim.Vec3(0.5)) # Gray
-humerusCenter = osim.PhysicalOffsetFrame()
-humerusCenter.setName("humerusCenter")
-humerusCenter.setParentFrame(humerus)
-humerusCenter.setOffsetTransform(osim.Transform(osim.Vec3(0)))
-humerus.addComponent(humerusCenter)
-humerusCenter.attachGeometry(bodyGeometry.clone())
+Licensed under the Apache License, Version 2.0.  See the full text of the [Apache License, Version 2.0](https://github.com/opensim-org/opensim-core/blob/master/LICENSE.txt) for more information. This license makes OpenSim suitable for commercial, government, academic, and personal use. 
 
-radiusCenter = osim.PhysicalOffsetFrame()
-radiusCenter.setName("radiusCenter")
-radiusCenter.setParentFrame(radius)
-radiusCenter.setOffsetTransform(osim.Transform(osim.Vec3(0)))
-radius.addComponent(radiusCenter)
-radiusCenter.attachGeometry(bodyGeometry.clone())
+Third-party components have their own licenses. see our [Notice](https://github.com/opensim-org/opensim-core/blob/master/NOTICE), and [Acknowledgements](https://simtk-confluence.stanford.edu:8443/display/OpenSim/Acknowledgements) webpages for more information.
 
-# ---------------------------------------------------------------------------
-# Configure the model.
-# ---------------------------------------------------------------------------
+### How to acknowledge us
 
-state = arm.initSystem()
-# Fix the shoulder at its default angle and begin with the elbow flexed.
-shoulder.getCoordinate().setLocked(state, True)
-elbow.getCoordinate().setValue(state, 0.5 * osim.SimTK_PI)
-arm.equilibrateMuscles(state)
+Acknowledging the OpenSim project helps us and helps you. It allows us to track our impact, which is essential for securing funding to improve the software and provide support to our users (you). If you use OpenSim, we would be extremely grateful if you acknowledge us by citing the following paper:
 
-# ---------------------------------------------------------------------------
-# Configure the visualizer.
-# ---------------------------------------------------------------------------
+> Seth A, Hicks JL, Uchida TK, Habib A, Dembia CL, et al. (2018) **OpenSim: Simulating musculoskeletal dynamics and neuromuscular control to study human and animal movement.** _PLOS Computational Biology_ 14(7): e1006223. https://doi.org/10.1371/journal.pcbi.1006223
 
-viz = arm.updVisualizer().updSimbodyVisualizer()
-viz.setBackgroundColor(osim.Vec3(0)) # white
-viz.setGroundHeight(-2)
+If you use plugins, models, or other components contributed by your fellow researchers, you must acknowledge their work as described in the license that accompanies each of these files.
 
-# ---------------------------------------------------------------------------
-# Simulate.
-# ---------------------------------------------------------------------------
 
-manager = osim.Manager(arm)
-state.setTime(0)
-manager.initialize(state)
-state = manager.integrate(5.0)
-```
+## Funding
 
-</details>
-<details>
-<summary>Matlab</summary>
+The OpenSim project is currently supported by the following:
+ - United States National Institutes of Health (NIH)
+    - [Mobilize Center](https://mobilize.stanford.edu/) (P41 EB027060)
+    - [Restore Center](https://restore.stanford.edu/) (P2C HD101913)
+ - [Wu Tsai Human Performance Alliance](https://humanperformancealliance.org/)
 
-``` Matlab
-%% Import Java libraries
-import org.opensim.modeling.*
+Past funding includes the following grants and contracts:
 
+<<<<<<< HEAD
 arm = Model();
 arm.setName('bicep_curl');
 arm.setUseVisualizer(true);
@@ -1216,3 +1042,11 @@ Example: If opensim_install is in your home directory:
 [running_gif]: doc/images/opensim_running.gif
 [simple_example_gif]: doc/images/opensim_double_pendulum_muscle.gif
 [java]: http://www.oracle.com/technetwork/java/javase/downloads/index.html
+=======
+ - United States National Institutes of Health (NIH)
+    - Simulation of Biological Structures (Simbios; U54 GM072970)
+    - Simulation in Rehabilitation Research (NCSRR; R24 HD065690, P2C HD065690)
+    - Mobilize Center (U54 EB020405)
+ - United States Defense Advanced Research Projects Agency (DARPA)
+    - Warrior Web (W911QX-12-C-0018)
+>>>>>>> upstream/main
