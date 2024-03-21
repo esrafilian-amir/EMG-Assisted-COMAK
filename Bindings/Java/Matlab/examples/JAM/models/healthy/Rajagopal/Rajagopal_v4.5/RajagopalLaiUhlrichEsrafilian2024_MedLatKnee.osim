@@ -4267,11 +4267,11 @@
 							<!--Names of the coordinates that serve as the independent variables         of the transform function.-->
 							<coordinates>knee_angle_r</coordinates>
 							<!--Rotation or translation axis for the transform.-->
-							<axis>0 0 1</axis>
+							<axis>0 0 -1</axis>
 							<!--Transform function of the generalized coordinates used to        represent the amount of displacement along a specified axis.-->
 							<PolynomialFunction name="function">
 								<!--Coefficients of a polynomial function, from highest to lowest order.Polynomial order is n-1, where n is the number of coefficients.-->
-								<coefficients>-0.00015904478788503811 0.001015149915669 -0.001817510974968 -2.6414266451992301e-05 7.7465635324718924e-07</coefficients>
+								<coefficients>0.00015904478788503811 -0.001015149915669 0.001817510974968 2.6414266451992301e-05 -7.7465635324718924e-07</coefficients>
 							</PolynomialFunction>
 						</TransformAxis>
 						<TransformAxis name="translation2">

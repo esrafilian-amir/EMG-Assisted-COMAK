@@ -81,4 +81,4 @@ RajagopalLaiUhlrichEsrafilian2024_MedLatKnee:
 	 X = -z;
 	 Y = y;
 	 Z = x;
-	 Thus, change rotaion axes acourdingly (knee flexion*=-1, set Z translation to -x).
+	 Thus, change rotaion axes acourdingly (knee rot 1 and 2 *=-1, set Z translation to -x).
