@@ -4209,7 +4209,7 @@
 							<!--Translational offset (in meters) of this frame's origin from the parent frame's origin, expressed in the parent frame.-->
 							<translation>-0.0044999999999999997 -0.40960000000000002 -0.00175</translation>
 							<!--Orientation offset (in radians) of this frame in its parent frame, expressed as a frame-fixed x-y-z rotation sequence.-->
-							<orientation>-1.64157 1.44618 1.5708</orientation>
+							<orientation>-0.0708    0.0000    0.1246</orientation>
 						</PhysicalOffsetFrame>
 						<PhysicalOffsetFrame name="tibia_prox_r_offset">
 							<!--The geometry used to display the axes of this Frame.-->
@@ -4222,9 +4222,9 @@
 							<!--Path to a Component that satisfies the Socket 'parent' of type C (description: The parent frame to this frame.).-->
 							<socket_parent>/bodyset/tibia_prox_r</socket_parent>
 							<!--Translational offset (in meters) of this frame's origin from the parent frame's origin, expressed in the parent frame.-->
-							<translation>-0.0080895399999999992 -0.0035347999999999998 -0.00148474</translation>
+							<translation>-0.0076   -0.0046   -0.0012</translation>
 							<!--Orientation offset (in radians) of this frame in its parent frame, expressed as a frame-fixed x-y-z rotation sequence.-->
-							<orientation>-1.64157 1.44618 1.5708</orientation>
+							<orientation>-0.0708    0.0000    0.1246</orientation>
 						</PhysicalOffsetFrame>
 					</frames>
 					<!--Defines how the child body moves with respect to the parent as a function of the generalized coordinates.-->
@@ -4234,17 +4234,17 @@
 							<!--Names of the coordinates that serve as the independent variables         of the transform function.-->
 							<coordinates>knee_angle_r</coordinates>
 							<!--Rotation or translation axis for the transform.-->
-							<axis>1 0 0</axis>
+							<axis>0 0 1</axis>
 							<!--Transform function of the generalized coordinates used to        represent the amount of displacement along a specified axis.-->
 							<LinearFunction name="function">
-								<coefficients> 1 0</coefficients>
+								<coefficients> -1 0</coefficients>
 							</LinearFunction>
 						</TransformAxis>
 						<TransformAxis name="rotation2">
 							<!--Names of the coordinates that serve as the independent variables         of the transform function.-->
 							<coordinates>knee_angle_r</coordinates>
 							<!--Rotation or translation axis for the transform.-->
-							<axis>0 0 1</axis>
+							<axis>1 0 0</axis>
 							<!--Transform function of the generalized coordinates used to        represent the amount of displacement along a specified axis.-->
 							<PolynomialFunction name="function">
 								<!--Coefficients of a polynomial function, from highest to lowest order.Polynomial order is n-1, where n is the number of coefficients.-->
@@ -4267,11 +4267,11 @@
 							<!--Names of the coordinates that serve as the independent variables         of the transform function.-->
 							<coordinates>knee_angle_r</coordinates>
 							<!--Rotation or translation axis for the transform.-->
-							<axis>1 0 0</axis>
+							<axis>0 0 1</axis>
 							<!--Transform function of the generalized coordinates used to        represent the amount of displacement along a specified axis.-->
 							<PolynomialFunction name="function">
 								<!--Coefficients of a polynomial function, from highest to lowest order.Polynomial order is n-1, where n is the number of coefficients.-->
-								<coefficients>0.00015904478788503811 -0.001015149915669 0.001817510974968 2.6414266451992301e-05 -7.7465635324718924e-07</coefficients>
+								<coefficients>-0.00015904478788503811 0.001015149915669 -0.001817510974968 -2.6414266451992301e-05 7.7465635324718924e-07</coefficients>
 							</PolynomialFunction>
 						</TransformAxis>
 						<TransformAxis name="translation2">
@@ -4289,7 +4289,7 @@
 							<!--Names of the coordinates that serve as the independent variables         of the transform function.-->
 							<coordinates>knee_angle_r</coordinates>
 							<!--Rotation or translation axis for the transform.-->
-							<axis>0 0 1</axis>
+							<axis>1 0 0</axis>
 							<!--Transform function of the generalized coordinates used to        represent the amount of displacement along a specified axis.-->
 							<PolynomialFunction name="function">
 								<!--Coefficients of a polynomial function, from highest to lowest order.Polynomial order is n-1, where n is the number of coefficients.-->
@@ -5120,7 +5120,7 @@
 							<!--Translational offset (in meters) of this frame's origin from the parent frame's origin, expressed in the parent frame.-->
 							<translation>-0.0044999999999999997 -0.40960000000000002 0.00175</translation>
 							<!--Orientation offset (in radians) of this frame in its parent frame, expressed as a frame-fixed x-y-z rotation sequence.-->
-							<orientation>1.64157 -1.44618 1.5708</orientation>
+							<orientation>0.07077003 -0.00000046 0.12461633</orientation>
 						</PhysicalOffsetFrame>
 						<PhysicalOffsetFrame name="tibia_prox_l_offset">
 							<!--The geometry used to display the axes of this Frame.-->
@@ -5133,9 +5133,9 @@
 							<!--Path to a Component that satisfies the Socket 'parent' of type C (description: The parent frame to this frame.).-->
 							<socket_parent>/bodyset/tibia_prox_l</socket_parent>
 							<!--Translational offset (in meters) of this frame's origin from the parent frame's origin, expressed in the parent frame.-->
-							<translation>-0.0080895399999999992 -0.0035347999999999998 0.00148474</translation>
+							<translation>-0.00758746 -0.00460656 0.00116191</translation>
 							<!--Orientation offset (in radians) of this frame in its parent frame, expressed as a frame-fixed x-y-z rotation sequence.-->
-							<orientation>1.64157 -1.44618 1.5708</orientation>
+							<orientation>0.07077003 -0.00000046 0.12461633</orientation>
 						</PhysicalOffsetFrame>
 					</frames>
 					<!--Defines how the child body moves with respect to the parent as a function of the generalized coordinates.-->
@@ -5145,7 +5145,7 @@
 							<!--Names of the coordinates that serve as the independent variables         of the transform function.-->
 							<coordinates>knee_angle_l</coordinates>
 							<!--Rotation or translation axis for the transform.-->
-							<axis>-1 0 0</axis>
+							<axis>0 0 -1</axis>
 							<!--Transform function of the generalized coordinates used to        represent the amount of displacement along a specified axis.-->
 							<LinearFunction name="function">
 								<coefficients> 1 0</coefficients>
@@ -5155,7 +5155,7 @@
 							<!--Names of the coordinates that serve as the independent variables         of the transform function.-->
 							<coordinates>knee_angle_l</coordinates>
 							<!--Rotation or translation axis for the transform.-->
-							<axis>0 0 1</axis>
+							<axis>-1 0 0</axis>
 							<!--Transform function of the generalized coordinates used to        represent the amount of displacement along a specified axis.-->
 							<PolynomialFunction name="function">
 								<!--Coefficients of a polynomial function, from highest to lowest order.Polynomial order is n-1, where n is the number of coefficients.-->
@@ -5178,7 +5178,7 @@
 							<!--Names of the coordinates that serve as the independent variables         of the transform function.-->
 							<coordinates>knee_angle_l</coordinates>
 							<!--Rotation or translation axis for the transform.-->
-							<axis>1 0 0</axis>
+							<axis>0 0 1</axis>
 							<!--Transform function of the generalized coordinates used to        represent the amount of displacement along a specified axis.-->
 							<PolynomialFunction name="function">
 								<!--Coefficients of a polynomial function, from highest to lowest order.Polynomial order is n-1, where n is the number of coefficients.-->
@@ -5200,7 +5200,7 @@
 							<!--Names of the coordinates that serve as the independent variables         of the transform function.-->
 							<coordinates>knee_angle_l</coordinates>
 							<!--Rotation or translation axis for the transform.-->
-							<axis>0 0 1</axis>
+							<axis>-1 0 0</axis>
 							<!--Transform function of the generalized coordinates used to        represent the amount of displacement along a specified axis.-->
 							<PolynomialFunction name="function">
 								<!--Coefficients of a polynomial function, from highest to lowest order.Polynomial order is n-1, where n is the number of coefficients.-->

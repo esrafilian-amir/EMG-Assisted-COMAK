@@ -67,3 +67,18 @@ Silder, A., Whittington, B., Heiderscheit, B., Thelen, D.G. (2007)
     Identification of passive elastic joint moment-angle relationships in the lower extremity.
     Journal of Biomechanics.
     doi: https://doi.org/10.1016/j.jbiomech.2006.12.017
+	
+RajagopalLaiUhlrichEsrafilian2024_MedLatKnee:
+1- MedLat knee JCF added
+2- Knee coordinate updated:
+ axes are updated as follow:
+ for right knee:
+	 X = z;
+	 Y = y;
+	 Z = -x;
+	 Thus, change rotaion axes acourdingly (knee flexion*=-1, set Z translation to -x).
+ for left knee:
+	 X = -z;
+	 Y = y;
+	 Z = x;
+	 Thus, change rotaion axes acourdingly (knee flexion*=-1, set Z translation to -x).
