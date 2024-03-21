@@ -958,7 +958,7 @@
 					<!--The elements of the inertia tensor (Vec6) as [Ixx Iyy Izz Ixy Ixz Iyz] measured about the mass_center and not the body origin.-->
 					<inertia>1e-5 1e-5 1e-5 0 0 0</inertia>
 				</Body>
-				<Body name="med_cond_r">
+				<Body name="med_knee_r">
 					<!--The geometry used to display the axes of this Frame.-->
 					<FrameGeometry name="frame_geometry">
 						<!--Path to a Component that satisfies the Socket 'frame' of type Frame.-->
@@ -996,7 +996,7 @@
 					<!--The elements of the inertia tensor (Vec6) as [Ixx Iyy Izz Ixy Ixz Iyz] measured about the mass_center and not the body origin.-->
 					<inertia>1e-5 1e-5 1e-5 0 0 0</inertia>
 				</Body>
-				<Body name="lat_cond_r">
+				<Body name="lat_knee_r">
 					<!--The geometry used to display the axes of this Frame.-->
 					<FrameGeometry name="frame_geometry">
 						<!--Path to a Component that satisfies the Socket 'frame' of type Frame.-->
@@ -2018,7 +2018,7 @@
 					<!--The elements of the inertia tensor (Vec6) as [Ixx Iyy Izz Ixy Ixz Iyz] measured about the mass_center and not the body origin.-->
 					<inertia>1e-5 1e-5 1e-5 0 0 0</inertia>
 				</Body>
-				<Body name="med_cond_l">
+				<Body name="med_knee_l">
 					<!--The geometry used to display the axes of this Frame.-->
 					<FrameGeometry name="frame_geometry">
 						<!--Path to a Component that satisfies the Socket 'frame' of type Frame.-->
@@ -2056,7 +2056,7 @@
 					<!--The elements of the inertia tensor (Vec6) as [Ixx Iyy Izz Ixy Ixz Iyz] measured about the mass_center and not the body origin.-->
 					<inertia>1e-5 1e-5 1e-5 0 0 0</inertia>
 				</Body>
-				<Body name="lat_cond_l">
+				<Body name="lat_knee_l">
 					<!--The geometry used to display the axes of this Frame.-->
 					<FrameGeometry name="frame_geometry">
 						<!--Path to a Component that satisfies the Socket 'frame' of type Frame.-->
@@ -4298,14 +4298,14 @@
 						</TransformAxis>
 					</SpatialTransform>
 				</CustomJoint>
-				<CustomJoint name="med_cond_joint_r">
+				<CustomJoint name="med_knee_joint_r">
 					<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The parent frame for the joint.).-->
 					<socket_parent_frame>tibia_prox_r_offset</socket_parent_frame>
 					<!--Path to a Component that satisfies the Socket 'child_frame' of type PhysicalFrame (description: The child frame for the joint.).-->
-					<socket_child_frame>med_cond_r_offset</socket_child_frame>
+					<socket_child_frame>med_knee_r_offset</socket_child_frame>
 					<!--List containing the generalized coordinates (q's) that parameterize this joint.-->
 					<coordinates>
-						<Coordinate name="med_cond_adduction_r">
+						<Coordinate name="med_knee_adduction_r">
 							<!--The value of this coordinate before any value has been set. Rotational coordinate value is in radians and Translational in meters.-->
 							<default_value>0</default_value>
 							<!--The speed value of this coordinate before any value has been set. Rotational coordinate value is in rad/s and Translational in m/s.-->
@@ -4341,7 +4341,7 @@
 							<!--Orientation offset (in radians) of this frame in its parent frame, expressed as a frame-fixed x-y-z rotation sequence.-->
 							<orientation>0 0 0</orientation>
 						</PhysicalOffsetFrame>
-						<PhysicalOffsetFrame name="med_cond_r_offset">
+						<PhysicalOffsetFrame name="med_knee_r_offset">
 							<!--The geometry used to display the axes of this Frame.-->
 							<FrameGeometry name="frame_geometry">
 								<!--Path to a Component that satisfies the Socket 'frame' of type Frame.-->
@@ -4350,7 +4350,7 @@
 								<scale_factors>0.20000000000000001 0.20000000000000001 0.20000000000000001</scale_factors>
 							</FrameGeometry>
 							<!--Path to a Component that satisfies the Socket 'parent' of type C (description: The parent frame to this frame.).-->
-							<socket_parent>/bodyset/med_cond_r</socket_parent>
+							<socket_parent>/bodyset/med_knee_r</socket_parent>
 							<!--Translational offset (in meters) of this frame's origin from the parent frame's origin, expressed in the parent frame.-->
 							<translation>0 0 0</translation>
 							<!--Orientation offset (in radians) of this frame in its parent frame, expressed as a frame-fixed x-y-z rotation sequence.-->
@@ -4362,7 +4362,7 @@
 						<!--3 Axes for rotations are listed first.-->
 						<TransformAxis name="rotation1">
 							<!--Names of the coordinates that serve as the independent variables         of the transform function.-->
-							<coordinates>med_cond_adduction_r</coordinates>
+							<coordinates>med_knee_adduction_r</coordinates>
 							<!--Rotation or translation axis for the transform.-->
 							<axis>1 0 0</axis>
 							<!--Transform function of the generalized coordinates used to        represent the amount of displacement along a specified axis.-->
@@ -4423,14 +4423,14 @@
 						</TransformAxis>
 					</SpatialTransform>
 				</CustomJoint>
-				<CustomJoint name="lat_cond_joint_r">
+				<CustomJoint name="lat_knee_joint_r">
 					<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The parent frame for the joint.).-->
 					<socket_parent_frame>tibia_prox_r_offset</socket_parent_frame>
 					<!--Path to a Component that satisfies the Socket 'child_frame' of type PhysicalFrame (description: The child frame for the joint.).-->
-					<socket_child_frame>lat_cond_r_offset</socket_child_frame>
+					<socket_child_frame>lat_knee_r_offset</socket_child_frame>
 					<!--List containing the generalized coordinates (q's) that parameterize this joint.-->
 					<coordinates>
-						<Coordinate name="lat_cond_adduction_r">
+						<Coordinate name="lat_knee_adduction_r">
 							<!--The value of this coordinate before any value has been set. Rotational coordinate value is in radians and Translational in meters.-->
 							<default_value>0</default_value>
 							<!--The speed value of this coordinate before any value has been set. Rotational coordinate value is in rad/s and Translational in m/s.-->
@@ -4466,7 +4466,7 @@
 							<!--Orientation offset (in radians) of this frame in its parent frame, expressed as a frame-fixed x-y-z rotation sequence.-->
 							<orientation>0 0 0</orientation>
 						</PhysicalOffsetFrame>
-						<PhysicalOffsetFrame name="lat_cond_r_offset">
+						<PhysicalOffsetFrame name="lat_knee_r_offset">
 							<!--The geometry used to display the axes of this Frame.-->
 							<FrameGeometry name="frame_geometry">
 								<!--Path to a Component that satisfies the Socket 'frame' of type Frame.-->
@@ -4475,7 +4475,7 @@
 								<scale_factors>0.20000000000000001 0.20000000000000001 0.20000000000000001</scale_factors>
 							</FrameGeometry>
 							<!--Path to a Component that satisfies the Socket 'parent' of type C (description: The parent frame to this frame.).-->
-							<socket_parent>/bodyset/lat_cond_r</socket_parent>
+							<socket_parent>/bodyset/lat_knee_r</socket_parent>
 							<!--Translational offset (in meters) of this frame's origin from the parent frame's origin, expressed in the parent frame.-->
 							<translation>0 0 0</translation>
 							<!--Orientation offset (in radians) of this frame in its parent frame, expressed as a frame-fixed x-y-z rotation sequence.-->
@@ -4487,7 +4487,7 @@
 						<!--3 Axes for rotations are listed first.-->
 						<TransformAxis name="rotation1">
 							<!--Names of the coordinates that serve as the independent variables         of the transform function.-->
-							<coordinates>lat_cond_adduction_r</coordinates>
+							<coordinates>lat_knee_adduction_r</coordinates>
 							<!--Rotation or translation axis for the transform.-->
 							<axis>1 0 0</axis>
 							<!--Transform function of the generalized coordinates used to        represent the amount of displacement along a specified axis.-->
@@ -4548,14 +4548,14 @@
 						</TransformAxis>
 					</SpatialTransform>
 				</CustomJoint>
-				<WeldJoint name="med_cond_weld_r">
+				<WeldJoint name="med_knee_weld_r">
 					<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The parent frame for the joint.).-->
-					<socket_parent_frame>med_cond_r_offset</socket_parent_frame>
+					<socket_parent_frame>med_knee_r_offset</socket_parent_frame>
 					<!--Path to a Component that satisfies the Socket 'child_frame' of type PhysicalFrame (description: The child frame for the joint.).-->
 					<socket_child_frame>tibial_plat_r_offset</socket_child_frame>
 					<!--Physical offset frames owned by the Joint that are typically used to satisfy the owning Joint's parent and child frame connections (sockets). PhysicalOffsetFrames are often used to describe the fixed transformation from a Body's origin to another location of interest on the Body (e.g., the joint center). When the joint is deleted, so are the PhysicalOffsetFrame components in this list.-->
 					<frames>
-						<PhysicalOffsetFrame name="med_cond_r_offset">
+						<PhysicalOffsetFrame name="med_knee_r_offset">
 							<!--The geometry used to display the axes of this Frame.-->
 							<FrameGeometry name="frame_geometry">
 								<!--Path to a Component that satisfies the Socket 'frame' of type Frame.-->
@@ -4564,7 +4564,7 @@
 								<scale_factors>0.20000000000000001 0.20000000000000001 0.20000000000000001</scale_factors>
 							</FrameGeometry>
 							<!--Path to a Component that satisfies the Socket 'parent' of type C (description: The parent frame to this frame.).-->
-							<socket_parent>/bodyset/med_cond_r</socket_parent>
+							<socket_parent>/bodyset/med_knee_r</socket_parent>
 							<!--Translational offset (in meters) of this frame's origin from the parent frame's origin, expressed in the parent frame.-->
 							<translation>0 0.035000000000000003 0.02</translation>
 							<!--Orientation offset (in radians) of this frame in its parent frame, expressed as a frame-fixed x-y-z rotation sequence.-->
@@ -5209,14 +5209,14 @@
 						</TransformAxis>
 					</SpatialTransform>
 				</CustomJoint>
-				<CustomJoint name="med_cond_joint_l">
+				<CustomJoint name="med_knee_joint_l">
 					<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The parent frame for the joint.).-->
 					<socket_parent_frame>tibia_prox_l_offset</socket_parent_frame>
 					<!--Path to a Component that satisfies the Socket 'child_frame' of type PhysicalFrame (description: The child frame for the joint.).-->
-					<socket_child_frame>med_cond_l_offset</socket_child_frame>
+					<socket_child_frame>med_knee_l_offset</socket_child_frame>
 					<!--List containing the generalized coordinates (q's) that parameterize this joint.-->
 					<coordinates>
-						<Coordinate name="med_cond_adduction_l">
+						<Coordinate name="med_knee_adduction_l">
 							<!--The value of this coordinate before any value has been set. Rotational coordinate value is in radians and Translational in meters.-->
 							<default_value>0</default_value>
 							<!--The speed value of this coordinate before any value has been set. Rotational coordinate value is in rad/s and Translational in m/s.-->
@@ -5252,7 +5252,7 @@
 							<!--Orientation offset (in radians) of this frame in its parent frame, expressed as a frame-fixed x-y-z rotation sequence.-->
 							<orientation>0 0 0</orientation>
 						</PhysicalOffsetFrame>
-						<PhysicalOffsetFrame name="med_cond_l_offset">
+						<PhysicalOffsetFrame name="med_knee_l_offset">
 							<!--The geometry used to display the axes of this Frame.-->
 							<FrameGeometry name="frame_geometry">
 								<!--Path to a Component that satisfies the Socket 'frame' of type Frame.-->
@@ -5261,7 +5261,7 @@
 								<scale_factors>0.20000000000000001 0.20000000000000001 0.20000000000000001</scale_factors>
 							</FrameGeometry>
 							<!--Path to a Component that satisfies the Socket 'parent' of type C (description: The parent frame to this frame.).-->
-							<socket_parent>/bodyset/med_cond_l</socket_parent>
+							<socket_parent>/bodyset/med_knee_l</socket_parent>
 							<!--Translational offset (in meters) of this frame's origin from the parent frame's origin, expressed in the parent frame.-->
 							<translation>0 0 0</translation>
 							<!--Orientation offset (in radians) of this frame in its parent frame, expressed as a frame-fixed x-y-z rotation sequence.-->
@@ -5273,7 +5273,7 @@
 						<!--3 Axes for rotations are listed first.-->
 						<TransformAxis name="rotation1">
 							<!--Names of the coordinates that serve as the independent variables         of the transform function.-->
-							<coordinates>med_cond_adduction_l</coordinates>
+							<coordinates>med_knee_adduction_l</coordinates>
 							<!--Rotation or translation axis for the transform.-->
 							<axis>1 0 0</axis>
 							<!--Transform function of the generalized coordinates used to        represent the amount of displacement along a specified axis.-->
@@ -5334,14 +5334,14 @@
 						</TransformAxis>
 					</SpatialTransform>
 				</CustomJoint>
-				<CustomJoint name="lat_cond_joint_l">
+				<CustomJoint name="lat_knee_joint_l">
 					<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The parent frame for the joint.).-->
 					<socket_parent_frame>tibia_prox_l_offset</socket_parent_frame>
 					<!--Path to a Component that satisfies the Socket 'child_frame' of type PhysicalFrame (description: The child frame for the joint.).-->
-					<socket_child_frame>lat_cond_l_offset</socket_child_frame>
+					<socket_child_frame>lat_knee_l_offset</socket_child_frame>
 					<!--List containing the generalized coordinates (q's) that parameterize this joint.-->
 					<coordinates>
-						<Coordinate name="lat_cond_adduction_l">
+						<Coordinate name="lat_knee_adduction_l">
 							<!--The value of this coordinate before any value has been set. Rotational coordinate value is in radians and Translational in meters.-->
 							<default_value>0</default_value>
 							<!--The speed value of this coordinate before any value has been set. Rotational coordinate value is in rad/s and Translational in m/s.-->
@@ -5377,7 +5377,7 @@
 							<!--Orientation offset (in radians) of this frame in its parent frame, expressed as a frame-fixed x-y-z rotation sequence.-->
 							<orientation>0 0 0</orientation>
 						</PhysicalOffsetFrame>
-						<PhysicalOffsetFrame name="lat_cond_l_offset">
+						<PhysicalOffsetFrame name="lat_knee_l_offset">
 							<!--The geometry used to display the axes of this Frame.-->
 							<FrameGeometry name="frame_geometry">
 								<!--Path to a Component that satisfies the Socket 'frame' of type Frame.-->
@@ -5386,7 +5386,7 @@
 								<scale_factors>0.20000000000000001 0.20000000000000001 0.20000000000000001</scale_factors>
 							</FrameGeometry>
 							<!--Path to a Component that satisfies the Socket 'parent' of type C (description: The parent frame to this frame.).-->
-							<socket_parent>/bodyset/lat_cond_l</socket_parent>
+							<socket_parent>/bodyset/lat_knee_l</socket_parent>
 							<!--Translational offset (in meters) of this frame's origin from the parent frame's origin, expressed in the parent frame.-->
 							<translation>0 0 0</translation>
 							<!--Orientation offset (in radians) of this frame in its parent frame, expressed as a frame-fixed x-y-z rotation sequence.-->
@@ -5398,7 +5398,7 @@
 						<!--3 Axes for rotations are listed first.-->
 						<TransformAxis name="rotation1">
 							<!--Names of the coordinates that serve as the independent variables         of the transform function.-->
-							<coordinates>lat_cond_adduction_l</coordinates>
+							<coordinates>lat_knee_adduction_l</coordinates>
 							<!--Rotation or translation axis for the transform.-->
 							<axis>1 0 0</axis>
 							<!--Transform function of the generalized coordinates used to        represent the amount of displacement along a specified axis.-->
@@ -5459,14 +5459,14 @@
 						</TransformAxis>
 					</SpatialTransform>
 				</CustomJoint>
-				<WeldJoint name="med_cond_weld_l">
+				<WeldJoint name="med_knee_weld_l">
 					<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The parent frame for the joint.).-->
-					<socket_parent_frame>med_cond_l_offset</socket_parent_frame>
+					<socket_parent_frame>med_knee_l_offset</socket_parent_frame>
 					<!--Path to a Component that satisfies the Socket 'child_frame' of type PhysicalFrame (description: The child frame for the joint.).-->
 					<socket_child_frame>tibial_plat_l_offset</socket_child_frame>
 					<!--Physical offset frames owned by the Joint that are typically used to satisfy the owning Joint's parent and child frame connections (sockets). PhysicalOffsetFrames are often used to describe the fixed transformation from a Body's origin to another location of interest on the Body (e.g., the joint center). When the joint is deleted, so are the PhysicalOffsetFrame components in this list.-->
 					<frames>
-						<PhysicalOffsetFrame name="med_cond_l_offset">
+						<PhysicalOffsetFrame name="med_knee_l_offset">
 							<!--The geometry used to display the axes of this Frame.-->
 							<FrameGeometry name="frame_geometry">
 								<!--Path to a Component that satisfies the Socket 'frame' of type Frame.-->
@@ -5475,7 +5475,7 @@
 								<scale_factors>0.20000000000000001 0.20000000000000001 0.20000000000000001</scale_factors>
 							</FrameGeometry>
 							<!--Path to a Component that satisfies the Socket 'parent' of type C (description: The parent frame to this frame.).-->
-							<socket_parent>/bodyset/med_cond_l</socket_parent>
+							<socket_parent>/bodyset/med_knee_l</socket_parent>
 							<!--Translational offset (in meters) of this frame's origin from the parent frame's origin, expressed in the parent frame.-->
 							<translation>0 0.035000000000000003 -0.02</translation>
 							<!--Orientation offset (in radians) of this frame in its parent frame, expressed as a frame-fixed x-y-z rotation sequence.-->
@@ -6693,16 +6693,16 @@
 		<!--Constraints in the model.-->
 		<ConstraintSet name="constraintset">
 			<objects>
-				<WeldConstraint name="Lat_Cond_r_Constraint">
+				<WeldConstraint name="Lat_knee_r_Constraint">
 					<!--Flag indicating whether the constraint is enforced or not.Enforced means that the constraint is active in subsequent dynamics realizations. NOTE: Prior to OpenSim 4.0, this behavior was controlled by the 'isDisabled' property, where 'true' meant the constraint was not being enforced. Thus, if 'isDisabled' is'true', then 'isEnforced' is false.-->
 					<isEnforced>true</isEnforced>
 					<!--Path to a Component that satisfies the Socket 'frame1' of type F (description: The first frame participating in this linker.).-->
-					<socket_frame1>lat_cond_r_offset</socket_frame1>
+					<socket_frame1>lat_knee_r_offset</socket_frame1>
 					<!--Path to a Component that satisfies the Socket 'frame2' of type F (description: The second frame participating in this linker.).-->
 					<socket_frame2>/bodyset/tibial_plat_r</socket_frame2>
 					<!--Frames created/added to satisfy this component's connections.-->
 					<frames>
-						<PhysicalOffsetFrame name="lat_cond_r_offset">
+						<PhysicalOffsetFrame name="lat_knee_r_offset">
 							<!--The geometry used to display the axes of this Frame.-->
 							<FrameGeometry name="frame_geometry">
 								<!--Path to a Component that satisfies the Socket 'frame' of type Frame.-->
@@ -6711,7 +6711,7 @@
 								<scale_factors>0.20000000000000001 0.20000000000000001 0.20000000000000001</scale_factors>
 							</FrameGeometry>
 							<!--Path to a Component that satisfies the Socket 'parent' of type C (description: The parent frame to this frame.).-->
-							<socket_parent>/bodyset/lat_cond_r</socket_parent>
+							<socket_parent>/bodyset/lat_knee_r</socket_parent>
 							<!--Translational offset (in meters) of this frame's origin from the parent frame's origin, expressed in the parent frame.-->
 							<translation>0 0.035000000000000003 -0.02</translation>
 							<!--Orientation offset (in radians) of this frame in its parent frame, expressed as a frame-fixed x-y-z rotation sequence.-->
@@ -6719,16 +6719,16 @@
 						</PhysicalOffsetFrame>
 					</frames>
 				</WeldConstraint>
-				<WeldConstraint name="Lat_Cond_l_Constraint">
+				<WeldConstraint name="Lat_knee_l_Constraint">
 					<!--Flag indicating whether the constraint is enforced or not.Enforced means that the constraint is active in subsequent dynamics realizations. NOTE: Prior to OpenSim 4.0, this behavior was controlled by the 'isDisabled' property, where 'true' meant the constraint was not being enforced. Thus, if 'isDisabled' is'true', then 'isEnforced' is false.-->
 					<isEnforced>true</isEnforced>
 					<!--Path to a Component that satisfies the Socket 'frame1' of type F (description: The first frame participating in this linker.).-->
-					<socket_frame1>lat_cond_l_offset</socket_frame1>
+					<socket_frame1>lat_knee_l_offset</socket_frame1>
 					<!--Path to a Component that satisfies the Socket 'frame2' of type F (description: The second frame participating in this linker.).-->
 					<socket_frame2>/bodyset/tibial_plat_l</socket_frame2>
 					<!--Frames created/added to satisfy this component's connections.-->
 					<frames>
-						<PhysicalOffsetFrame name="lat_cond_l_offset">
+						<PhysicalOffsetFrame name="lat_knee_l_offset">
 							<!--The geometry used to display the axes of this Frame.-->
 							<FrameGeometry name="frame_geometry">
 								<!--Path to a Component that satisfies the Socket 'frame' of type Frame.-->
@@ -6737,7 +6737,7 @@
 								<scale_factors>0.20000000000000001 0.20000000000000001 0.20000000000000001</scale_factors>
 							</FrameGeometry>
 							<!--Path to a Component that satisfies the Socket 'parent' of type C (description: The parent frame to this frame.).-->
-							<socket_parent>/bodyset/lat_cond_l</socket_parent>
+							<socket_parent>/bodyset/lat_knee_l</socket_parent>
 							<!--Translational offset (in meters) of this frame's origin from the parent frame's origin, expressed in the parent frame.-->
 							<translation>0 0.035000000000000003 0.02</translation>
 							<!--Orientation offset (in radians) of this frame in its parent frame, expressed as a frame-fixed x-y-z rotation sequence.-->
