@@ -5412,11 +5412,11 @@
 							<!--Names of the coordinates that serve as the independent variables         of the transform function.-->
 							<coordinates>knee_angle_l</coordinates>
 							<!--Rotation or translation axis for the transform.-->
-							<axis>0 1 0</axis>
+							<axis>0 -1 0</axis>
 							<!--Transform function of the generalized coordinates used to        represent the amount of displacement along a specified axis.-->
 							<PolynomialFunction name="function">
 								<!--Coefficients of a polynomial function, from highest to lowest order.Polynomial order is n-1, where n is the number of coefficients.-->
-								<coefficients>-0.025165762727423002 0.16948005139054001 -0.36949934868824902 4.4303583088363053e-08</coefficients>
+								<coefficients>0.025165762727423002 -0.16948005139054001 0.36949934868824902 -4.4303583088363053e-08</coefficients>
 							</PolynomialFunction>
 						</TransformAxis>
 						<!--3 Axes for translations are listed next.-->
@@ -6122,7 +6122,7 @@
 							<!--Names of the coordinates that serve as the independent variables         of the transform function.-->
 							<coordinates></coordinates>
 							<!--Rotation or translation axis for the transform.-->
-							<axis>0 1 0</axis>
+							<axis>0 -1 0</axis>
 							<!--Transform function of the generalized coordinates used to        represent the amount of displacement along a specified axis.-->
 							<Constant name="function">
 								<value>0</value>
@@ -6132,7 +6132,7 @@
 							<!--Names of the coordinates that serve as the independent variables         of the transform function.-->
 							<coordinates></coordinates>
 							<!--Rotation or translation axis for the transform.-->
-							<axis>1 0 0</axis>
+							<axis>-1 0 0</axis>
 							<!--Transform function of the generalized coordinates used to        represent the amount of displacement along a specified axis.-->
 							<Constant name="function">
 								<value>0</value>
@@ -6165,15 +6165,14 @@
 							<!--Names of the coordinates that serve as the independent variables         of the transform function.-->
 							<coordinates></coordinates>
 							<!--Rotation or translation axis for the transform.-->
-							<axis>0 0 1</axis>
+							<axis>0 0 -1</axis>
 							<!--Transform function of the generalized coordinates used to        represent the amount of displacement along a specified axis.-->
 							<Constant name="function">
-								<value>-0.0027499999999999998</value>
+								<value>0.0027499999999999998</value>
 							</Constant>
 						</TransformAxis>
 					</SpatialTransform>
 				</CustomJoint>
-				
 				<PinJoint name="ankle_l">
 					<!--Path to a Component that satisfies the Socket 'parent_frame' of type PhysicalFrame (description: The parent frame for the joint.).-->
 					<socket_parent_frame>tibia_l_offset</socket_parent_frame>
