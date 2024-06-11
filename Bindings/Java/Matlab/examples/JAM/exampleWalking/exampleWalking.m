@@ -369,7 +369,7 @@ comak.set_activation_exponent(2);
 comak.set_contact_energy_weight(0);
 comak.set_non_muscle_actuator_weight(1000);
 comak.set_model_assembly_accuracy(1e-12);
-comak.set_use_visualizer(false);
+comak.set_use_visualizer(true);
 comak.set_verbose(2);
 
 comak.print('./inputs/comak_settings.xml');

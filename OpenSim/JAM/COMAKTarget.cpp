@@ -447,7 +447,7 @@ objectiveFunc(const SimTK::Vector &parameters, const bool new_parameters,
     for (int i = 0; i < _nMuscles; i++) {
         //msl_cost += _muscle_volumes(i) *
         //            pow(fabs(parameters(p)), _activation_exponent);
-        msl_cost += _muscle_weight(i) * _muscle_weight(i) *
+        msl_cost += _muscle_weight(i) * _muscle_volumes(i) *
                     pow(fabs(parameters(i)), _activation_exponent);
         // follow EMGs
         if (_is_emg_assisted) {
@@ -523,7 +523,7 @@ gradientFunc(const SimTK::Vector &parameters, const bool new_parameters,
         gradient(p) += 
             _activation_exponent * _non_muscle_actuator_weight * 
             parameters(p) * pow(fabs(parameters(p)),
-                _activation_exponent - 2.0);
+                _activation_exponent - 1.0);
 
         p++;
     }
