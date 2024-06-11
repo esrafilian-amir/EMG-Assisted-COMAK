@@ -612,7 +612,7 @@ void JointMechanicsTool::assembleStatesTrajectoryFromStatesData(
         }
     }
 
-    for (auto mc : missingColumnNames) {
+    for (auto& mc : missingColumnNames) {
         log_warn("JointMechanicsTool input_states_file missing state: {}", mc);
     }
     // Fill up trajectory from states in file
@@ -1210,7 +1210,7 @@ void JointMechanicsTool::setupContactStorage(SimTK::State& s) {
                     _contact_mesh_paths.push_back(target_mesh_path);
                 }
             }
-            catch (ComponentNotFoundOnSpecifiedPath){
+            catch (ComponentNotFoundOnSpecifiedPath const &){
                 OPENSIM_THROW(Exception, "contact_name: " + get_contacts(i)
                     + " was not found as a Smith2018ArticularContactForce path" 
                     " in the model. Did you use absolute path?");
@@ -1306,7 +1306,7 @@ void JointMechanicsTool::setupContactStorage(SimTK::State& s) {
                     _contact_output_vector_vec3_names.push_back(output_name);
                 }
             }
-            catch (Exception){
+            catch (Exception const &){
                 OPENSIM_THROW(Exception, "contact_output: " + 
                     get_contact_outputs(i) + " is not a valid "
                     "Smith2018ArticularContactForce output name")
@@ -1408,7 +1408,7 @@ void JointMechanicsTool::setupAttachedGeometriesStorage() {
                     (get_attached_geometry_bodies(i));
                 body_path_list.push_back(frame.getAbsolutePathString());
             }
-            catch (Exception) {
+            catch (Exception const &) {
                 OPENSIM_THROW(Exception, "attached_geometry_bodies: " +
                     get_attached_geometry_bodies(i) + "does not exist as a "
                     "Frame component in model. Did you use Absolute Path?");
@@ -1589,7 +1589,7 @@ void JointMechanicsTool::setupLigamentStorage() {
                 _ligament_names.push_back(lig.getName());
                 _ligament_paths.push_back(lig.getAbsolutePathString());
             }
-            catch (ComponentNotFoundOnSpecifiedPath) {
+            catch (ComponentNotFoundOnSpecifiedPath const&) {
                 OPENSIM_THROW(Exception, "ligament: " + get_ligaments(i) +
                     " was not found in the model. "
                     "Are you using the absolute path?");
@@ -1620,7 +1620,7 @@ void JointMechanicsTool::setupLigamentStorage() {
                 lig0.getOutput(output_name);
                 _ligament_output_double_names.push_back(output_name);
             }
-            catch (Exception){
+            catch (Exception const &){
                 OPENSIM_THROW(Exception, "ligament_output: " + 
                     get_ligament_outputs(i) + " is not a valid "
                     "Blankevoort1991Ligament output name")
@@ -1675,7 +1675,7 @@ void JointMechanicsTool::setupMuscleStorage() {
                 _muscle_names.push_back(msl.getName());
                 _muscle_paths.push_back(msl.getAbsolutePathString());
             }
-            catch (ComponentNotFoundOnSpecifiedPath) {
+            catch (ComponentNotFoundOnSpecifiedPath const&) {
                 OPENSIM_THROW(Exception, "Muscle: " + get_muscles(i) +
                     " was not found in the model. "
                     "Are you using the absolute path?");
@@ -1714,7 +1714,7 @@ void JointMechanicsTool::setupMuscleStorage() {
                 msl0.getOutput(output_name);
                 
             }
-            catch (Exception){
+            catch (Exception const&){
                 if (output_name != "length") {
                     OPENSIM_THROW(Exception, "muscle_output: " +
                         get_muscle_outputs(i) + " is not a valid "
@@ -1909,7 +1909,7 @@ int JointMechanicsTool::record(const SimTK::State& s, const int frame_num)
                 _model.updComponent<Blankevoort1991Ligament>(lig_path);
 
             //Path Points
-            const GeometryPath& geoPath = lig.upd_GeometryPath();
+            const GeometryPath& geoPath = lig.updGeometryPath();
 
             int nPoints = 0;
             SimTK::Vector_<SimTK::Vec3> path_points(_max_path_points, SimTK::Vec3(-1));
@@ -1938,7 +1938,7 @@ int JointMechanicsTool::record(const SimTK::State& s, const int frame_num)
             Muscle& msl = _model.updComponent<Muscle>(msl_path);
 
             //Path Points
-            const GeometryPath& geoPath = msl.upd_GeometryPath();
+            const GeometryPath& geoPath = msl.updGeometryPath();
 
             int nPoints = 0;
 
@@ -1957,7 +1957,7 @@ int JointMechanicsTool::record(const SimTK::State& s, const int frame_num)
                 
                 if (output_name == "length") {
                     _muscle_output_double_values[nMsl].set(frame_num, j,
-                        msl.get_GeometryPath().getOutputValue<double>
+                        msl.getGeometryPath().getOutputValue<double>
                         (s, "length"));
                 }
                 else if (output_name == "tension") {

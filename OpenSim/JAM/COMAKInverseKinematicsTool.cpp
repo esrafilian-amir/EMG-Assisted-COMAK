@@ -228,7 +228,7 @@ bool COMAKInverseKinematicsTool::initialize()
     //Make sure Coordinate exists in model and no duplicates
     std::string name = get_secondary_coupled_coordinate();
     try { _model.getComponent<Coordinate>(name); }
-    catch (Exception) {
+    catch (Exception const&) {
         OPENSIM_THROW(Exception, "secondary_coupled_coord: " + 
             name + " not found in model.")
     }
@@ -236,7 +236,7 @@ bool COMAKInverseKinematicsTool::initialize()
     for (int i = 0; i < getProperty_secondary_coordinates().size(); ++i) {
         std::string name = get_secondary_coordinates(i);
         try { _model.getComponent<Coordinate>(name); }
-        catch (Exception){
+        catch (Exception const&){
             OPENSIM_THROW(Exception,"secondary_coordinate: " + 
                 name + "not found in model.")
         }
@@ -678,7 +678,7 @@ void COMAKInverseKinematicsTool::performIK()
             try {
                 model.getMarkerSet().get(iktask_name);
             }
-            catch (Exception) {
+            catch (Exception const&) {
                 OPENSIM_THROW(Exception, "COMAKInverseKinematics "
                     "IKMarkerTask: " + iktask_name + 
                     " does not exist as a marker in the model.");
@@ -687,7 +687,7 @@ void COMAKInverseKinematicsTool::performIK()
                 TimeSeriesTableVec3 trc = TimeSeriesTableVec3(get_marker_file());
                 trc.getColumnIndex(iktask_name);
             }
-            catch (Exception) {
+            catch (Exception const&) {
                 OPENSIM_THROW(Exception, "COMAKInverseKinematics "
                     "IKMarkerTask: " + iktask_name + 
                     " does not exist as a marker in the .trc marker_file: " +
@@ -699,7 +699,7 @@ void COMAKInverseKinematicsTool::performIK()
             try {
                 model.getCoordinateSet().get(iktask_name);
             }
-            catch (Exception) {
+            catch (Exception const&) {
                 OPENSIM_THROW(Exception, "COMAKInverseKinematics "
                     "IKCoordinateTask: " + iktask_name + 
                     " does not exist as a coordinate in the model.");
@@ -711,7 +711,7 @@ void COMAKInverseKinematicsTool::performIK()
         _secondary_constraint_functions =
             FunctionSet(get_secondary_constraint_function_file());
     }
-    catch (Exception) {
+    catch (Exception const&) {
         OPENSIM_THROW(Exception, "Function file: " +
             get_secondary_constraint_function_file() + " does not exist.");
 
@@ -840,12 +840,12 @@ void COMAKInverseKinematicsTool::runInverseKinematics(Model& model) {
                 ikSolver.assemble(s);
                 break;
             }
-            catch (const std::exception){
+            catch (std::exception const&){
                 try {
                     ikSolver.track(s);
                     break;
                 }
-                catch (const std::exception) {
+                catch (std::exception const&) {
                     log_error("Assembly failed... " 
                         "retrying with new initial conditions.");
                 }
