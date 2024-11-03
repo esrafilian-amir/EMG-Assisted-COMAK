@@ -24,6 +24,15 @@ function(MocoAddTest)
         list(APPEND test_args "~*MocoTropterSolver*")
         list(APPEND test_args "~[tropter]")
     endif()
+    if(APPLE)
+        list(APPEND test_args "~[win]~[linux]~[win/linux]~[linux/win]")
+    endif()
+    if(LINUX)
+        list(APPEND test_args "~[win]~[mac]~[win/mac]~[mac/win]")
+    endif()
+    if(WIN32)
+        list(APPEND test_args "~[mac]~[linux]~[mac/linux]~[linux/mac]~[unix]")
+    endif()
     add_test(NAME ${MOCOTEST_NAME} COMMAND ${MOCOTEST_NAME} ${test_args})
     # Tests likely run faster if we parallelize the tests rather than the
     # individual problems.
@@ -42,7 +51,9 @@ MocoAddTest(NAME testMocoImplicit)
 
 MocoAddTest(NAME testMocoConstraints)
 
-MocoAddTest(NAME testMocoContact)
+MocoAddTest(NAME testMocoContact RESOURCES
+        subject_20dof18musc_running.osim
+        running_solution_full_stride.sto)
 
 MocoAddTest(NAME testMocoControllers)
 
@@ -66,7 +77,9 @@ MocoAddTest(NAME testMocoTrack RESOURCES
 
 MocoAddTest(NAME testMocoAnalytic)
 
-MocoAddTest(NAME testMocoMetabolics)
+MocoAddTest(NAME testMocoMetabolics RESOURCES
+        testMocoMetabolics_hanging_muscle.osim
+        )
 
 file(COPY subject_walk_armless_18musc.osim subject_walk_armless_coordinates.mot
      DESTINATION "${CMAKE_BINARY_DIR}/OpenSim/Tests/Wrapping")

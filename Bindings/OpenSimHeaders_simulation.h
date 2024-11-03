@@ -19,6 +19,7 @@
 #include <OpenSim/Simulation/Model/PhysicalOffsetFrame.h>
 
 #include <OpenSim/Simulation/Model/Force.h>
+#include <OpenSim/Simulation/Model/ForceProducer.h>
 #include <OpenSim/Simulation/Model/PrescribedForce.h>
 #include <OpenSim/Simulation/Model/CoordinateLimitForce.h>
 #include <OpenSim/Simulation/Model/ExternalForce.h>
@@ -54,6 +55,7 @@
 #include <OpenSim/Simulation/Control/ControlLinear.h>
 #include <OpenSim/Simulation/Control/Controller.h>
 #include <OpenSim/Simulation/Control/PrescribedController.h>
+#include <OpenSim/Simulation/Control/SynergyController.h>
 #include <OpenSim/Simulation/Manager/Manager.h>
 #include <OpenSim/Simulation/Model/Analysis.h>
 #include <OpenSim/Simulation/Model/AnalysisSet.h>
@@ -148,6 +150,7 @@
 #include <OpenSim/Simulation/OpenSense/IMU.h>
 #include <OpenSim/Simulation/OpenSense/OpenSenseUtilities.h>
 
+#include <OpenSim/Simulation/StatesDocument.h>
 #include <OpenSim/Simulation/StatesTrajectory.h>
 #include <OpenSim/Simulation/StatesTrajectoryReporter.h>
 

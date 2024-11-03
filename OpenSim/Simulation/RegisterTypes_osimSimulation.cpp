@@ -95,6 +95,7 @@
 #include "Control/ControlLinear.h"
 #include "Control/PrescribedController.h"
 #include "Control/InputController.h"
+#include "Control/SynergyController.h"
 
 #include "Wrap/PathWrap.h"
 #include "Wrap/PathWrapSet.h"
@@ -276,6 +277,8 @@ OSIMSIMULATION_API void RegisterTypes_osimSimulation()
 
     Object::registerType( ControlSetController() );
     Object::registerType( PrescribedController() );
+    Object::registerType( SynergyVector() );
+    Object::registerType( SynergyController() );
 
     Object::registerType( PathActuator() );
     Object::registerType( ProbeSet() );

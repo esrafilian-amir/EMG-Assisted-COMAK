@@ -390,7 +390,7 @@ protected:
         // and to access a dv that is not type double.
         // The following calls put the mo and dv into the maps used to contain
         // all mo's and dv's exposed in OpenSim. When Stage::Topology is
-        // realized, they will allocated in class Bar's override of
+        // realized, they will be allocated in class Bar's override of
         // extendRealizeTopology(). See below.
         bool allocate = false;
         int maxFlagValue = 1;
@@ -401,6 +401,8 @@ protected:
     // Manually allocate and update the index and subsystem for
     // a discrete variable and a modeling option as though they were
     // natively allocated in Simbody and brought into OpenSim.
+    // Note, as of May 2024, this is also what one would need to do in order
+    // to add a discrete variable that is a type other than double.
     void extendRealizeTopology(SimTK::State& state) const override {
         Super::extendRealizeTopology(state);
 
@@ -1655,6 +1657,10 @@ TEST_CASE("Component Interface Component::resolveVariableNameAndOwner")
         REQUIRE(dvPaths[1] == "/a/dvX");
         REQUIRE(dvPaths[2] == "/a/b/dvX");
 
+        // Check a VariableNotFound exception
+        CHECK_THROWS_AS(top.setModelingOption(s, "/a/should_not_be_found", 0),
+            VariableNotFound);
+
         // Verify correct execution
         std::string dvNameCorrect("dvX");
         std::string dvName;
@@ -1770,6 +1776,12 @@ TEST_CASE("Component Interface Modeling Options")
         REQUIRE(moPaths[1] == "/a/moX");
         REQUIRE(moPaths[2] == "/a/b/moX");
     }
+
+    // Check a VariableNotFound exceptions
+    CHECK_THROWS_AS(top.setModelingOption(s, "/a/should_not_be_found", 0),
+        VariableNotFound);
+    CHECK_THROWS_AS(top.getModelingOption(s, "/a/should_not_be_found"),
+        VariableNotFound);
 
     // Set different values for moX at the different paths
     top.setModelingOption(s, moPaths[0], 0);
@@ -2047,7 +2059,7 @@ TEST_CASE("Component Interface State Trajectories")
     }
 
     // Create a new state trajectory (as though deserializing)
-    // newTraj must be must the expected size before any set calls.
+    // newTraj must be the expected size before any set calls.
     SimTK::Array_<SimTK::State> newTraj;
     for (int i = 0; i < nsteps; ++i) newTraj.emplace_back(s);
     // state variables

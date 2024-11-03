@@ -24,14 +24,14 @@ function(SetDefaultCMakeInstallPrefix)
     get_filename_component(BASE_DIR ${BASE_DIR} DIRECTORY)
     # Default install prefix for OpenSim dependencies. If user changes
     # CMAKE_INSTALL_PREFIX, this directory will be removed.
-    set(DEFAULT_CMAKE_INSTALL_PREFIX
+    set(DEFAULT_CMAKE_INSTALL_PREFIX 
         ${BASE_DIR}/opensim_dependencies_install
         CACHE
         INTERNAL
         "Default CMAKE_INSTALL_PREFIX for OpenSim dependencies.")
 
     if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-        set(CMAKE_INSTALL_PREFIX
+        set(CMAKE_INSTALL_PREFIX 
             ${DEFAULT_CMAKE_INSTALL_PREFIX}
             CACHE
             PATH
@@ -105,7 +105,6 @@ function(AddDependency)
             list(APPEND CMAKE_ARGS
                 -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE})
         endif()
-        list(APPEND CMAKE_ARGS ${DEP_CMAKE_ARGS})
 
         # Forward cmake arguments to dependencies.
         list(APPEND CMAKE_ARGS
@@ -139,6 +138,9 @@ function(AddDependency)
         if(SWIG_EXECUTABLE)
             list(APPEND CMAKE_ARGS -DSWIG_EXECUTABLE:FILEPATH=${SWIG_EXECUTABLE})
         endif()
+
+        # Append the dependency-specific CMake arguments.
+        list(APPEND CMAKE_ARGS ${DEP_CMAKE_ARGS})
 
         if(DEP_GIT_URL)
             ExternalProject_Add(${DEP_NAME}
@@ -183,7 +185,7 @@ AddDependency(NAME       ezc3d
 AddDependency(NAME       simbody
               DEFAULT    ON
               GIT_URL    https://github.com/simbody/simbody.git
-              GIT_TAG    d98f05fa1899633b544757e6c179562940f0849d
+              GIT_TAG    f853397efad00798a169ff3dd1c52f5e20a24ba9
               CMAKE_ARGS -DBUILD_EXAMPLES:BOOL=OFF
                          -DBUILD_TESTING:BOOL=OFF
                          ${SIMBODY_EXTRA_CMAKE_ARGS})
@@ -193,6 +195,11 @@ AddDependency(NAME       docopt
               GIT_URL    https://github.com/docopt/docopt.cpp.git
               GIT_TAG    3dd23e3280f213bacefdf5fcb04857bf52e90917)
 
+set(SPDLOG_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+if(MSVC)
+    # `spdlog` transitively uses a deprecated `stdext::checked_array_iterator`
+    set(SPDLOG_CXX_FLAGS "${SPDLOG_CXX_FLAGS} /D_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING")
+endif()
 
 AddDependency(NAME       spdlog
               DEFAULT    ON
@@ -201,7 +208,8 @@ AddDependency(NAME       spdlog
               CMAKE_ARGS -DSPDLOG_BUILD_BENCH:BOOL=OFF
                          -DSPDLOG_BUILD_TESTS:BOOL=OFF
                          -DSPDLOG_BUILD_EXAMPLE:BOOL=OFF
-                         -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON)
+                         -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON
+                         -DCMAKE_CXX_FLAGS:STRING=${SPDLOG_CXX_FLAGS})
 
 AddDependency(NAME hdf5
               DEFAULT ON
@@ -281,36 +289,19 @@ if (WIN32)
 
 
     if(SUPERBUILD_ipopt)
-
-        # Ipopt: Download pre-built binaries built by chrisdembia.
-        # This binary distribution comes with MUMPS and OpenBLAS.
-        # Compiled with clang-cl 5.0 and flang, using conda.
-        # Unfortunately, we do not have scripts to recreate this binary :(.
+        # Ipopt: Download pre-built binaries built by coin-or
+        # Compilers and Runtime Libraries:
+        # Microsoft (R) C/C++ Optimizing Compiler Version 19.29.30153 for x64
+        # (R) C++ Intel(R) 64 Compiler Classic for applications running on Intel(R) 64, Version 2021.2.0 Build 20210228_000000
+        # Intel(R) Fortran Intel(R) 64 Compiler Classic for applications running on Intel(R) 64, Version 2021.2.0 Build 20210228_000000
         set(IPOPT_INSTALL_CMD "${CMAKE_COMMAND}" -E copy_directory
             "${CMAKE_BINARY_DIR}/ipopt-prefix/src/ipopt"
             "${CMAKE_INSTALL_PREFIX}/ipopt")
         ExternalProject_Add(ipopt
-            URL https://sourceforge.net/projects/myosin/files/ipopt/ipopt-mumps-flang-openblas-win64.zip
+            URL https://github.com/coin-or/Ipopt/releases/download/releases%2F3.14.16/Ipopt-3.14.16-win64-msvs2019-md.zip
             CONFIGURE_COMMAND ""
             BUILD_COMMAND ""
             INSTALL_COMMAND ${IPOPT_INSTALL_CMD})
-
-        # Previously attempted option:
-        # Ipopt: Download pre-built binaries from the YARP/iCub project.
-        # This binary distribution comes with MUMPS (which contains Fortran
-        # code compiled with the proprietary Intel Fortran compiler).
-        # set(IPOPT_INSTALL_CMD "${CMAKE_COMMAND}" -E copy_directory
-            # "${CMAKE_BINARY_DIR}/ipopt-prefix/src/ipopt"
-            # "${CMAKE_INSTALL_PREFIX}/ipopt")
-        # ExternalProject_Add(ipopt
-            # URL http://www.icub.org/download/3rd-party/ipopt-3.12.7_msvc14_x86_amd64.zip
-            # CONFIGURE_COMMAND ""
-            # BUILD_COMMAND ""
-            # INSTALL_COMMAND ${IPOPT_INSTALL_CMD})
-
-        # COIN-OR may make binaries available on GitHub (see release 3.13.2),
-        # likely using Intel Fortran.
-        # https://github.com/coin-or/Ipopt/releases
         mark_as_advanced(SUPERBUILD_ipopt)
     endif()
 else()
@@ -353,17 +344,33 @@ else()
         # operators like && is not defined."
         # Patch the scripts that download Metis and MUMPS to use our
         # Sourceforge mirror. The original links are not reliable.
-        ExternalProject_Add(ipopt
-            URL https://www.coin-or.org/download/source/Ipopt/Ipopt-3.12.8.zip
-            INSTALL_DIR "${CMAKE_INSTALL_PREFIX}/ipopt"
-            PATCH_COMMAND cd <SOURCE_DIR>/ThirdParty/Metis && patch < ${CMAKE_SOURCE_DIR}/get.Metis.patch
-                  COMMAND cd <SOURCE_DIR>/ThirdParty/Metis && ./get.Metis
-                  COMMAND cd <SOURCE_DIR>/ThirdParty/Mumps && patch < ${CMAKE_SOURCE_DIR}/get.Mumps.patch
-                  COMMAND cd <SOURCE_DIR>/ThirdParty/Mumps && ./get.Mumps
-            # GCC 10 generates a warning when compling MUMPS that we must suppress using
-            # -fallow-argument-mismatch.
-            # Suppress warnings treated as errors in Clang/LLVM with -Wno-error=implicit-function-declaration
+        message(STATUS "Building Metis...")
+
+        ExternalProject_Add(metis
+            # URL    http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz
+            URL    https://sourceforge.net/projects/myosin/files/metis-5.1.0.tar.gz/download
+            CONFIGURE_COMMAND cd <SOURCE_DIR> && ${CMAKE_MAKE_PROGRAM} shared=1 config "prefix=${CMAKE_INSTALL_PREFIX}/ipopt" BUILDDIR=bdir
+            BUILD_COMMAND cd <SOURCE_DIR>/bdir && ${CMAKE_MAKE_PROGRAM}
+            INSTALL_DIR       "${CMAKE_INSTALL_PREFIX}/ipopt"
+            INSTALL_COMMAND cd <SOURCE_DIR>/bdir && ${CMAKE_MAKE_PROGRAM} install)
+
+        # GCC 10 generates a warning when compling MUMPS that we must suppress using
+        # -fallow-argument-mismatch.
+        ExternalProject_Add(mumps
+            GIT_REPOSITORY    https://github.com/coin-or-tools/ThirdParty-Mumps.git
+            GIT_TAG           releases/3.0.5
+            PATCH_COMMAND cd <SOURCE_DIR> && ./get.Mumps
             CONFIGURE_COMMAND <SOURCE_DIR>/configure --prefix=<INSTALL_DIR> ADD_FFLAGS=-fallow-argument-mismatch ADD_CFLAGS=-Wno-error=implicit-function-declaration
+            BUILD_COMMAND ${CMAKE_MAKE_PROGRAM} ${BUILD_FLAGS}
+            INSTALL_DIR       "${CMAKE_INSTALL_PREFIX}/ipopt"
+            INSTALL_COMMAND ${CMAKE_MAKE_PROGRAM} install)
+
+        ExternalProject_Add(ipopt
+            DEPENDS           mumps metis
+            URL https://github.com/coin-or/Ipopt/archive/refs/tags/releases/3.14.16.zip
+            INSTALL_DIR "${CMAKE_INSTALL_PREFIX}/ipopt"
+            # Suppress warnings treated as errors in Clang/LLVM with -Wno-error=implicit-function-declaration
+            CONFIGURE_COMMAND <SOURCE_DIR>/configure --with-mumps --prefix=<INSTALL_DIR> --with-mumps-cflags="-I${CMAKE_INSTALL_PREFIX}/ipopt/include/coin-or/mumps" --with-mumps-lflags="-L${CMAKE_INSTALL_PREFIX}/ipopt/lib -lcoinmumps"
             BUILD_COMMAND ${CMAKE_MAKE_PROGRAM} ${BUILD_FLAGS}
             INSTALL_COMMAND ${CMAKE_MAKE_PROGRAM} install)
     endif()
@@ -371,18 +378,37 @@ else()
 endif()
 
 if(SUPERBUILD_casadi)
-    AddDependency(NAME       casadi
+  if (WIN32)
+      AddDependency(NAME       casadi
                   DEFAULT    ON
                   DEPENDS    ipopt
                   GIT_URL    https://github.com/casadi/casadi.git
-                  # This commit is from casadi's develop branch, 2020-06-20
-                  GIT_TAG    d074c221e22bd754f240f3597371418733e5efd4
+                  GIT_TAG    3.6.5
                   CMAKE_ARGS -DWITH_IPOPT:BOOL=ON
+                             -DIPOPT_LIBRARIES:FILEPATH=ipopt.dll.lib
+                             -DIPOPT_INCLUDE_DIRS:PATH=${CMAKE_INSTALL_PREFIX}/ipopt/include/coin-or
+                             -DLIB_FULL_ipopt.dll.lib:FILEPATH=${CMAKE_INSTALL_PREFIX}/ipopt/lib/ipopt.dll.lib
+                             -DWITH_MUMPS:BOOL=OFF
                              -DWITH_THREAD:BOOL=ON
+                             -DWITH_BUILD_MUMPS:BOOL=OFF
                              -DWITH_EXAMPLES:BOOL=OFF
                              -DPKG_CONFIG_USE_CMAKE_PREFIX_PATH:BOOL=ON
                              -DCMAKE_PREFIX_PATH:PATH=${CMAKE_INSTALL_PREFIX}/ipopt
                   )
+  else()
+    AddDependency(NAME       casadi
+                  DEFAULT    ON
+                  DEPENDS    ipopt
+                  GIT_URL    https://github.com/casadi/casadi.git
+                  GIT_TAG    3.6.5
+                  CMAKE_ARGS -DWITH_IPOPT:BOOL=ON
+                             -DWITH_THREAD:BOOL=ON
+                             -DWITH_BUILD_MUMPS:BOOL=OFF
+                             -DWITH_EXAMPLES:BOOL=OFF
+                             -DPKG_CONFIG_USE_CMAKE_PREFIX_PATH:BOOL=ON
+                             -DCMAKE_PREFIX_PATH:PATH=${CMAKE_INSTALL_PREFIX}/ipopt
+                  )
+  endif()
 endif()
 
 #######################
