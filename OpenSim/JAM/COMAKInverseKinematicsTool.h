@@ -59,6 +59,9 @@ public:
     OpenSim_DECLARE_LIST_PROPERTY(secondary_coordinates, std::string, 
         "List of paths to the Secondary Coordinates in the model.")
 
+    OpenSim_DECLARE_LIST_PROPERTY(prescribed_coordinates, std::string, 
+        "List of paths to the Secondary Coordinates in the model.")
+
     OpenSim_DECLARE_OPTIONAL_PROPERTY(secondary_coupled_coordinate, std::string, 
         "Path to the coordinate to prescribe in "
         "secondary_constraint_simulation. In inverse kinematics, "
