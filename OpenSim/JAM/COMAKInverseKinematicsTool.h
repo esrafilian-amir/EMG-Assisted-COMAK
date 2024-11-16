@@ -59,8 +59,8 @@ public:
     OpenSim_DECLARE_LIST_PROPERTY(secondary_coordinates, std::string, 
         "List of paths to the Secondary Coordinates in the model.")
 
-    OpenSim_DECLARE_LIST_PROPERTY(prescribed_coordinates, std::string, 
-        "List of paths to the Secondary Coordinates in the model.")
+    OpenSim_DECLARE_LIST_PROPERTY(constrained_coordinates, std::string, 
+        "List of paths to the Constrained Coordinates in the model.")
 
     OpenSim_DECLARE_OPTIONAL_PROPERTY(secondary_coupled_coordinate, std::string, 
         "Path to the coordinate to prescribe in "
@@ -229,7 +229,7 @@ public:
 
     SimTK::State _state;
 
-    int _n_prescribed_coord;
+    int _n_constrained_coord;
     int _n_primary_coord;
     int _n_secondary_coord;
 
@@ -239,9 +239,9 @@ public:
     int _n_parameters;
     Array<std::string> _parameter_names;
 
-    Array<std::string> _prescribed_coord_name;
-    Array<std::string> _prescribed_coord_path;
-    Array<int> _prescribed_coord_index;
+    Array<std::string> _constrained_coord_name;
+    Array<std::string> _constrained_coord_path;
+    Array<int> _constrained_coord_index;
 
     Array<std::string> _primary_coord_name;
     Array<std::string> _primary_coord_path;
