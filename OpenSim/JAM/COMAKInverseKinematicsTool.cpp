@@ -837,6 +837,28 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
 
             model_cons.addConstraint(cc_constraint);
         }
+		
+        for (int i = model_cons.upd_ForceSet().getSize() - 1; i >= 0; i--) {
+            if (model_cons.getForceSet().get(i).getConcreteClassName() ==
+                    "Blankevoort1991Ligament") {
+                std::string lg_name = model_cons.getForceSet().get(i).getName();
+                if (lg_name[0] == 'P' && lg_name[1] == 'T') {
+
+                } else {
+                    model_cons.upd_ForceSet().remove(i);
+                }
+
+            } else if (model_cons.getForceSet().get(i).getConcreteClassName() ==
+                       "SpringGeneralizedForce") {
+                model_cons.upd_ForceSet().remove(i);
+
+            } else if (model_cons.getForceSet().get(i).getConcreteClassName() ==
+                       "Smith2018ArticularContactForce") {
+                model_cons.upd_ForceSet().remove(i);
+            }
+
+        }
+        model_cons.updContactGeometrySet().clearAndDestroy();
         model_cons.print(get_constrained_model_file());
     }
 }
