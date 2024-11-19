@@ -519,11 +519,16 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
             }
             prev_sec_coord_value(k) = value;
 
-
+            if (get_verbose()>0)
             log_info("{:<30} {:<20} {:<20}", coord.getName(), value, delta);
+            else {
+                if (delta > get_secondary_constraint_sim_settle_threshold())
+                    log_info("{:<30} {:<20} {:<20}", coord.getName(), value,
+                            delta);
+            }
 
         }
-        printDebugInfo(model,state);  
+        if (get_verbose() > 0) printDebugInfo(model, state);
 
         i++;
     }
@@ -635,7 +640,7 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
         q_table.appendRow(state.getTime(), q_row);
 
         log_info("{}",state.getTime());
-        printDebugInfo(model,state);  
+        if (get_verbose() > 0) printDebugInfo(model, state);
     }
 
     //Compute Coupled Constraint Functions

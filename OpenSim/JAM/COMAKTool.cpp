@@ -966,7 +966,8 @@ void COMAKTool::performCOMAK() {
             _model.realizeAcceleration(state);
 
             // Output Optimization Results
-            printOptimizationResultsToConsole(_optim_parameters, state);
+            if (get_verbose() > 4)
+                printOptimizationResultsToConsole(_optim_parameters, state);
 
             log_info("Optimized Acceleration Errors:");
             log_info("{:<20} {:<20} {:<20} {:<20}", "Name", "Experimental",
@@ -1013,9 +1014,14 @@ void COMAKTool::performCOMAK() {
                     max_udot_coord = coord.getName();
                     max_udot_error = udot_error;
                 }
-
-                log_info("{:<20} {:<20} {:<20} {:<20}", coord.getName(),
-                        observed_udot, coord_udot, udot_error);
+                if (get_verbose() == 0) {
+                    if (udot_error > max_udot_error)
+                        log_info("{:<20} {:<20} {:<20} {:<20}", coord.getName(),
+                                observed_udot, coord_udot, udot_error);
+                } else {
+                    log_info("{:<20} {:<20} {:<20} {:<20}", coord.getName(),
+                            observed_udot, coord_udot, udot_error);
+                }
             }
 
             log_info("Max udot Error: {} \t Max Error Coord: {}",
@@ -1765,15 +1771,16 @@ void COMAKTool::printCOMAKascii() {
         "##                                                                                             ##\n"
         "#################################################################################################\n"
         "#################################################################################################\n"
-        "      ##                                   EMG-Assisted                                  ##\n"
-        "      ##           Concurrent Optimization of Muscle Activations and Kinematics          ##\n"
-        "      ##                                                                                 ##\n"
-        "      ##    Developed by Amir Esrafilian [1], Colin Smith [2,3] and Darryl Thelen [2]    ##\n"
-        "      ##                        1. University of Eastern Finland                         ##\n"
-        "      ##                       2. University of Wisconsin-Madison                        ##\n"
-        "      ##                                   3. ETH Zurich                                 ##\n"
-        "      #####################################################################################\n"
-        "      #####################################################################################\n\n"
+        "      ##                                   EMG-Assisted                                   ##\n"
+        "      ##           Concurrent Optimization of Muscle Activations and Kinematics           ##\n"
+        "      ##                                                                                  ##\n"
+        "      ##                     Implemented by Amir Esrafilian [1],                          ##\n"
+        "      ## on top of COMAK, originally developed by Colin Smith [2,3] and Darryl Thelen [2] ##\n"
+        "      ##                        1. University of Eastern Finland                          ##\n"
+        "      ##                       2. University of Wisconsin-Madison                         ##\n"
+        "      ##                                   3. ETH Zurich                                  ##\n"
+        "      ######################################################################################\n"
+        "      ######################################################################################\n\n"
     );
 };
 
