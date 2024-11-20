@@ -379,13 +379,15 @@ comak.run();
 
 %% Perform Joint Mechanics Analysis
 jnt_mech = JointMechanicsTool();
+import org.opensim.modeling.*
+jnt_mech = JointMechanicsTool();
 jnt_mech.set_model_file(model_file);
 jnt_mech.set_input_states_file([comak_result_dir '/' results_basename '_states.sto']);
 jnt_mech.set_use_muscle_physiology(false);
 jnt_mech.set_results_file_basename(results_basename);
 jnt_mech.set_results_directory(jnt_mech_result_dir);
 jnt_mech.set_start_time(1.28);
-jnt_mech.set_stop_time(-1);
+jnt_mech.set_stop_time(1.91);
 jnt_mech.set_resample_step_size(-1);
 jnt_mech.set_normalize_to_cycle(true);
 jnt_mech.set_lowpass_filter_frequency(-1);
@@ -393,15 +395,15 @@ jnt_mech.set_print_processed_kinematics(false);
 jnt_mech.set_contacts(0,'all');
 jnt_mech.set_contact_outputs(0,'all');
 jnt_mech.set_contact_mesh_properties(0,'none');
-jnt_mech.set_ligaments(0,'all');
-jnt_mech.set_ligament_outputs(0,'all');
-jnt_mech.set_muscles(0,'all');
-jnt_mech.set_muscle_outputs(0,'all');
+jnt_mech.set_ligaments(0,'none');
+jnt_mech.set_ligament_outputs(0,'none');
+jnt_mech.set_muscles(0,'none');
+jnt_mech.set_muscle_outputs(0,'none');
 
-jnt_mech.set_attached_geometry_bodies(0,'all');
+jnt_mech.set_attached_geometry_bodies(0,'none');
 
-jnt_mech.set_output_orientation_frame('ground');
-jnt_mech.set_output_position_frame('ground');
+jnt_mech.set_output_orientation_frame('/bodyset/tibia_proximal_r');
+jnt_mech.set_output_position_frame('/bodyset/tibia_proximal_r');
 jnt_mech.set_write_vtp_files(true);
 jnt_mech.set_vtp_file_format('binary');
 jnt_mech.set_write_h5_file(false);
@@ -410,7 +412,6 @@ jnt_mech.set_h5_states_data(true);
 jnt_mech.set_write_transforms_file(false);
 jnt_mech.set_output_transforms_file_type('sto');
 jnt_mech.set_use_visualizer(false);
-jnt_mech.set_verbose(0);
 
 analysis_set = AnalysisSet();
 

@@ -508,19 +508,19 @@ SimTK::State COMAKTool::initialize() {
     }
 
     computeMuscleVolumes();
+    if (get_verbose() > 0) {
+        log_debug("Muscle Properties");
+        log_debug("{:<15} {:<15} {:<15}", "name ", "Fmax", "Volume");
+        i = 0;
+        for (const Muscle& msl : _model.getComponentList<Muscle>()) {
+            double l0 = msl.get_optimal_fiber_length();
+            double fmax = msl.get_max_isometric_force();
 
-    log_debug("Muscle Properties");
-    log_debug("{:<15} {:<15} {:<15}", "name ", "Fmax", "Volume");
-    i = 0;
-    for (const Muscle& msl : _model.getComponentList<Muscle>()) {
-        double l0 = msl.get_optimal_fiber_length();
-        double fmax = msl.get_max_isometric_force();
-
-        log_debug("{:<15} {:<15} {:<15}", msl.getName(), fmax,
-                _muscle_volumes[i]);
-        i++;
+            log_debug("{:<15} {:<15} {:<15}", msl.getName(), fmax,
+                    _muscle_volumes[i]);
+            i++;
+        }
     }
-
     // Setup optimization parameters
     // parameters vector ordered
     // muscle activations
@@ -574,17 +574,17 @@ SimTK::State COMAKTool::initialize() {
             _n_optim_constraints++;
         }
     }
+    if (get_verbose() > 0) {
+        log_debug("IPOPT Parameter Names:");
+        for (int p = 0; p < _n_parameters; p++) {
+            log_debug("{} \t {}", p, _optim_parameter_names[p]);
+        }
 
-    log_debug("IPOPT Parameter Names:");
-    for (int p = 0; p < _n_parameters; p++) {
-        log_debug("{} \t {}", p, _optim_parameter_names[p]);
+        log_debug("IPOPT Constraint Names");
+        for (int p = 0; p < _n_optim_constraints; p++) {
+            log_debug("{} \t {}", p, _optim_constraint_names[p]);
+        }
     }
-
-    log_debug("IPOPT Constraint Names");
-    for (int p = 0; p < _n_optim_constraints; p++) {
-        log_debug("{} \t {}", p, _optim_constraint_names[p]);
-    }
-
     // Organize COMAKCostFunctionParameters
     int msl_cnt = 0;
     SimTK::Vector _gamma(_n_muscles);
@@ -665,7 +665,7 @@ void COMAKTool::performCOMAK() {
     int m = 0;
     for (Muscle& msl : _model.updComponentList<Muscle>()) {
 
-        log_debug("{:<20} {:<20} {:<20} {:<20} {:<20} {:<20}", msl.getName(),
+        log_info("{:<20} {:<20} {:<20} {:<20} {:<20} {:<20}", msl.getName(),
                 _cost_muscle_weights.get(m).calcValue(
                         SimTK::Vector(1, get_start_time())),
 
@@ -694,10 +694,10 @@ void COMAKTool::performCOMAK() {
         }
     }
 
-    log_debug("Initial Secondary Coordinate Values:");
+    log_info("Initial Secondary Coordinate Values:");
 
     for (int i = 0; i < _n_secondary_coord; ++i) {
-        log_debug("{} :\t {}", _secondary_coord_name[i],
+        log_info("{} :\t {}", _secondary_coord_name[i],
                 init_secondary_values(i));
     }
 
@@ -784,7 +784,7 @@ void COMAKTool::performCOMAK() {
         // Print EMGs
         if (get_is_emg_assisted() && get_verbose()>0) {
             // Check Cost Function Parameters
-            log_info("{:<20} {:<20} {:<20} {:<20} {:<20} {:<20}", "Muscles",
+            log_debug("{:<20} {:<20} {:<20} {:<20} {:<20} {:<20}", "Muscles",
                     "muscle_weight", "muscle_emg_gamma", "desired_act",
                     "lower_bound", "upper_bound");
             int m = 0;
@@ -841,7 +841,7 @@ void COMAKTool::performCOMAK() {
         _model.realizeVelocity(state);
 
         // Print initial optimization
-        if (frame_num == 1) {
+        if (frame_num == 1 && get_verbose() > 1) {
             printOptimizationResultsToConsole(_optim_parameters, state);
         }
 
@@ -852,7 +852,7 @@ void COMAKTool::performCOMAK() {
         SimTK::Matrix iter_parameters(get_max_iterations(), _n_parameters, 0.0);
         std::vector<SimTK::State> iter_states(get_max_iterations());
         int n_iter = 0;
-
+        SimTK::Vector desired_act(_n_muscles);
         for (int iter = 0; iter < get_max_iterations(); ++iter) {
             n_iter++;
 
@@ -928,7 +928,7 @@ void COMAKTool::performCOMAK() {
             target.setCostFunctionWeight(msl_weight);
 
             // Set Desired Activations
-            SimTK::Vector desired_act(_n_muscles);
+            
             for (int m = 0; m < _n_muscles; ++m) {
                 desired_act(m) = _cost_muscle_desired_act.get(m).calcValue(
                         SimTK::Vector(1, _time[i]));
@@ -1049,6 +1049,18 @@ void COMAKTool::performCOMAK() {
                     log_info("{:<20} {:<20} {:<20} {:<20}", coord.getName(),
                             observed_udot, coord_udot, udot_error);
                 }
+                if (get_verbose() > 1) {
+                    log_debug("");
+                    log_debug("Optimized Muscles:");
+                    log_debug("{:<20} {:<20} {:<20}", "name", "activation",
+                            "EMG");
+                    for (int ii = 0; ii < _n_muscles; ++ii) {
+                        if (_emg_gamma_weight(ii) > 0)
+                            log_debug("{:<20} {:<20} {:<20}",
+                                    _optim_parameter_names[ii],
+                                    _optim_parameters[ii], desired_act(ii));
+                    }
+                }
             }
 
             log_info("Max udot Error: {} \t Max Error Coord: {}",
@@ -1113,7 +1125,17 @@ void COMAKTool::performCOMAK() {
 
             min_max_udot_error = min_val;
         } else {
-            log_info("COMAK Converged! Number of iterations: {}", n_iter);
+            log_info("");
+            log_info("Optimized Muscles:");
+            log_info("{:<20} {:<20} {:<20}", "name", "activation", "EMG");
+            for (int ii = 0; ii < _n_muscles; ++ii) {
+                if (_emg_gamma_weight(ii) > 0)
+                    log_info("{:<20} {:<20} {:<20}",
+                            _optim_parameter_names[ii], _optim_parameters[ii],
+                            desired_act(ii));
+            }
+            log_info("");
+            log_info("########################## COMAK Converged! Number of iterations: {} ##########################", n_iter);
             frame_converged = 1;
         }
 
@@ -1482,8 +1504,13 @@ SimTK::Vector COMAKTool::equilibriateSecondaryCoordinates() {
 
             if (delta > max_coord_delta) { max_coord_delta = delta; }
             prev_sec_coord_value(k) = value;
-
-            log_info("{:<20} {:<15} {:<15}", coord.getName(), value, delta);
+            if (get_verbose() > 0) {
+                log_info("{:<20} {:<15} {:<15}", coord.getName(), value, delta);
+            }else {
+            if (delta>get_settle_threshold())
+                    log_info("{:<20} {:<15} {:<15}", coord.getName(), value,
+                            delta);
+            }
         }
         i++;
     }
