@@ -1078,7 +1078,18 @@ void COMAKTool::performCOMAK() {
 
         int frame_converged = 0;
         double min_max_udot_error = max_udot_error;
-
+        // print muscle activations
+        if (get_is_emg_assisted() == 1) {
+            log_info("");
+            log_info("Optimized Muscles:");
+            log_info("{:<20} {:<20} {:<20}", "name", "activation", "EMG");
+            for (int ii = 0; ii < _n_muscles; ++ii) {
+                if (_emg_gamma_weight(ii) > 0)
+                    log_info("{:<20} {:<20} {:<20}", _optim_parameter_names[ii],
+                            _optim_parameters[ii], desired_act(ii));
+            }
+        }
+        // print COMAK report for this iteration
         if (max_udot_error > get_udot_tolerance()) {
 
             log_info("COMAK failed to converge.");
@@ -1100,7 +1111,7 @@ void COMAKTool::performCOMAK() {
                 _optim_parameters = ~iter_parameters[min_iter];
                 state = iter_states[min_iter];
 
-                log_info("Using best iteration ({}) with max udot error: {}",
+                log_info("########################## Using best iteration ({}) with max udot error: {} ##########################",
                         min_iter, min_val);
             } else {
                 _optim_parameters = _prev_parameters;
@@ -1109,8 +1120,8 @@ void COMAKTool::performCOMAK() {
 
                 state.setTime(_time[i]);
 
-                log_info("No iteration has max udot error less than "
-                         "worst case tolerance ({}).",
+                log_info("########################## No iteration has max udot error less than "
+                         "worst case tolerance ({}). ##########################",
                         get_udot_worse_case_tolerance());
 
                 log_info("Resetting optimization parameters to previous time "
@@ -1125,15 +1136,6 @@ void COMAKTool::performCOMAK() {
 
             min_max_udot_error = min_val;
         } else {
-            log_info("");
-            log_info("Optimized Muscles:");
-            log_info("{:<20} {:<20} {:<20}", "name", "activation", "EMG");
-            for (int ii = 0; ii < _n_muscles; ++ii) {
-                if (_emg_gamma_weight(ii) > 0)
-                    log_info("{:<20} {:<20} {:<20}",
-                            _optim_parameter_names[ii], _optim_parameters[ii],
-                            desired_act(ii));
-            }
             log_info("");
             log_info("########################## COMAK Converged! Number of iterations: {} ##########################", n_iter);
             frame_converged = 1;
