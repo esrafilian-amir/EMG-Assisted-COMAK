@@ -311,7 +311,7 @@ public:
                                      bool,
                                      "If true, the analysis will be EMG-assisted.")
     OpenSim_DECLARE_PROPERTY(verbose, int,
-                            "Controling output detail.")
+                            "Controling output detail. 0: print essential info, 1: more details, 2: print all details (huge log file)")
 //=============================================================================
 // METHODS
 //=============================================================================

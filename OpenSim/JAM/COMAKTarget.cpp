@@ -124,9 +124,9 @@ void ComakTarget::initialize(){
         _emg_gamma_weight.resize(_nMuscles);
         _emg_gamma_weight = 0.0;
     }
-    //Precompute Constraint Matrix
+     //Precompute Constraint Matrix
     precomputeConstraintMatrix();
-    if (_verbose > 0) {
+    if (_verbose > 1) {
         log_debug("Num Parameters: {}", _nParameters);
         log_debug("Num Constraints: {}", _nConstraints);
         log_debug("Num Actuators: {}", _nActuators);
@@ -362,34 +362,34 @@ void ComakTarget::precomputeConstraintMatrix() {
         }
     }
 
-    
-    log_trace("Constraint Matrix: ");
-    for (int i = 0; i < _nConstraints; ++i) {
-        log_trace(_constraint_names[i]);
-        int p = 0;
-                
-        //Muscles
-        log_trace("Muscles");
-        for (int j = 0; j < _nMuscles; ++j) {
-            log_trace("{}",_constraint_matrix(i, p));
-            p++;
-        }
+    if (_verbose > 1) {
+        log_trace("Constraint Matrix: ");
+        for (int i = 0; i < _nConstraints; ++i) {
+            log_trace(_constraint_names[i]);
+            int p = 0;
 
-        //Non Muscle Actuators
-        log_trace("Non Muscle Actuators");
-        for (int j = 0; j < _nNonMuscleActuators; ++j) {
-            log_trace("{}",_constraint_matrix(i, p));
-            p++;
-        }
+            // Muscles
+            log_trace("Muscles");
+            for (int j = 0; j < _nMuscles; ++j) {
+                log_trace("{}", _constraint_matrix(i, p));
+                p++;
+            }
 
-        //Secondary Coordinates
-        log_trace("Delta Secondary Coord");
-        for (int j = 0; j < _nSecondaryCoord; ++j) {
-            log_trace("{}",_constraint_matrix(i, p));
-            p++;
+            // Non Muscle Actuators
+            log_trace("Non Muscle Actuators");
+            for (int j = 0; j < _nNonMuscleActuators; ++j) {
+                log_trace("{}", _constraint_matrix(i, p));
+                p++;
+            }
+
+            // Secondary Coordinates
+            log_trace("Delta Secondary Coord");
+            for (int j = 0; j < _nSecondaryCoord; ++j) {
+                log_trace("{}", _constraint_matrix(i, p));
+                p++;
+            }
         }
     }
-
 }
 
 void ComakTarget::realizeAccelerationFromParameters
@@ -479,7 +479,7 @@ objectiveFunc(const SimTK::Vector &parameters, const bool new_parameters,
         + non_muscle_cost * _non_muscle_actuator_weight
         + contact_cost * _contact_energy_weight;
 
-    if (_verbose > 9) {
+    if (_verbose > 1) {
         std::cout << "Total Cost: " << performance << "\t";
         std::cout << "Muscle Cost: " << msl_cost << "\t";
         std::cout << "Non Muscle Actuator Cost: " << non_muscle_cost << "\t";
@@ -534,10 +534,11 @@ gradientFunc(const SimTK::Vector &parameters, const bool new_parameters,
             _contact_energy_weight * _secondary_coord_unit_energy[i];
         p++;
     }
-
-    log_trace("Cost Gradient");
-    for (int i = 0; i < _nParameters; ++i) {
-        log_trace("{} : {}",_parameter_names[i], gradient(i));
+    if (_verbose > 1) {
+        log_trace("Cost Gradient");
+        for (int i = 0; i < _nParameters; ++i) {
+            log_trace("{} : {}", _parameter_names[i], gradient(i));
+        }
     }
 
     return 0;
@@ -618,7 +619,7 @@ void ComakTarget::setParameterBounds(double scale) {
         p++;
     }
     setParameterLimits(lower_bounds, upper_bounds);
-    if (_verbose > 0) {
+    if (_verbose > 1) {
         log_debug("{:<20} {:<15} {:<15} {:<15},",
                 "Parameter Limits: ", "initial value", "lower bound",
                 "upper bound");
@@ -636,7 +637,7 @@ void ComakTarget::printPerformance(SimTK::Vector parameters) {
     bool notNeeded = false;
     SimTK::Real performance;
     objectiveFunc(parameters, notNeeded, performance);
-    if (_verbose > 0) {
+    if (_verbose > 1) {
         log_info("Optimization Cost Function: {}", performance);
     }
 }

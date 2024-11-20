@@ -667,18 +667,18 @@ void COMAKTool::performCOMAK() {
 
         log_debug("{:<20} {:<20} {:<20} {:<20} {:<20} {:<20}", msl.getName(),
                 _cost_muscle_weights.get(m).calcValue(
-                        SimTK::Vector(1, _time[0])),
+                        SimTK::Vector(1, get_start_time())),
 
                 _emg_gamma_weight[m], // Amir
 
                 _cost_muscle_desired_act.get(m).calcValue(
-                        SimTK::Vector(1, _time[0])),
+                        SimTK::Vector(1, get_start_time())),
 
                 _cost_muscle_act_lower_bound.get(m).calcValue(
-                        SimTK::Vector(1, _time[0])),
+                        SimTK::Vector(1, get_start_time())),
 
                 _cost_muscle_act_upper_bound.get(m).calcValue(
-                        SimTK::Vector(1, _time[0])));
+                        SimTK::Vector(1, get_start_time())));
         m++;
     }
 
@@ -781,7 +781,34 @@ void COMAKTool::performCOMAK() {
 
         log_info("Frame: {} / {}", ++frame_num, _n_out_frames);
         log_info("Time: {}", _time[i]);
+        // Print EMGs
+        if (get_is_emg_assisted() && get_verbose()>0) {
+            // Check Cost Function Parameters
+            log_info("{:<20} {:<20} {:<20} {:<20} {:<20} {:<20}", "Muscles",
+                    "muscle_weight", "muscle_emg_gamma", "desired_act",
+                    "lower_bound", "upper_bound");
+            int m = 0;
+            for (Muscle& msl : _model.updComponentList<Muscle>()) {
+                if (_emg_gamma_weight[m] > 0) {
+                    log_debug("{:<20} {:<20} {:<20} {:<20} {:<20} {:<20}",
+                            msl.getName(),
+                            _cost_muscle_weights.get(m).calcValue(
+                                    SimTK::Vector(1, _time[i])),
 
+                            _emg_gamma_weight[m], // Amir
+
+                            _cost_muscle_desired_act.get(m).calcValue(
+                                    SimTK::Vector(1, _time[i])),
+
+                            _cost_muscle_act_lower_bound.get(m).calcValue(
+                                    SimTK::Vector(1, _time[i])),
+
+                            _cost_muscle_act_upper_bound.get(m).calcValue(
+                                    SimTK::Vector(1, _time[i])));
+                }
+                m++;
+            }
+        }
         // Set Primary Qs and Us to experimental values
         for (int j = 0; j < _n_primary_coord; ++j) {
             Coordinate& coord =
@@ -966,7 +993,7 @@ void COMAKTool::performCOMAK() {
             _model.realizeAcceleration(state);
 
             // Output Optimization Results
-            if (get_verbose() > 4)
+            if (get_verbose() > 1)
                 printOptimizationResultsToConsole(_optim_parameters, state);
 
             log_info("Optimized Acceleration Errors:");
