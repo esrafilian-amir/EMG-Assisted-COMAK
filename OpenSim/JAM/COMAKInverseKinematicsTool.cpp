@@ -84,17 +84,18 @@ void COMAKInverseKinematicsTool::constructProperties()
     constructProperty_secondary_coordinates();
     constructProperty_constrained_coordinates();
     constructProperty_secondary_coupled_coordinate("");
-    constructProperty_secondary_constraint_sim_settle_threshold(1e-5);
-    constructProperty_secondary_constraint_sim_sweep_time(1.0);
+    constructProperty_secondary_constraint_sim_settle_threshold(1e-4);
+    constructProperty_secondary_constraint_sim_sweep_time(3.0);
+    constructProperty_sweep_dt(0.005);
     constructProperty_secondary_coupled_coordinate_start_value(0.0);
-    constructProperty_secondary_coupled_coordinate_stop_value(0.0);
+    constructProperty_secondary_coupled_coordinate_stop_value(90.0);
     constructProperty_secondary_constraint_sim_integrator_accuracy(1e-6);
+    constructProperty_settling_sim_integrator_accuracy(1e-10);
     constructProperty_secondary_constraint_sim_internal_step_limit(-1);
     constructProperty_constraint_function_num_interpolation_points(20);
     constructProperty_secondary_constraint_function_file(
         "secondary_coordinate_constraint_functions.xml");
     constructProperty_print_secondary_constraint_sim_results(false);
-
     constructProperty_perform_inverse_kinematics(true);
     constructProperty_IKTaskSet(IKTaskSet());
     constructProperty_marker_file("");
@@ -303,7 +304,9 @@ bool COMAKInverseKinematicsTool::initialize()
         if (ind > -1) { _constrained_coord_index[ind] = nCoord; }
         nCoord++;
     }
-
+    if (get_settling_sim_integrator_accuracy() < 1e-9)
+        set_settling_sim_integrator_accuracy(
+                get_secondary_constraint_sim_integrator_accuracy());
 
     log_info("Secondary Coordinates:");
     log_info("----------------------");
@@ -453,7 +456,7 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
 
     if (get_use_visualizer()) {
         SimTK::Visualizer& viz = model.updVisualizer().updSimbodyVisualizer();
-        viz.setWindowTitle("COMAK IK Settle Simulation");
+        viz.setWindowTitle("Settling: " + get_model_file());
         viz.setBackgroundColor(SimTK::White);
         viz.setShowSimTime(true);
         viz.setDesiredFrameRate(100);        
@@ -462,7 +465,7 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
     //prescribe muscle force
     for (Muscle& msl : model.updComponentList<Muscle>()) {
         msl.overrideActuation(state, true);
-        double value = msl.getMaxIsometricForce()*0.01;
+        double value = msl.getMaxIsometricForce()*0.02;
         msl.setOverrideActuation(state, value);
     }
     model.equilibrateMuscles(state);
@@ -470,7 +473,7 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
     //setup integrator
     SimTK::CPodesIntegrator integrator(
         model.getSystem(), SimTK::CPodes::BDF, SimTK::CPodes::Newton);
-    integrator.setAccuracy(get_secondary_constraint_sim_integrator_accuracy());
+    integrator.setAccuracy(get_settling_sim_integrator_accuracy());
 
     if (get_secondary_constraint_sim_internal_step_limit() != -1) {
         integrator.setInternalStepLimit(
@@ -482,7 +485,7 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
     
     StatesTrajectory settle_states;
 
-    double dt = 0.01;
+    double dt = 0.005;
  
 
     log_info("Starting Settling Simulation.");
@@ -575,7 +578,7 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
     state = model.initSystem();
     if (get_use_visualizer()) {
         SimTK::Visualizer& viz = model.updVisualizer().updSimbodyVisualizer();
-        viz.setWindowTitle("COMAK IK Sweep Simulation");
+        viz.setWindowTitle("Sweeping: " + get_model_file());
         viz.setBackgroundColor(SimTK::White);
         viz.setShowSimTime(true);
         viz.setDesiredFrameRate(100);
@@ -584,7 +587,7 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
     //prescribe muscle force
     for (Muscle& msl : model.updComponentList<Muscle>()) {
         msl.overrideActuation(state, true);
-        double value = msl.getMaxIsometricForce()*0.01;
+        double value = msl.getMaxIsometricForce()*0.02;
         msl.setOverrideActuation(state, value);
     }
     model.equilibrateMuscles(state);
@@ -599,6 +602,7 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
 
     double sweep_start = 0;
     double sweep_stop = Px;
+    dt = get_sweep_dt();
 
     int nSteps = (int)lround((sweep_stop - sweep_start) / dt);
 

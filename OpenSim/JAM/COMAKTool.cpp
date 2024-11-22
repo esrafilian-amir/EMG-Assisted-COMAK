@@ -732,6 +732,7 @@ void COMAKTool::performCOMAK() {
         viz = &_model.updVisualizer().updSimbodyVisualizer();
         viz->setBackgroundColor(SimTK::White);
         viz->setShowSimTime(true);
+        viz->setWindowTitle("Runing COMAK for: " + get_model_file());
     }
 
     // Setup Results Storage

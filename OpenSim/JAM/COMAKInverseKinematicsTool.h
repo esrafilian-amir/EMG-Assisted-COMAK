@@ -84,6 +84,12 @@ public:
         "range of motion from the  secondary_coupled_coordinate_start_value "
         "to the secondary_coupled_coordinate_stop_value.")
 
+    OpenSim_DECLARE_PROPERTY(sweep_dt, double, 
+        "The time step of the simulation phase where the "
+        "secondary_coupled_coord is swept (non-linearly prescribed) through the "
+        "range of motion from the  secondary_coupled_coordinate_start_value "
+        "to the secondary_coupled_coordinate_stop_value.")
+
     OpenSim_DECLARE_PROPERTY(secondary_coupled_coordinate_start_value, double, 
         "Initial Coordinate value for the secondary_coupled_coordinate in the "
         "secondary_constraint_sim. The units are in meters for translational "
@@ -95,6 +101,11 @@ public:
         "secondary_constraint_sim. The units are in meters for translational "
         "coordinates and degrees for rotational coordinates. "
         "The default value is 0.0.")
+
+    OpenSim_DECLARE_PROPERTY(
+        settling_sim_integrator_accuracy, double, 
+        "Integrator tolerance for the forward simulation."
+        "The default value is 1e-6.")
 
     OpenSim_DECLARE_PROPERTY(
         secondary_constraint_sim_integrator_accuracy, double, 
