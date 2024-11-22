@@ -196,7 +196,8 @@ bool COMAKInverseKinematicsTool::initialize()
     }
 
     // check marker file exists
-    if (!SimTK::Pathname::fileExists(get_marker_file())) {
+    if (!SimTK::Pathname::fileExists(get_marker_file()) &&
+            get_perform_inverse_kinematics()) {
         OPENSIM_THROW(Exception,"COMAKInverseKinematicsTool: marker_file "
             "does not exist! " + get_marker_file())
     }
