@@ -1050,6 +1050,7 @@ void COMAKTool::performCOMAK() {
                     log_info("{:<20} {:<20} {:<20} {:<20}", coord.getName(),
                             observed_udot, coord_udot, udot_error);
                 }
+                /*
                 if (get_verbose() > 1) {
                     log_debug("");
                     log_debug("Optimized Muscles:");
@@ -1062,6 +1063,7 @@ void COMAKTool::performCOMAK() {
                                     _optim_parameters[ii], desired_act(ii));
                     }
                 }
+                */
             }
 
             log_info("Max udot Error: {} \t Max Error Coord: {}",
@@ -1420,6 +1422,7 @@ SimTK::Vector COMAKTool::equilibriateSecondaryCoordinates() {
         SimTK::Visualizer& viz =
                 settle_model.updVisualizer().updSimbodyVisualizer();
         viz.setBackgroundColor(SimTK::White);
+        viz.setWindowTitle("Settling for COMAK for: " + get_model_file());
         viz.setShowSimTime(true);
     }
 

@@ -378,7 +378,6 @@ disp('Running COMAK Tool...')
 comak.run();
 
 %% Perform Joint Mechanics Analysis
-jnt_mech = JointMechanicsTool();
 import org.opensim.modeling.*
 jnt_mech = JointMechanicsTool();
 jnt_mech.set_model_file(model_file);

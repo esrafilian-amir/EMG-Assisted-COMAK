@@ -137,7 +137,7 @@ void Smith2018ContactMesh::setNull() {
 void Smith2018ContactMesh::constructProperties() {
     constructProperty_mesh_file("");
     constructProperty_elastic_modulus(1000000.0);
-    constructProperty_poissons_ratio(0.5);
+    constructProperty_poissons_ratio(0.45);
     constructProperty_thickness(0.005);
     constructProperty_use_variable_thickness(false);
     constructProperty_mesh_back_file("");
