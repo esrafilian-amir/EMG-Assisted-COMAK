@@ -28,7 +28,7 @@
 
 ---
 
-**NOTE: This repository contains the source code of OpenSim 4.x. For OpenSim 3.x or earlier, see [this link](https://simtk-confluence.stanford.edu/display/OpenSim/Building+OpenSim+from+Source).**
+**NOTE: This repository contains the source code of EMG-ASSISTED COMAK inmplemented in OpenSim v4+. An example of the pipeline is provided in: Resources\Code\Matlab\JAM\exampleWalking_EMG_Assisted **
 
 OpenSim is software that lets users develop models of musculoskeletal structures and create dynamic simulations of movement, such as this one:
 
