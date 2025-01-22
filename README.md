@@ -28,7 +28,7 @@
 
 ---
 
-**NOTE: This repository contains the source code of EMG-ASSISTED COMAK inmplemented in OpenSim v4+. An example of the pipeline is provided in: Resources\Code\Matlab\JAM\exampleWalking_EMG_Assisted **
+**NOTE: This repository contains the source code of EMG-ASSISTED COMAK implemented in OpenSim v4+. An example of the pipeline is provided in: Resources\Code\Matlab\JAM\exampleWalking_EMG_Assisted **
 
 OpenSim is software that lets users develop models of musculoskeletal structures and create dynamic simulations of movement, such as this one:
 
