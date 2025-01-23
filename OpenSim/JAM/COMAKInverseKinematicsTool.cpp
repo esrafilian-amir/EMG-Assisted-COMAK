@@ -409,8 +409,8 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
 
     //Initialize Simulation 
     //---------------------
-    double _constrained_multiplier = 0.95;
-    // Add CoordinateCouplerConstraints for constrained coordinates Amirr
+    double _constrained_multiplier = 0.8;
+    // Add CoordinateCouplerConstraints for constrained coordinates (e.g., Patella Flex)
     for (int i = 0; i < getProperty_constrained_coordinates().size(); ++i) {
         std::string path = get_constrained_coordinates(i);
         Coordinate& coord = model.updComponent<Coordinate>(path);
