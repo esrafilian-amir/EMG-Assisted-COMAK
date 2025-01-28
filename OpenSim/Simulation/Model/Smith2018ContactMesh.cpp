@@ -592,7 +592,7 @@ void Smith2018ContactMesh::initializeMesh() {
             }
         }
     } else {
-        std::cout << "Else found " << '\n';
+        std::cout << "Generic mesh found " << '\n';
         _regional_tri_ind.clear();
         _regional_tri_ind.resize(6);
         _regional_n_tri.clear();
