@@ -110,6 +110,8 @@ void COMAKTool::constructProperties() {
     constructProperty_verbose(0);
     constructProperty_emg_file("");
     constructProperty_is_emg_assisted(false);
+    constructProperty_ignore_tendon_compliance(true);
+    constructProperty_ignore_activation_dynamics(true);
 }
 
 void COMAKTool::setModel(Model& model) {
@@ -1408,10 +1410,15 @@ SimTK::Vector COMAKTool::equilibriateSecondaryCoordinates() {
              "----------------------------------------");
 
     for (Muscle& msl : settle_model.updComponentList<Muscle>()) {
-        if (msl.getConcreteClassName() == "Millard2012EquilibriumMuscle") {
-            msl.set_ignore_activation_dynamics(true);
-            msl.set_ignore_tendon_compliance(true);
-        }
+        msl.set_ignore_activation_dynamics(get_ignore_activation_dynamics());
+        log_info("ignore activation dynamics{:<20}", get_ignore_activation_dynamics());
+
+        msl.set_ignore_tendon_compliance(get_ignore_tendon_compliance());
+        log_info("ignore tendon compliance{:<20}", get_ignore_tendon_compliance());
+        //if (msl.getConcreteClassName() == "Millard2012EquilibriumMuscle") {
+        //    msl.set_ignore_activation_dynamics(true);
+        //    msl.set_ignore_tendon_compliance(true);
+        //}
     }
 
     if (get_use_visualizer()) { settle_model.setUseVisualizer(true); }

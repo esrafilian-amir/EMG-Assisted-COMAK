@@ -312,6 +312,12 @@ public:
                                      "If true, the analysis will be EMG-assisted.")
     OpenSim_DECLARE_PROPERTY(verbose, int,
                             "Controling output detail. 0: print essential info, 1: more details, 2: print all details (huge log file)")
+    OpenSim_DECLARE_PROPERTY(ignore_tendon_compliance,
+                                     bool,
+                                     "If true, it ignores tendon compliance.")
+    OpenSim_DECLARE_PROPERTY(ignore_activation_dynamics,
+                                     bool,
+                                     "If true, it ignores activation dynamics.")
 //=============================================================================
 // METHODS
 //=============================================================================
