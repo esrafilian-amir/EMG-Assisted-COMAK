@@ -96,6 +96,13 @@ def main():
                     help="add LINE after the first script line matching REGEX "
                          "(e.g. 'comak.set_settle_threshold::"
                          "comak.set_settle_plateau_tolerance(0.1);')")
+    ap.add_argument("--reuse-ik", metavar="RUN_DIR",
+                    help="copy results/comak-inverse-kinematics from this earlier "
+                         "run (e.g. <runs>/baseline/walking) and skip the "
+                         "COMAKInverseKinematicsTool run")
+    ap.add_argument("--keep-ik-run", action="store_true",
+                    help="with --reuse-ik, only copy the IK results (for the "
+                         "constraint functions) and still run the IK tool")
     a = ap.parse_args()
 
     folder, script, extra = CASES[a.case]
@@ -111,6 +118,14 @@ def main():
         text = re.sub(pat, rep, text, flags=re.M)
     if a.disable_muscle:
         text = disable_muscle_in_model(text, folder, root, a.disable_muscle)
+    if a.reuse_ik:
+        src = Path(a.reuse_ik) / "JAM" / folder / "results" / "comak-inverse-kinematics"
+        shutil.copytree(src, work / "results" / "comak-inverse-kinematics")
+        if not a.keep_ik_run:
+            text, n = re.subn(r"^(\s*)(comak_ik\.run\(\);)", r"\1% \2", text,
+                              flags=re.M)
+            if n != 1:
+                sys.exit("could not find comak_ik.run(); to skip")
     for spec in a.insert_after:
         pat, line = spec.split("::", 1)
         text, n = re.subn(r"^(.*" + pat + r".*)$", r"\1\n" + line.replace("\\", r"\\"),

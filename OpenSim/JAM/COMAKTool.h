@@ -225,6 +225,42 @@ public:
         "solution was found, and the solution from previous time step is used "
         "for the current time step. The default value is 50.0.")
 
+    OpenSim_DECLARE_PROPERTY(use_central_difference_jacobian, bool,
+        "Compute the secondary coordinate columns of the linearized "
+        "acceleration constraints with central differences (perturbing "
+        "each secondary coordinate by +/- unit_udot_epsilon) instead of "
+        "forward differences. It costs one more model evaluation per "
+        "secondary coordinate. The default value is false.")
+
+    OpenSim_DECLARE_PROPERTY(ignore_secondary_speed_term, bool,
+        "Ignore the sensitivity of the accelerations to the secondary "
+        "coordinate speeds (change in position / time step) in the "
+        "linearized constraints, treating the secondary coordinates as "
+        "quasi-static. The default value is false.")
+
+    OpenSim_DECLARE_PROPERTY(normalize_constraint_rows, bool,
+        "Normalize each linearized acceleration constraint by its "
+        "largest sensitivity, so coordinates with very small inertia do "
+        "not dominate the optimization. The default value is false.")
+
+    OpenSim_DECLARE_PROPERTY(secondary_step_penalty_weight, double,
+        "Weight on the squared change of the secondary coordinates in "
+        "each COMAK iteration in the cost function (rotations are "
+        "converted to meters with step_penalty_rotation_length). It keeps "
+        "the steps small and stabilizes the iterations. 0 turns it off. "
+        "The default value is 0.")
+
+    OpenSim_DECLARE_PROPERTY(step_penalty_rotation_length, double,
+        "Characteristic length (m) that converts the rotations of the "
+        "secondary coordinates (rad) to the unit of the translations (m) "
+        "in secondary_step_penalty_weight. The default value is 0.05.")
+
+    OpenSim_DECLARE_PROPERTY(position_extrapolation_factor, double,
+        "Fraction of the secondary coordinate velocity of the previous "
+        "time step that is used to extrapolate the secondary coordinates "
+        "to the next time step. 1 is a full extrapolation, 0 starts from "
+        "the previous values. The default value is 1.")
+
     OpenSim_DECLARE_PROPERTY(unit_udot_epsilon, double, 
         "The size of the perturbation applied to COMAKSecondaryCoordinates "
         "when computing the gradient of the acceleration constraints in the "

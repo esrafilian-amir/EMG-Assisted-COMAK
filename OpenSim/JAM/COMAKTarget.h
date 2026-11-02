@@ -154,6 +154,24 @@ public:
     void setParameterNames(const Array<std::string>& parameter_names) {
         _parameter_names = parameter_names;
     }
+    /** Options for the constraint Jacobian: central instead of forward
+    differences for the secondary coordinate columns, no speed term for the
+    secondary coordinates, and normalization of each constraint row by its
+    largest entry. Call before initialize(). */
+    void setJacobianOptions(bool central_difference, bool ignore_speed_term,
+            bool normalize_rows) {
+        _central_difference = central_difference;
+        _ignore_secondary_speed_term = ignore_speed_term;
+        _normalize_rows = normalize_rows;
+    }
+
+    /** Penalty weight * sum((unit_scale * change of secondary coordinate)^2) on
+    the change of the secondary coordinates in the optimization. */
+    void setSecondaryStepPenalty(double weight, const SimTK::Vector& unit_scale) {
+        _step_penalty_weight = weight;
+        _step_unit_scale = unit_scale;
+    }
+
     //Amir
     void setVerbose(int verbose) {
         _verbose = verbose;
@@ -185,6 +203,11 @@ private:
     Array<std::string> _constraint_names;
 
     int _nParameters;
+    bool _central_difference = false;
+    bool _ignore_secondary_speed_term = false;
+    bool _normalize_rows = false;
+    double _step_penalty_weight = 0.0;
+    SimTK::Vector _step_unit_scale;
     Array<std::string> _parameter_names;
 
     int _nMuscles;

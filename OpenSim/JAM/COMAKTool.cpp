@@ -88,6 +88,12 @@ void COMAKTool::constructProperties() {
     constructProperty_udot_tolerance(1.0);
     constructProperty_udot_worse_case_tolerance(50.0);
     constructProperty_unit_udot_epsilon(1e-8);
+    constructProperty_use_central_difference_jacobian(false);
+    constructProperty_ignore_secondary_speed_term(false);
+    constructProperty_normalize_constraint_rows(false);
+    constructProperty_secondary_step_penalty_weight(0.0);
+    constructProperty_step_penalty_rotation_length(0.05);
+    constructProperty_position_extrapolation_factor(1.0);
     constructProperty_optimization_scale_delta_coord(1e-3);
 
     constructProperty_ipopt_diagnostics_level(0);
@@ -839,7 +845,8 @@ void COMAKTool::performCOMAK() {
             double prev_value = coord.getValue(state);
             double prev_speed = coord.getSpeedValue(state);
 
-            double new_value = prev_value + prev_speed * _dt;
+            double new_value = prev_value +
+                    get_position_extrapolation_factor() * prev_speed * _dt;
             coord.setValue(state, new_value);
         }
 
@@ -927,6 +934,22 @@ void COMAKTool::performCOMAK() {
             target.setScaleDeltaCoordinates(
                     get_optimization_scale_delta_coord());
             target.setActivationExponent(get_activation_exponent());
+
+            // Numerical options of the optimization
+            SimTK::Vector secondary_unit_scale(_n_secondary_coord, 1.0);
+            for (int m = 0; m < _n_secondary_coord; ++m) {
+                if (_model.getComponent<Coordinate>(_secondary_coord_path[m])
+                                .getMotionType() ==
+                        Coordinate::MotionType::Rotational) {
+                    secondary_unit_scale[m] = get_step_penalty_rotation_length();
+                }
+            }
+            target.setSecondaryStepPenalty(
+                    get_secondary_step_penalty_weight(), secondary_unit_scale);
+            target.setJacobianOptions(get_use_central_difference_jacobian(),
+                    get_ignore_secondary_speed_term(),
+                    get_normalize_constraint_rows());
+
             target.setParameterNames(_optim_parameter_names);
             // Amir ->
             target.setVerbose(get_verbose());
@@ -984,11 +1007,26 @@ void COMAKTool::performCOMAK() {
                 "derivative_test_perturbation", 1e-6);
             */
 
+            const SimTK::Vector parameters_before_optimization = _optim_parameters;
             try {
                 optimizer.optimize(_optim_parameters);
             }
             catch (const SimTK::Exception::Base& ex) {
                 log_error("COMAK Optimization failed: {}", ex.getMessage());
+            }
+
+            // A failed optimization can return NaN or infinite values, which
+            // would corrupt the model state. Keep the previous parameters.
+            bool parameters_finite = true;
+            for (int p = 0; p < _n_parameters; ++p) {
+                if (!SimTK::isFinite(_optim_parameters[p])) {
+                    parameters_finite = false;
+                }
+            }
+            if (!parameters_finite) {
+                log_warn("The optimization returned non-finite parameters. "
+                         "Using the parameters of the previous iteration.");
+                _optim_parameters = parameters_before_optimization;
             }
 
             // Account for optimization scale factors
@@ -1056,7 +1094,7 @@ void COMAKTool::performCOMAK() {
                     max_udot_error = udot_error;
                 }
                 if (get_verbose() == 0) {
-                    if (udot_error > max_udot_error)
+                    if (udot_error > get_udot_tolerance())
                         log_info("{:<20} {:<20} {:<20} {:<20}", coord.getName(),
                                 observed_udot, coord_udot, udot_error);
                 } else {
@@ -1132,7 +1170,16 @@ void COMAKTool::performCOMAK() {
             } else {
                 _optim_parameters = _prev_parameters;
 
-                setStateFromComakParameters(state, _prev_parameters);
+                // Go back to the secondary coordinates of the previous time
+                // step. setStateFromComakParameters adds the secondary
+                // changes to the current values, so the changes are zeroed.
+                SimTK::Vector reset_parameters = _prev_parameters;
+                for (int m = 0; m < _n_secondary_coord; ++m) {
+                    reset_parameters[m + _n_actuators] = 0.0;
+                    _model.updComponent<Coordinate>(_secondary_coord_path[m])
+                            .setValue(state, _prev_secondary_value(m), false);
+                }
+                setStateFromComakParameters(state, reset_parameters);
 
                 state.setTime(_time[i]);
 

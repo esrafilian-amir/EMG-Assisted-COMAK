@@ -256,42 +256,64 @@ void ComakTarget::precomputeConstraintMatrix() {
     }
 
     //Compute Secondary Coordinate Unit Udot
+    //(forward differences, or central differences if requested)
     for (int j = 0; j < _nSecondaryCoord; ++j) {
-        Coordinate& optim_coord = 
+        Coordinate& optim_coord =
             _model->updComponent<Coordinate>(_secondary_coords[j]);
 
-        double init_value = optim_coord.getValue(_state);
+        const double init_value = optim_coord.getValue(_state);
 
-        double value = init_value + _unit_udot_epsilon;
+        // Accelerations of the constrained coordinates and the contact energy
+        // with the secondary coordinate set to value
+        auto evaluate = [&](double value, SimTK::Vector& udot, double& energy) {
+            optim_coord.setValue(_state, value, true);
+            _model->realizeAcceleration(_state);
 
-        optim_coord.setValue(_state, value,true);
-        
-        _model->realizeAcceleration(_state);
-        
-        int k = 0;
-        for (const auto& coord : _model->updComponentList<Coordinate>()) {
-            bool is_primary =
-                _primary_coords.findIndex(coord.getAbsolutePathString()) > -1;
-            bool is_secondary =
-                _secondary_coords.findIndex(coord.getAbsolutePathString())> -1;
+            int k = 0;
+            for (const auto& coord : _model->updComponentList<Coordinate>()) {
+                bool is_primary = _primary_coords.findIndex(
+                        coord.getAbsolutePathString()) > -1;
+                bool is_secondary = _secondary_coords.findIndex(
+                        coord.getAbsolutePathString()) > -1;
 
-            if (is_primary || is_secondary) {
-                _secondary_coord_unit_udot(k, j) = _scale_delta_coord *
-                    (coord.getAccelerationValue(_state) - 
-                        _constraint_initial_udot(k)) / _unit_udot_epsilon;
-                k++;
+                if (is_primary || is_secondary) {
+                    udot[k] = coord.getAccelerationValue(_state);
+                    k++;
+                }
             }
+
+            energy = 0;
+            for (Smith2018ArticularContactForce& cnt_frc :
+                _model->updComponentList<Smith2018ArticularContactForce>()) {
+                energy += cnt_frc.getOutputValue<double>(
+                        _state, "potential_energy");
+            }
+        };
+
+        SimTK::Vector udot_plus(_nConstraints);
+        double energy_plus = 0;
+        evaluate(init_value + _unit_udot_epsilon, udot_plus, energy_plus);
+
+        if (_central_difference) {
+            SimTK::Vector udot_minus(_nConstraints);
+            double energy_minus = 0;
+            evaluate(init_value - _unit_udot_epsilon, udot_minus, energy_minus);
+
+            for (int k = 0; k < _nConstraints; ++k) {
+                _secondary_coord_unit_udot(k, j) = _scale_delta_coord *
+                    (udot_plus[k] - udot_minus[k]) / (2.0 * _unit_udot_epsilon);
+            }
+            _secondary_coord_unit_energy(j) = _scale_delta_coord *
+                (energy_plus - energy_minus) / (2.0 * _unit_udot_epsilon);
+        } else {
+            for (int k = 0; k < _nConstraints; ++k) {
+                _secondary_coord_unit_udot(k, j) = _scale_delta_coord *
+                    (udot_plus[k] - _constraint_initial_udot(k)) /
+                    _unit_udot_epsilon;
+            }
+            _secondary_coord_unit_energy(j) = _scale_delta_coord *
+                (energy_plus - _initial_contact_energy) / _unit_udot_epsilon;
         }
-        
-        //Contact Energy dot
-        double cnt_energy = 0;
-        for (Smith2018ArticularContactForce& cnt_frc : 
-            _model->updComponentList<Smith2018ArticularContactForce>()) {
-            cnt_energy += 
-                cnt_frc.getOutputValue<double>(_state,"potential_energy"); 
-        }
-        _secondary_coord_unit_energy(j) = _scale_delta_coord *
-            (cnt_energy - _initial_contact_energy)/_unit_udot_epsilon;
 
         optim_coord.setValue(_state, init_value, true);
     }
@@ -357,8 +379,27 @@ void ComakTarget::precomputeConstraintMatrix() {
         //Secondary Coordinates
         for (int j = 0; j < _nSecondaryCoord; ++j) {
             _constraint_matrix(i,p) = _secondary_coord_unit_udot(i,j);
-            _constraint_matrix(i,p) += _secondary_speed_unit_udot(i,j);
+            if (!_ignore_secondary_speed_term) {
+                _constraint_matrix(i,p) += _secondary_speed_unit_udot(i,j);
+            }
             p++;
+        }
+    }
+
+    // Normalize each constraint row by its largest entry, so that light
+    // coordinates with very large acceleration sensitivities do not dominate
+    if (_normalize_rows) {
+        for (int i = 0; i < _nConstraints; ++i) {
+            double row_max = 1e-12;
+            for (int p = 0; p < _nParameters; ++p) {
+                row_max = std::max(row_max, std::abs(_constraint_matrix(i, p)));
+            }
+            const double scale = 1.0 / row_max;
+            for (int p = 0; p < _nParameters; ++p) {
+                _constraint_matrix(i, p) *= scale;
+            }
+            _constraint_initial_udot[i] *= scale;
+            _constraint_desired_udot[i] *= scale;
         }
     }
 
@@ -479,6 +520,17 @@ objectiveFunc(const SimTK::Vector &parameters, const bool new_parameters,
         + non_muscle_cost * _non_muscle_actuator_weight
         + contact_cost * _contact_energy_weight;
 
+    // Penalty on the change of the secondary coordinates
+    if (_step_penalty_weight > 0 && _step_unit_scale.size() == _nSecondaryCoord) {
+        double step_cost = 0.0;
+        for (int j = 0; j < _nSecondaryCoord; ++j) {
+            const double d = _step_unit_scale[j] * _scale_delta_coord *
+                    parameters(_nActuators + j);
+            step_cost += d * d;
+        }
+        performance += _step_penalty_weight * step_cost;
+    }
+
     if (_verbose > 1) {
         std::cout << "Total Cost: " << performance << "\t";
         std::cout << "Muscle Cost: " << msl_cost << "\t";
@@ -521,10 +573,10 @@ gradientFunc(const SimTK::Vector &parameters, const bool new_parameters,
     }
 
     for (int i = 0; i < _nNonMuscleActuators; i++) {
-        gradient(p) += 
-            _activation_exponent * _non_muscle_actuator_weight * 
-            parameters(p) * pow(fabs(parameters(p)),
-                _activation_exponent - 1.0);
+        const double sign_p = (parameters(p) > 0) - (parameters(p) < 0);
+        gradient(p) += _activation_exponent * _non_muscle_actuator_weight *
+                       sign_p *
+                       pow(fabs(parameters(p)), _activation_exponent - 1.0);
 
         p++;
     }
@@ -533,6 +585,13 @@ gradientFunc(const SimTK::Vector &parameters, const bool new_parameters,
         gradient(p) += 
             _contact_energy_weight * _secondary_coord_unit_energy[i];
         p++;
+    }
+    if (_step_penalty_weight > 0 && _step_unit_scale.size() == _nSecondaryCoord) {
+        for (int j = 0; j < _nSecondaryCoord; ++j) {
+            const double sc = _step_unit_scale[j] * _scale_delta_coord;
+            gradient(_nActuators + j) += 2.0 * _step_penalty_weight * sc * sc *
+                    parameters(_nActuators + j);
+        }
     }
     if (_verbose > 1) {
         log_trace("Cost Gradient");
@@ -602,7 +661,7 @@ void ComakTarget::setParameterBounds(double scale) {
             min_value = -1000*scale;
         }
         if (max_control < 1000)
-            max_value = actuator.getMinControl()*scale;
+            max_value = actuator.getMaxControl()*scale;
         else {
             max_value = 1000*scale;
         }

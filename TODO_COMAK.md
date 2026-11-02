@@ -38,8 +38,9 @@ contact-mesh code. Regression scripts live in `scripts/regression/`.
   ligament diagnostics file, patella warning)
 - [x] Step 3: COMAK input kinematics (`time_step = -1` checks, smoothing spline
   on by default, disabled-muscle index alignment, processed kinematics printout)
-- [ ] Step 4: COMAK optimization (reserve bound and gradient, check IPOPT result
-  before using it, fallback restore, trust region, mass-weighted rows, speed term)
+- [x] Step 4: COMAK optimization (reserve bound and gradient fixes, finite-result check,
+  corrected fallback; optional numerical options; trust region, soft constraints and
+  smoothing penalties tried and removed, see scripts/regression/RESULTS.md)
 - [ ] Step 5: COMAK speed (cached lookups, allocations, `flip_meshes`, parallel
   Jacobian columns)
 - [ ] Step 6: contact and mesh (OBB triangle-index bug, leaf closest-hit,
@@ -47,3 +48,13 @@ contact-mesh code. Regression scripts live in `scripts/regression/`.
   cache, culling)
 - [ ] Step 7: stability on non-walking tasks, patella and meniscus handling,
   final regression, docs/CHANGELOG
+
+## Open after Step 4
+
+- [ ] Full-length confirmation runs (EMG-assisted, walking, meniscus) with the final defaults.
+- [ ] Decide which numerical options to turn on by default (extrapolation factor 0 and central
+  differences looked useful on the meniscus window; evidence is from 12 to 31 frames).
+- [ ] Meniscus model still converges only about 2/3 of the frames in the test window.
+- [ ] Reconsider a penalty on the activation change between frames (it helped walking and the
+  meniscus model but distorted EMG tracking when applied to EMG-driven muscles).
+- [ ] Apply the numerical options only to light coordinates (selected by inertia).
