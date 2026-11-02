@@ -413,40 +413,14 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
 
     //Initialize Simulation 
     //---------------------
-    double _constrained_multiplier = 0.8;
-    // Add CoordinateCouplerConstraints for constrained coordinates (e.g., Patella Flex)
-    for (int i = 0; i < getProperty_constrained_coordinates().size(); ++i) {
-        std::string path = get_constrained_coordinates(i);
-        Coordinate& coord = model.updComponent<Coordinate>(path);
-        std::string coord_name = coord.getName();
-
-        std::string ind_coord_name =
-                model.getComponent<Coordinate>(
-                             get_secondary_coupled_coordinate())
-                        .getName();
-
-        std::string joint_path = coord.getJoint().getAbsolutePathString();
-
-        Array<double> coefficients;
-        coefficients.append(_constrained_multiplier);
-        coefficients.append(0.0);
-
-        LinearFunction constraint_fun = LinearFunction(coefficients);
-
-        CoordinateCouplerConstraint* cc_constraint =
-                new CoordinateCouplerConstraint();
-
-        cc_constraint->setIndependentCoordinateNames(
-                Array<std::string>(ind_coord_name, 1, 2));
-        cc_constraint->setDependentCoordinateName(coord_name);
-        cc_constraint->setFunction(constraint_fun);
-        cc_constraint->setName(coord_name + "_function");
-
-        //coord.setDefaultValue(function.calcValue(coupled_coord_default_value));
-
-        model.addConstraint(cc_constraint);
+    // The constrained coordinates (e.g., Patella Flex) are free in the settling
+    // and sweep simulations, like the secondary coordinates. They move in
+    // response to the ligament, contact and muscle forces and the knee
+    // motion, and their constraint functions are computed from the sweep.
+    for (int i = 0; i < _n_constrained_coord; ++i) {
+        log_info("Constrained coordinate {} is free in the secondary "
+                "constraint simulation.", get_constrained_coordinates(i));
     }
-    //model.print("test.osim");
        
     //Perform Settling Simulation
     //---------------------------
@@ -496,15 +470,22 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
     log_info("Starting Settling Simulation.");
     
 
+    // The constrained coordinates are free in the settling simulation, so they
+    // have to settle as well.
     std::vector<const Coordinate*> settle_coords;
     for (int k = 0; k < _n_secondary_coord; k++) {
         settle_coords.push_back(
                 &model.getComponent<Coordinate>(_secondary_coord_path[k]));
     }
+    for (int k = 0; k < _n_constrained_coord; k++) {
+        settle_coords.push_back(
+                &model.getComponent<Coordinate>(_constrained_coord_path[k]));
+    }
+    const int n_settle = (int)settle_coords.size();
 
-    SimTK::Vector prev_sec_coord_value(_n_secondary_coord,0.0);
+    SimTK::Vector prev_sec_coord_value(n_settle, 0.0);
 
-    for (int k = 0; k < _n_secondary_coord; k++) {
+    for (int k = 0; k < n_settle; k++) {
         const Coordinate& coord = *settle_coords[k];
         double value = coord.getValue(state);
         prev_sec_coord_value(k) = value;
@@ -530,7 +511,7 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
 
         //Compute Delta Coordinate
         max_coord_delta = 0;
-        for (int k = 0; k < _n_secondary_coord; k++) {
+        for (int k = 0; k < n_settle; k++) {
             
             const Coordinate& coord = *settle_coords[k];
             double value = coord.getValue(state);
@@ -657,6 +638,28 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
     
     StatesTrajectory sweep_states;
 
+    // Ligament lengths, strains and forces during the sweep (written only if
+    // print_secondary_constraint_sim_results is true)
+    std::vector<const Blankevoort1991Ligament*> sweep_ligaments;
+    TimeSeriesTable lig_table;
+    int n_lig_columns = 0;
+    if (get_print_secondary_constraint_sim_results()) {
+        std::vector<std::string> lig_labels;
+        lig_labels.push_back(get_secondary_coupled_coordinate() + "/value");
+        for (int j = 0; j < _n_constrained_coord; ++j) {
+            lig_labels.push_back(_constrained_coord_path[j] + "/value");
+        }
+        for (const auto& lig :
+                model.getComponentList<Blankevoort1991Ligament>()) {
+            sweep_ligaments.push_back(&lig);
+            lig_labels.push_back(lig.getName() + "_length");
+            lig_labels.push_back(lig.getName() + "_strain");
+            lig_labels.push_back(lig.getName() + "_total_force");
+        }
+        lig_table.setColumnLabels(lig_labels);
+        n_lig_columns = (int)lig_labels.size();
+    }
+
     for (int i = 0; i <= nSteps; ++i) {
 
         sweep_timestepper.stepTo(sweep_start + i*dt);
@@ -670,6 +673,25 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
             j++;
         }
         q_table.appendRow(state.getTime(), q_row);
+
+        if (!sweep_ligaments.empty()) {
+            model.realizeDynamics(state);
+            SimTK::RowVector lig_row(n_lig_columns);
+            int c = 0;
+            lig_row(c++) = model.getComponent<Coordinate>(
+                    get_secondary_coupled_coordinate()).getValue(state);
+            for (int j = 0; j < _n_constrained_coord; ++j) {
+                lig_row(c++) = model.getComponent<Coordinate>(
+                        _constrained_coord_path[j]).getValue(state);
+            }
+            for (const auto* lig : sweep_ligaments) {
+                lig_row(c++) = lig->getOutputValue<double>(state, "length");
+                lig_row(c++) = lig->getOutputValue<double>(state, "strain");
+                lig_row(c++) =
+                        lig->getOutputValue<double>(state, "total_force");
+            }
+            lig_table.appendRow(state.getTime(), lig_row);
+        }
 
         log_info("{}",state.getTime());
         if (get_verbose() > 0) printDebugInfo(model, state);
@@ -700,15 +722,45 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
         }
     }
 
+    for (int i = 1; i < ind_data.size(); ++i) {
+        OPENSIM_THROW_IF(ind_data(i) <= ind_data(i - 1), Exception,
+                "The secondary_coupled_coordinate must increase during the "
+                "sweep simulation to compute the constraint functions. Set "
+                "secondary_coupled_coordinate_stop_value greater than "
+                "secondary_coupled_coordinate_start_value.")
+    }
+
+    for (int j = 0; j < _n_constrained_coord; ++j) {
+        const int last = data.nrow() - 1;
+        const double ind_range = ind_data(last) - ind_data(0);
+        const double change =
+                data(last, j + _n_secondary_coord) - data(0, j + _n_secondary_coord);
+        const double ratio = (ind_range != 0) ? change / ind_range : 0.0;
+        log_info("Constrained coordinate {} changed by {} over the sweep, "
+                "{} x the change of {}.",
+                _constrained_coord_path[j], change, ratio,
+                get_secondary_coupled_coordinate());
+        if (std::abs(ratio) < 0.25) {
+            log_warn("Constrained coordinate {} barely moved with {}. Check "
+                    "the ligament slack lengths and the contact geometry "
+                    "(set print_secondary_constraint_sim_results to write "
+                    "the ligament lengths and strains of the sweep).",
+                    _constrained_coord_path[j],
+                    get_secondary_coupled_coordinate());
+        }
+    }
+
     double ind_max = SimTK::max(ind_data);
     double ind_min = SimTK::min(ind_data);
 
     int npts = get_constraint_function_num_interpolation_points();
-    double step = (ind_max - ind_min) / npts;
+    OPENSIM_THROW_IF(npts < 2, Exception,
+            "constraint_function_num_interpolation_points must be at least 2.")
+    double step = (ind_max - ind_min) / (npts - 1);
 
     SimTK::Vector ind_pt_data(npts);
 
-    for (int i = 0; i < npts+1; ++i) {
+    for (int i = 0; i < npts; ++i) {
         ind_pt_data(i) = ind_min + i * step;
     }
 
@@ -804,6 +856,18 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
         STOFileAdapter sto_file_adapt;
         sto_file_adapt.write(settle_table, settle_file);
         sto_file_adapt.write(sweep_table, sweep_file);
+
+        if (lig_table.getNumRows() > 0) {
+            lig_table.addTableMetaData("header", std::string("sweep_ligaments"));
+            lig_table.addTableMetaData("nRows",
+                    std::to_string(lig_table.getNumRows()));
+            lig_table.addTableMetaData("nColumns",
+                    std::to_string(lig_table.getNumColumns() + 1));
+            lig_table.addTableMetaData("inDegrees", std::string("no"));
+            sto_file_adapt.write(lig_table,
+                    get_results_directory() + "/" + get_results_prefix() +
+                            "_secondary_constraint_sweep_ligaments.sto");
+        }
     }
 
     if (!get_constrained_model_file().empty()) {

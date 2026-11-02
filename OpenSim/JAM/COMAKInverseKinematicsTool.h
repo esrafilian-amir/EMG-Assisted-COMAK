@@ -60,7 +60,11 @@ public:
         "List of paths to the Secondary Coordinates in the model.")
 
     OpenSim_DECLARE_LIST_PROPERTY(constrained_coordinates, std::string, 
-        "List of paths to the Constrained Coordinates in the model.")
+        "List of paths to the Constrained Coordinates in the model. Constrained "
+        "coordinates (e.g., Patella Flex) are free in the settling and sweep "
+        "simulations, like the secondary coordinates. A coupled constraint "
+        "function of the secondary_coupled_coordinate is computed for each "
+        "from the sweep results and applied in inverse kinematics.")
 
     OpenSim_DECLARE_OPTIONAL_PROPERTY(secondary_coupled_coordinate, std::string, 
         "Path to the coordinate to prescribe in "
@@ -128,7 +132,7 @@ public:
     OpenSim_DECLARE_PROPERTY(
         settling_sim_integrator_accuracy, double, 
         "Integrator tolerance for the forward simulation."
-        "The default value is 1e-6.")
+        "The default value is 1e-10.")
 
     OpenSim_DECLARE_PROPERTY(
         secondary_constraint_sim_integrator_accuracy, double, 
