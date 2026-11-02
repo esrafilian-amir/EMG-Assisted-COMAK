@@ -151,7 +151,23 @@ public:
         "settle_threshold, the settling simulation is stopped. "
         "The default value is 1e-5.")
 
-    OpenSim_DECLARE_PROPERTY(settle_accuracy, double, 
+    OpenSim_DECLARE_PROPERTY(settle_plateau_tolerance, double,
+        "Also stop the settling simulation when the largest change in the "
+        "secondary coordinates per step has plateaued: it varied by less than "
+        "this fraction (e.g. 0.1 for 10%) over the last settle_plateau_window "
+        "steps, after having dropped below 10% of its first value. "
+        "0 disables the plateau check. The default value is 0.")
+
+    OpenSim_DECLARE_PROPERTY(settle_plateau_window, int,
+        "Number of steps used to detect a plateau in the settling simulation. "
+        "The default value is 10.")
+
+    OpenSim_DECLARE_PROPERTY(settle_zero_initial_speeds, bool,
+        "Start the settling simulation with all coordinate speeds set to "
+        "zero instead of the speeds computed from the coordinates_file. "
+        "The default value is false.")
+
+    OpenSim_DECLARE_PROPERTY(settle_accuracy, double,
         "Set the integrator accuracy for initializing forward simulation. "
         "The default value is 1e-6.")
 

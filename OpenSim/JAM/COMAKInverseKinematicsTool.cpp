@@ -85,6 +85,10 @@ void COMAKInverseKinematicsTool::constructProperties()
     constructProperty_constrained_coordinates();
     constructProperty_secondary_coupled_coordinate("");
     constructProperty_secondary_constraint_sim_settle_threshold(1e-4);
+    constructProperty_secondary_constraint_sim_settle_plateau_tolerance(0.0);
+    constructProperty_secondary_constraint_sim_settle_plateau_window(10);
+    constructProperty_secondary_constraint_sim_muscle_activation(0.02);
+    constructProperty_settling_sim_dt(0.005);
     constructProperty_secondary_constraint_sim_sweep_time(3.0);
     constructProperty_sweep_dt(0.005);
     constructProperty_secondary_coupled_coordinate_start_value(0.0);
@@ -465,7 +469,8 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
     //prescribe muscle force
     for (Muscle& msl : model.updComponentList<Muscle>()) {
         msl.overrideActuation(state, true);
-        double value = msl.getMaxIsometricForce()*0.02;
+        double value = msl.getMaxIsometricForce() *
+                get_secondary_constraint_sim_muscle_activation();
         msl.setOverrideActuation(state, value);
     }
     model.equilibrateMuscles(state);
@@ -485,26 +490,39 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
     
     StatesTrajectory settle_states;
 
-    double dt = 0.005;
+    double dt = get_settling_sim_dt();
  
 
     log_info("Starting Settling Simulation.");
     
 
+    std::vector<const Coordinate*> settle_coords;
+    for (int k = 0; k < _n_secondary_coord; k++) {
+        settle_coords.push_back(
+                &model.getComponent<Coordinate>(_secondary_coord_path[k]));
+    }
+
     SimTK::Vector prev_sec_coord_value(_n_secondary_coord,0.0);
 
     for (int k = 0; k < _n_secondary_coord; k++) {
-        Coordinate& coord = model.updComponent<Coordinate>(_secondary_coord_path[k]);
+        const Coordinate& coord = *settle_coords[k];
         double value = coord.getValue(state);
         prev_sec_coord_value(k) = value;
     }
 
     double max_coord_delta = SimTK::Infinity;
     int i = 1;
-    while (max_coord_delta > get_secondary_constraint_sim_settle_threshold()){
+    SettleMonitor settle_monitor(
+            get_secondary_constraint_sim_settle_threshold(),
+            get_secondary_constraint_sim_settle_plateau_tolerance(),
+            get_secondary_constraint_sim_settle_plateau_window());
+    bool settled = false;
+    while (!settled) {
         timestepper.stepTo(i*dt);
         state = timestepper.getState();
-        settle_states.append(state);
+        if (get_print_secondary_constraint_sim_results()) {
+            settle_states.append(state);
+        }
             
         log_info("Time: {}", state.getTime());
         log_info("{:<30} {:<20} {:<20}","Name", "Value", "Value Change");
@@ -514,9 +532,9 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
         max_coord_delta = 0;
         for (int k = 0; k < _n_secondary_coord; k++) {
             
-            Coordinate& coord = model.updComponent<Coordinate>(_secondary_coord_path[k]);
+            const Coordinate& coord = *settle_coords[k];
             double value = coord.getValue(state);
-            double delta = abs(value - prev_sec_coord_value(k));
+            double delta = std::abs(value - prev_sec_coord_value(k));
             
             if (delta > max_coord_delta) {
                 max_coord_delta = delta;
@@ -534,7 +552,15 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
         }
         if (get_verbose() > 0) printDebugInfo(model, state);
 
+        settled = settle_monitor.update(max_coord_delta);
         i++;
+    }
+    if (settle_monitor.hitSafetyLimit()) {
+        log_warn("Settling simulation stopped at the safety limit of {} "
+                "steps without settling.", SettleMonitor::maxSteps());
+    } else {
+        log_info("Settling simulation finished after {} steps: {}.",
+                settle_monitor.numSteps(), settle_monitor.reason());
     }
 
     SimTK::Vector settled_secondary_values(_secondary_coord_path.getSize());
@@ -587,7 +613,8 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
     //prescribe muscle force
     for (Muscle& msl : model.updComponentList<Muscle>()) {
         msl.overrideActuation(state, true);
-        double value = msl.getMaxIsometricForce()*0.02;
+        double value = msl.getMaxIsometricForce() *
+                get_secondary_constraint_sim_muscle_activation();
         msl.setOverrideActuation(state, value);
     }
     model.equilibrateMuscles(state);

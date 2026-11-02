@@ -78,7 +78,30 @@ public:
         "simulation."
         "The default value is 1e-5.")
 
-    OpenSim_DECLARE_PROPERTY(secondary_constraint_sim_sweep_time, double, 
+    OpenSim_DECLARE_PROPERTY(secondary_constraint_sim_settle_plateau_tolerance,
+        double,
+        "Also finish the settling simulation when the largest change in the "
+        "secondary coordinates per step has plateaued: it varied by less than "
+        "this fraction (e.g. 0.1 for 10%) over the last "
+        "secondary_constraint_sim_settle_plateau_window steps, after having "
+        "dropped below 10% of its first value. 0 disables the plateau check. "
+        "The default value is 0.")
+
+    OpenSim_DECLARE_PROPERTY(secondary_constraint_sim_settle_plateau_window,
+        int,
+        "Number of steps used to detect a plateau in the settling simulation. "
+        "The default value is 10.")
+
+    OpenSim_DECLARE_PROPERTY(secondary_constraint_sim_muscle_activation, double,
+        "Constant muscle force, as a fraction of maximum isometric force, "
+        "applied in the settling and sweep simulations. "
+        "The default value is 0.02.")
+
+    OpenSim_DECLARE_PROPERTY(settling_sim_dt, double,
+        "Time step between convergence checks in the settling simulation. "
+        "The default value is 0.005.")
+
+    OpenSim_DECLARE_PROPERTY(secondary_constraint_sim_sweep_time, double,
         "The duration of the simulation phase where the "
         "secondary_coupled_coord is swept (linearly prescribed) through the "
         "range of motion from the  secondary_coupled_coordinate_start_value "

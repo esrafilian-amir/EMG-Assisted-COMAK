@@ -73,6 +73,9 @@ void COMAKTool::constructProperties() {
     constructProperty_settle_threshold(1e-5);
     constructProperty_settle_accuracy(1e-6);
     constructProperty_settle_internal_step_limit(-1);
+    constructProperty_settle_plateau_tolerance(0.0);
+    constructProperty_settle_plateau_window(10);
+    constructProperty_settle_zero_initial_speeds(false);
     constructProperty_print_settle_sim_results(false);
     constructProperty_settle_sim_results_directory("");
     constructProperty_settle_sim_results_prefix("");
@@ -1411,15 +1414,15 @@ SimTK::Vector COMAKTool::equilibriateSecondaryCoordinates() {
 
     for (Muscle& msl : settle_model.updComponentList<Muscle>()) {
         msl.set_ignore_activation_dynamics(get_ignore_activation_dynamics());
-        log_info("ignore activation dynamics{:<20}", get_ignore_activation_dynamics());
-
         msl.set_ignore_tendon_compliance(get_ignore_tendon_compliance());
-        log_info("ignore tendon compliance{:<20}", get_ignore_tendon_compliance());
         //if (msl.getConcreteClassName() == "Millard2012EquilibriumMuscle") {
         //    msl.set_ignore_activation_dynamics(true);
         //    msl.set_ignore_tendon_compliance(true);
         //}
     }
+
+    log_info("ignore activation dynamics: {}, ignore tendon compliance: {}",
+            get_ignore_activation_dynamics(), get_ignore_tendon_compliance());
 
     if (get_use_visualizer()) { settle_model.setUseVisualizer(true); }
 
@@ -1437,7 +1440,9 @@ SimTK::Vector COMAKTool::equilibriateSecondaryCoordinates() {
     int nCoord = 0;
     for (Coordinate& coord : settle_model.updComponentList<Coordinate>()) {
         coord.setValue(state, _q_matrix(_start_frame, nCoord), false);
-        coord.setSpeedValue(state, _u_matrix(_start_frame, nCoord));
+        coord.setSpeedValue(state, get_settle_zero_initial_speeds()
+                                           ? 0.0
+                                           : _u_matrix(_start_frame, nCoord));
 
         bool is_secondary = _secondary_coord_path.findIndex(
                                     coord.getAbsolutePathString()) > -1;
@@ -1476,11 +1481,16 @@ SimTK::Vector COMAKTool::equilibriateSecondaryCoordinates() {
     StatesTrajectory result_states;
 
     // Store Secondary Coordinate Values (to check if simulation is settled)
+    std::vector<const Coordinate*> settle_coords;
+    for (int k = 0; k < _n_secondary_coord; k++) {
+        settle_coords.push_back(&settle_model.getComponent<Coordinate>(
+                _secondary_coord_path[k]));
+    }
+
     SimTK::Vector prev_sec_coord_value(_n_secondary_coord);
 
     for (int k = 0; k < _n_secondary_coord; k++) {
-        Coordinate& coord =
-                settle_model.updComponent<Coordinate>(_secondary_coord_path[k]);
+        const Coordinate& coord = *settle_coords[k];
         prev_sec_coord_value(k) = coord.getValue(state);
     }
 
@@ -1497,10 +1507,13 @@ SimTK::Vector COMAKTool::equilibriateSecondaryCoordinates() {
 
     double max_coord_delta = SimTK::Infinity;
     int i = 1;
-    while (max_coord_delta > get_settle_threshold()) {
+    SettleMonitor settle_monitor(get_settle_threshold(),
+            get_settle_plateau_tolerance(), get_settle_plateau_window());
+    bool settled = false;
+    while (!settled) {
         timestepper.stepTo(i * dt);
         state = timestepper.getState();
-        result_states.append(state);
+        if (get_print_settle_sim_results()) { result_states.append(state); }
 
         log_info("Time: {}", state.getTime());
         log_info("{:<20} {:<15} {:<15}", "Secondary Coord", "Value",
@@ -1509,11 +1522,10 @@ SimTK::Vector COMAKTool::equilibriateSecondaryCoordinates() {
         // Compute Delta Coordinate
         max_coord_delta = 0;
         for (int k = 0; k < _n_secondary_coord; k++) {
-            Coordinate& coord = settle_model.updComponent<Coordinate>(
-                    _secondary_coord_path[k]);
+            const Coordinate& coord = *settle_coords[k];
 
             double value = coord.getValue(state);
-            double delta = abs(value - prev_sec_coord_value(k));
+            double delta = std::abs(value - prev_sec_coord_value(k));
 
             if (delta > max_coord_delta) { max_coord_delta = delta; }
             prev_sec_coord_value(k) = value;
@@ -1525,7 +1537,15 @@ SimTK::Vector COMAKTool::equilibriateSecondaryCoordinates() {
                             delta);
             }
         }
+        settled = settle_monitor.update(max_coord_delta);
         i++;
+    }
+    if (settle_monitor.hitSafetyLimit()) {
+        log_warn("Settling simulation stopped at the safety limit of {} "
+                "steps without settling.", SettleMonitor::maxSteps());
+    } else {
+        log_info("Settling simulation finished after {} steps: {}.",
+                settle_monitor.numSteps(), settle_monitor.reason());
     }
 
     // Print Results
