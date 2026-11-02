@@ -69,6 +69,19 @@ Walking window (13 frames, control 13/13, 7.3 iterations, 176 s): extrapolation 
 
 Windows are short (12 to 31 frames), so these are indications, not proof.
 
+Combination of extrapolation factor 0 and central differences: meniscus 8 converged, 14.5
+iterations, 750 s (no gain over extrapolation 0 alone); walking 13/13, 7.1 iterations, 188 s
+(worse than extrapolation 0 alone, 5.3 iterations, 141 s); EMG 31/31, 6.2 iterations, 595 s
+(18% slower than the control). The two do not add up.
+
+**Recommendation (not applied, defaults are unchanged):** `position_extrapolation_factor = 0`
+is the best single option: meniscus 8/12 instead of 6/12, walking 27% fewer iterations and
+20% less time, EMG about equal (6.3 against 6.0 iterations, 3 IPOPT failures against 0, all
+frames still converge). It is a one-line default change in `COMAKTool.cpp`
+(`constructProperty_position_extrapolation_factor`). Central differences help the worst case of
+the meniscus window (worst acceleration error 8.5 against 50) at about 13% more time and are
+neutral on walking. The step penalty, ignoring the speed term and row normalization did not help.
+
 ## 6. Reference IK
 
 The Step 2 IK (full-range constraint functions, free patella) is the reference for COMAK tests.
