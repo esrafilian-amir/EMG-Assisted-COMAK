@@ -122,6 +122,20 @@ public:
         "the time step in the input coordinates_file. "
         "The default value is -1.")
 
+    OpenSim_DECLARE_PROPERTY(smooth_input_kinematics, bool,
+        "Fit a smoothing quintic spline (GCVSpline) to each input "
+        "coordinate (after the optional lowpass filter) and use it for the "
+        "coordinate values, speeds and accelerations. If false, a cubic "
+        "interpolating spline through the data is used, which amplifies "
+        "noise in the accelerations. The default value is true.")
+
+    OpenSim_DECLARE_PROPERTY(smoothing_spline_error_variance, double,
+        "Error variance of the smoothing spline used if "
+        "smooth_input_kinematics is true. If negative, the variance is "
+        "estimated from the data by generalized cross validation. If 0, "
+        "the spline passes through the data points (no smoothing). A "
+        "larger value gives more smoothing. The default value is -1.")
+
     OpenSim_DECLARE_PROPERTY(lowpass_filter_frequency, double, 
         "Lowpass filter frequency for input kinematics. "
         "If set to -1, no filtering is applied. The default value is -1.")

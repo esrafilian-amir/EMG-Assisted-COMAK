@@ -55,6 +55,32 @@ def make_link(link, target):
         shutil.copytree(target, link)
 
 
+def disable_muscle_in_model(text, folder, root, muscle):
+    """Copy the model folder (Geometry linked, files copied) with `muscle` set
+    to appliesForce=false and point the script at the copy."""
+    m = re.search(r"model_file\s*=\s*'([^']+)'", text)
+    model_path = (EXAMPLES / folder / m.group(1)).resolve()
+    models_root = (EXAMPLES / "models").resolve()
+    rel_dir = model_path.parent.relative_to(models_root).as_posix()
+    dest = root / "JAM" / "models_mod" / rel_dir
+    dest.mkdir(parents=True, exist_ok=True)
+    for item in model_path.parent.iterdir():
+        if item.is_dir():
+            make_link(dest / item.name, item)
+        elif item == model_path:
+            osim = item.read_text()
+            # muscles do not list appliesForce explicitly, so add it
+            osim, n = re.subn(
+                r'(<[A-Za-z0-9]*Muscle[A-Za-z0-9]* name="' + re.escape(muscle) + r'">)',
+                "\\1\n<appliesForce>false</appliesForce>", osim, count=1)
+            if n != 1:
+                sys.exit(f"muscle {muscle} not found in {item.name}")
+            (dest / item.name).write_text(osim)
+        else:
+            shutil.copy2(item, dest / item.name)
+    return text.replace(f"../models/{rel_dir}/", f"../models_mod/{rel_dir}/")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--install", required=True)
@@ -62,6 +88,9 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--tag", required=True)
     ap.add_argument("--matlab", default=MATLAB)
+    ap.add_argument("--disable-muscle", metavar="NAME",
+                    help="run with this muscle set to appliesForce=false, using "
+                         "a modified copy of the model (Geometry is linked)")
     ap.add_argument("--insert-after", action="append", default=[],
                     metavar="REGEX::LINE",
                     help="add LINE after the first script line matching REGEX "
@@ -80,6 +109,8 @@ def main():
     text = (EXAMPLES / folder / script).read_text()
     for pat, rep in COMMON_PATCHES + extra:
         text = re.sub(pat, rep, text, flags=re.M)
+    if a.disable_muscle:
+        text = disable_muscle_in_model(text, folder, root, a.disable_muscle)
     for spec in a.insert_after:
         pat, line = spec.split("::", 1)
         text, n = re.subn(r"^(.*" + pat + r".*)$", r"\1\n" + line.replace("\\", r"\\"),
@@ -119,7 +150,7 @@ def main():
                 wall_seconds=round(wall, 1), git_head=git("rev-parse", "HEAD"),
                 git_dirty=bool(git("status", "--porcelain")),
                 patches=[p for p, _ in COMMON_PATCHES + extra],
-                inserts=a.insert_after)
+                inserts=a.insert_after, disabled_muscle=a.disable_muscle)
     (root / "meta.json").write_text(json.dumps(meta, indent=2))
     print(json.dumps(meta, indent=2))
     sys.exit(rc)

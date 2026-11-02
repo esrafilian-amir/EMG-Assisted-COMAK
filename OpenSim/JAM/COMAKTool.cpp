@@ -17,6 +17,7 @@
 #include "COMAKTool.h"
 
 #include "COMAKTarget.h"
+#include <memory>
 #include "JAMUtilities.h"
 #include "OpenSim/Actuators/CoordinateActuator.h"
 #include "OpenSim/Common/Constant.h"
@@ -62,6 +63,8 @@ void COMAKTool::constructProperties() {
     constructProperty_stop_time(-1);
     constructProperty_time_step(-1);
     constructProperty_lowpass_filter_frequency(-1);
+    constructProperty_smooth_input_kinematics(true);
+    constructProperty_smoothing_spline_error_variance(-1.0);
     constructProperty_print_processed_input_kinematics(false);
 
     constructProperty_prescribed_coordinates();
@@ -518,6 +521,7 @@ SimTK::State COMAKTool::initialize() {
         log_debug("{:<15} {:<15} {:<15}", "name ", "Fmax", "Volume");
         i = 0;
         for (const Muscle& msl : _model.getComponentList<Muscle>()) {
+        if (_muscle_path.findIndex(msl.getAbsolutePathString()) < 0) { continue; }
             double l0 = msl.get_optimal_fiber_length();
             double fmax = msl.get_max_isometric_force();
 
@@ -594,6 +598,7 @@ SimTK::State COMAKTool::initialize() {
     int msl_cnt = 0;
     SimTK::Vector _gamma(_n_muscles);
     for (Muscle& msl : _model.updComponentList<Muscle>()) {
+        if (_muscle_path.findIndex(msl.getAbsolutePathString()) < 0) { continue; }
         bool found_msl = false;
 
         int size_cost_fcn_param_set =
@@ -669,6 +674,7 @@ void COMAKTool::performCOMAK() {
 
     int m = 0;
     for (Muscle& msl : _model.updComponentList<Muscle>()) {
+        if (_muscle_path.findIndex(msl.getAbsolutePathString()) < 0) { continue; }
 
         log_info("{:<20} {:<20} {:<20} {:<20} {:<20} {:<20}", msl.getName(),
                 _cost_muscle_weights.get(m).calcValue(
@@ -795,6 +801,7 @@ void COMAKTool::performCOMAK() {
                     "lower_bound", "upper_bound");
             int m = 0;
             for (Muscle& msl : _model.updComponentList<Muscle>()) {
+                if (_muscle_path.findIndex(msl.getAbsolutePathString()) < 0) { continue; }
                 if (_emg_gamma_weight[m] > 0) {
                     log_debug("{:<20} {:<20} {:<20} {:<20} {:<20} {:<20}",
                             msl.getName(),
@@ -883,6 +890,7 @@ void COMAKTool::performCOMAK() {
             // Set Activation Limits
             int m = 0;
             for (Muscle& msl : _model.updComponentList<Muscle>()) {
+                if (_muscle_path.findIndex(msl.getAbsolutePathString()) < 0) { continue; }
                 msl.set_min_control(
                         _cost_muscle_act_lower_bound.get(m).calcValue(
                                 SimTK::Vector(1, _time[i])));
@@ -1598,12 +1606,15 @@ void COMAKTool::extractKinematicsFromFile() {
     if (get_start_time() == -1) { set_start_time(in_time.get(0)); }
     if (get_stop_time() == -1) { set_stop_time(in_time.getLast()); }
 
-    if (get_start_time() + get_time_step() < in_time.get(0)) {
+    // get_time_step() is -1 if the time step of the file is used
+    const double time_tol = std::max(get_time_step(), 0.0) + 1e-9;
+
+    if (get_start_time() < in_time.get(0) - time_tol) {
         OPENSIM_THROW(Exception, "ERROR: start_time in COMAKTool preceeds "
                                  "the times listed in the input file.");
     }
 
-    if (get_stop_time() - get_time_step() > in_time.getLast()) {
+    if (get_stop_time() > in_time.getLast() + time_tol) {
         OPENSIM_THROW(Exception, "ERROR: stop_time in COMAKTool exceeds "
                                  "the times listed in the input file.");
     }
@@ -1621,6 +1632,16 @@ void COMAKTool::extractKinematicsFromFile() {
 
     store.getTimeColumn(_time);
     _dt = _time[1] - _time[0];
+
+    for (int i = 1; i < _time.size(); ++i) {
+        if (std::abs((_time[i] - _time[i - 1]) - _dt) > 1e-3 * _dt) {
+            log_warn("The time step of the input kinematics is not uniform "
+                    "(dt = {} at t = {}, expected {}). COMAK assumes a "
+                    "constant time step.", _time[i] - _time[i - 1], _time[i],
+                    _dt);
+            break;
+        }
+    }
 
     // Set number of Frames
     _n_frames = _time.size();
@@ -1687,20 +1708,39 @@ void COMAKTool::extractKinematicsFromFile() {
         // GCVSpline q_spline;
         // q_spline.setDegree(5);
 
-        SimmSpline q_spline;
-        for (int i = 0; i < _n_frames; ++i) {
-            q_spline.addPoint(_time[i], _q_matrix(i, j));
+        std::unique_ptr<Function> q_spline;
+        if (get_smooth_input_kinematics()) {
+            SimTK::Vector q_data(_n_frames);
+            for (int i = 0; i < _n_frames; ++i) { q_data[i] = _q_matrix(i, j); }
+
+            // A coordinate that does not move has no noise to estimate
+            double error_variance = get_smoothing_spline_error_variance();
+            if (SimTK::max(q_data) - SimTK::min(q_data) < 1e-12) {
+                error_variance = 0.0;
+            }
+            q_spline.reset(new GCVSpline(5, _n_frames, &_time[0], &q_data[0],
+                    coord.getName(), error_variance));
+        } else {
+            SimmSpline* simm_spline = new SimmSpline();
+            for (int i = 0; i < _n_frames; ++i) {
+                simm_spline->addPoint(_time[i], _q_matrix(i, j));
+            }
+            q_spline.reset(simm_spline);
         }
 
         for (int i = 0; i < _n_frames; ++i) {
             SimTK::Vector x(1);
             x(0) = _time[i];
 
+            if (get_smooth_input_kinematics()) {
+                _q_matrix(i, j) = q_spline->calcValue(x);
+            }
+
             std::vector<int> u_order = {0};
-            _u_matrix(i, j) = q_spline.calcDerivative(u_order, x);
+            _u_matrix(i, j) = q_spline->calcDerivative(u_order, x);
 
             std::vector<int> udot_order = {0, 0};
-            _udot_matrix(i, j) = q_spline.calcDerivative(udot_order, x);
+            _udot_matrix(i, j) = q_spline->calcDerivative(udot_order, x);
         }
         j++;
     }
@@ -1724,13 +1764,13 @@ void COMAKTool::extractKinematicsFromFile() {
 
         for (auto& coord : _model.getComponentList<Coordinate>()) {
             labels.push_back(coord.getAbsolutePathString() + "/speed");
-            processed_kinematics(nCol) = _u_matrix(nCol);
+            processed_kinematics(nCol) = _u_matrix(nCol - numCoordinates);
             nCol++;
         }
 
         for (auto& coord : _model.getComponentList<Coordinate>()) {
             labels.push_back(coord.getAbsolutePathString() + "/acceleration");
-            processed_kinematics(nCol) = _udot_matrix(nCol);
+            processed_kinematics(nCol) = _udot_matrix(nCol - 2 * numCoordinates);
             nCol++;
         }
 
@@ -1819,10 +1859,11 @@ void COMAKTool::updateModelForces() {
 void COMAKTool::computeMuscleVolumes() {
     double max_iso_stress = 350000.0; // Muscle Specific Tension
 
-    SimTK::Vector msl_volume(_model.getMuscles().getSize(), 0.0);
+    SimTK::Vector msl_volume(_n_muscles, 0.0);
 
     int i = 0;
     for (const Muscle& msl : _model.getComponentList<Muscle>()) {
+        if (_muscle_path.findIndex(msl.getAbsolutePathString()) < 0) { continue; }
         double l0 = msl.get_optimal_fiber_length();
         double fmax = msl.get_max_isometric_force();
 
