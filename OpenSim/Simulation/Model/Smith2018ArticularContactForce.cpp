@@ -95,6 +95,11 @@ extendAddToSystem(MultibodySystem& system) const
         getSocket<Smith2018ContactMesh>("casting_mesh").
         getConnectee().getNumFaces();
 
+    const int target_mesh_nRegions = getSocket<Smith2018ContactMesh>("target_mesh").
+        getConnectee().getNumRegions();
+    const int casting_mesh_nRegions = getSocket<Smith2018ContactMesh>("casting_mesh").
+        getConnectee().getNumRegions();
+
     Vector target_mesh_def_vec(target_mesh_nTri);
     Vector casting_mesh_def_vec(casting_mesh_nTri);
     target_mesh_def_vec = -1;
@@ -258,65 +263,65 @@ extendAddToSystem(MultibodySystem& system) const
         "casting_total_contact_moment", Vec3(0), Stage::Position);
     this->_target_regional_contact_areaCV =
         addCacheVariable(
-        "target_regional_contact_area", Vector(6,0.0), Stage::Position);
+        "target_regional_contact_area", Vector(target_mesh_nRegions,0.0), Stage::Position);
     this->_target_regional_mean_proximityCV =
         addCacheVariable(
-        "target_regional_mean_proximity", Vector(6,0.0), Stage::Position);
+        "target_regional_mean_proximity", Vector(target_mesh_nRegions,0.0), Stage::Position);
     this->_target_regional_max_proximityCV =
         addCacheVariable(
-        "target_regional_max_proximity", Vector(6,0.0), Stage::Position);
+        "target_regional_max_proximity", Vector(target_mesh_nRegions,0.0), Stage::Position);
     this->_target_regional_center_of_proximityCV =
         addCacheVariable(
-        "target_regional_center_of_proximity", Vector_<Vec3>(6,Vec3(0)),
+        "target_regional_center_of_proximity", Vector_<Vec3>(target_mesh_nRegions,Vec3(0)),
         Stage::Position);
     this->_target_regional_mean_pressureCV =
         addCacheVariable(
-        "target_regional_mean_pressure", Vector(6,0.0), Stage::Position);
+        "target_regional_mean_pressure", Vector(target_mesh_nRegions,0.0), Stage::Position);
     this->_target_regional_max_pressureCV =
         addCacheVariable(
-        "target_regional_max_pressure",Vector(6,0.0), Stage::Position);
+        "target_regional_max_pressure",Vector(target_mesh_nRegions,0.0), Stage::Position);
     this->_target_regional_center_of_pressureCV =
         addCacheVariable(
-        "target_regional_center_of_pressure", Vector_<Vec3>(6,Vec3(0)),
+        "target_regional_center_of_pressure", Vector_<Vec3>(target_mesh_nRegions,Vec3(0)),
         Stage::Position);
     this->_target_regional_contact_forceCV =
         addCacheVariable(
-        "target_regional_contact_force", Vector_<Vec3>(6,Vec3(0)),
+        "target_regional_contact_force", Vector_<Vec3>(target_mesh_nRegions,Vec3(0)),
         Stage::Position);
     this->_target_regional_contact_momentCV =
         addCacheVariable(
-        "target_regional_contact_moment", Vector_<Vec3>(6,Vec3(0)),
+        "target_regional_contact_moment", Vector_<Vec3>(target_mesh_nRegions,Vec3(0)),
         Stage::Position);
     this->_casting_regional_contact_areaCV =
         addCacheVariable(
-        "casting_regional_contact_area", Vector(6,0.0), Stage::Position);
+        "casting_regional_contact_area", Vector(casting_mesh_nRegions,0.0), Stage::Position);
     this->_casting_regional_mean_proximityCV =
         addCacheVariable(
-        "casting_regional_mean_proximity", Vector(6,0.0), Stage::Position);
+        "casting_regional_mean_proximity", Vector(casting_mesh_nRegions,0.0), Stage::Position);
     this->_casting_regional_max_proximityCV =
         addCacheVariable(
-        "casting_regional_max_proximity", Vector(6,0.0), Stage::Position);
+        "casting_regional_max_proximity", Vector(casting_mesh_nRegions,0.0), Stage::Position);
     this->_casting_regional_center_of_proximityCV =
         addCacheVariable(
-        "casting_regional_center_of_proximity", Vector_<Vec3>(6, Vec3(0)),
+        "casting_regional_center_of_proximity", Vector_<Vec3>(casting_mesh_nRegions, Vec3(0)),
         Stage::Position);
     this->_casting_regional_mean_pressureCV =
         addCacheVariable(
-        "casting_regional_mean_pressure", Vector(6,0.0), Stage::Position);
+        "casting_regional_mean_pressure", Vector(casting_mesh_nRegions,0.0), Stage::Position);
     this->_casting_regional_max_pressureCV =
         addCacheVariable(
-        "casting_regional_max_pressure", Vector(6,0.0), Stage::Position);
+        "casting_regional_max_pressure", Vector(casting_mesh_nRegions,0.0), Stage::Position);
     this->_casting_regional_center_of_pressureCV =
         addCacheVariable(
-        "casting_regional_center_of_pressure", Vector_<Vec3>(6,Vec3(0)),
+        "casting_regional_center_of_pressure", Vector_<Vec3>(casting_mesh_nRegions,Vec3(0)),
         Stage::Position);
     this->_casting_regional_contact_forceCV =
         addCacheVariable(
-        "casting_regional_contact_force", Vector_<Vec3>(6,Vec3(0)),
+        "casting_regional_contact_force", Vector_<Vec3>(casting_mesh_nRegions,Vec3(0)),
         Stage::Position);
     this->_casting_regional_contact_momentCV =
         addCacheVariable(
-        "casting_regional_contact_moment", Vector_<Vec3>(6,Vec3(0)),
+        "casting_regional_contact_moment", Vector_<Vec3>(casting_mesh_nRegions,Vec3(0)),
         Stage::Position);
 
     //Modeling Options
@@ -924,17 +929,19 @@ void Smith2018ArticularContactForce::realizeContactMetricCaches(
     std::vector<std::vector<int>> casting_region_tri_ind = 
         casting_mesh.getRegionalTriangleIndices();
 
-    SimTK::Vector reg_contact_area(6, 0.0);
-    SimTK::Vector reg_mean_proximity(6, 0.0);
-    SimTK::Vector reg_max_proximity(6, 0.0);
-    SimTK::Vector_<SimTK::Vec3> reg_COPrx(6, SimTK::Vec3(0));
-    SimTK::Vector reg_mean_pressure(6, 0.0);
-    SimTK::Vector reg_max_pressure(6, 0.0);
-    SimTK::Vector_<SimTK::Vec3> reg_COP(6, SimTK::Vec3(0));
-    SimTK::Vector_<SimTK::Vec3> reg_contact_force(6, SimTK::Vec3(0));
-    SimTK::Vector_<SimTK::Vec3> reg_contact_moment(6, SimTK::Vec3(0));
+    const int nCastingRegions = casting_mesh.getNumRegions();
 
-    for (int i = 0; i < 6; ++i) {
+    SimTK::Vector reg_contact_area(nCastingRegions, 0.0);
+    SimTK::Vector reg_mean_proximity(nCastingRegions, 0.0);
+    SimTK::Vector reg_max_proximity(nCastingRegions, 0.0);
+    SimTK::Vector_<SimTK::Vec3> reg_COPrx(nCastingRegions, SimTK::Vec3(0));
+    SimTK::Vector reg_mean_pressure(nCastingRegions, 0.0);
+    SimTK::Vector reg_max_pressure(nCastingRegions, 0.0);
+    SimTK::Vector_<SimTK::Vec3> reg_COP(nCastingRegions, SimTK::Vec3(0));
+    SimTK::Vector_<SimTK::Vec3> reg_contact_force(nCastingRegions, SimTK::Vec3(0));
+    SimTK::Vector_<SimTK::Vec3> reg_contact_moment(nCastingRegions, SimTK::Vec3(0));
+
+    for (int i = 0; i < nCastingRegions; ++i) {
         auto stats = computeContactStats(casting_mesh, 
             casting_triangle_proximity, casting_triangle_pressure,
             casting_region_tri_ind[i]);
@@ -974,7 +981,18 @@ void Smith2018ArticularContactForce::realizeContactMetricCaches(
         std::vector<std::vector<int>> target_region_tri_ind =
             target_mesh.getRegionalTriangleIndices();
 
-        for (int i = 0; i < 6; ++i) {
+        const int nTargetRegions = target_mesh.getNumRegions();
+        reg_contact_area.resize(nTargetRegions);
+        reg_mean_proximity.resize(nTargetRegions);
+        reg_max_proximity.resize(nTargetRegions);
+        reg_COPrx.resize(nTargetRegions);
+        reg_mean_pressure.resize(nTargetRegions);
+        reg_max_pressure.resize(nTargetRegions);
+        reg_COP.resize(nTargetRegions);
+        reg_contact_force.resize(nTargetRegions);
+        reg_contact_moment.resize(nTargetRegions);
+
+        for (int i = 0; i < nTargetRegions; ++i) {
             auto stats = computeContactStats(target_mesh, 
                 target_triangle_proximity, target_triangle_pressure, target_region_tri_ind[i]);
 
@@ -1183,278 +1201,78 @@ Smith2018ArticularContactForce::computeContactStats(
     return stats;
 }
 
+namespace {
+
+// Labels of the total and regional columns of one mesh, in the order written
+// by getRecordValues(). Regional columns are named with the anatomical region
+// names of the mesh (e.g. regional.contact_force_medial_anterior_x).
+void appendMeshLabels(OpenSim::Array<std::string>& labels,
+        const std::string& prefix, const std::vector<std::string>& regions) {
+
+    labels.append(prefix + ".total.contact_area");
+    labels.append(prefix + ".total.mean_proximity");
+    labels.append(prefix + ".total.max_proximity");
+    labels.append(prefix + ".total.center_of_proximity_x");
+    labels.append(prefix + ".total.center_of_proximity_y");
+    labels.append(prefix + ".total.center_of_proximity_z");
+    labels.append(prefix + ".total.mean_pressure");
+    labels.append(prefix + ".total.max_pressure");
+    labels.append(prefix + ".total.center_of_pressure_x");
+    labels.append(prefix + ".total.center_of_pressure_y");
+    labels.append(prefix + ".total.center_of_pressure_z");
+    labels.append(prefix + ".total.contact_force_x");
+    labels.append(prefix + ".total.contact_force_y");
+    labels.append(prefix + ".total.contact_force_z");
+    labels.append(prefix + ".total.contact_moment_x");
+    labels.append(prefix + ".total.contact_moment_y");
+    labels.append(prefix + ".total.contact_moment_z");
+
+    struct Metric { const char* name; bool vec3; };
+    const Metric metrics[] = {
+        {"contact_area", false}, {"mean_proximity", false},
+        {"max_proximity", false}, {"center_of_proximity", true},
+        {"mean_pressure", false}, {"max_pressure", false},
+        {"center_of_pressure", true}, {"contact_force", true},
+        {"contact_moment", true}};
+    const char* axes[] = {"x", "y", "z"};
+
+    for (const Metric& metric : metrics) {
+        for (const std::string& region : regions) {
+            const std::string label = prefix + ".regional." + metric.name +
+                "_" + region;
+            if (metric.vec3) {
+                for (const char* axis : axes) {
+                    labels.append(label + "_" + axis);
+                }
+            }
+            else {
+                labels.append(label);
+            }
+        }
+    }
+}
+
+} // namespace
+
 OpenSim::Array<std::string> Smith2018ArticularContactForce::
 getRecordLabels() const {
-    // Can only return casting_mesh computations because target_mesh is 
+    // Can only return casting_mesh computations because target_mesh is
     // not used in computation of force, so if the flip_meshes ModelingOption
     // is not set, target_mesh values will not be valid
 
-    const std::string& c_mesh = getSocket<Smith2018ContactMesh>(
-        "casting_mesh").getConnectee().getName();
+    const Smith2018ContactMesh& casting_mesh =
+        getSocket<Smith2018ContactMesh>("casting_mesh").getConnectee();
 
-    const std::string& t_mesh = getSocket<Smith2018ContactMesh>(
-        "target_mesh").getConnectee().getName();
+    const Smith2018ContactMesh& target_mesh =
+        getSocket<Smith2018ContactMesh>("target_mesh").getConnectee();
 
     OpenSim::Array<std::string> labels("");
 
-    labels.append(getName() + "." + c_mesh + ".total.contact_area");
-    labels.append(getName() + "." + c_mesh + ".total.mean_proximity");
-    labels.append(getName() + "." + c_mesh + ".total.max_proximity"); 
-    labels.append(getName() + "." + c_mesh + ".total.center_of_proximity_x");
-    labels.append(getName() + "." + c_mesh + ".total.center_of_proximity_y");
-    labels.append(getName() + "." + c_mesh + ".total.center_of_proximity_z");
-    labels.append(getName() + "." + c_mesh + ".total.mean_pressure");
-    labels.append(getName() + "." + c_mesh + ".total.max_pressure");
-    labels.append(getName() + "." + c_mesh + ".total.center_of_pressure_x");
-    labels.append(getName() + "." + c_mesh + ".total.center_of_pressure_y");
-    labels.append(getName() + "." + c_mesh + ".total.center_of_pressure_z");
-    labels.append(getName() + "." + c_mesh + ".total.contact_force_x");
-    labels.append(getName() + "." + c_mesh + ".total.contact_force_y");
-    labels.append(getName() + "." + c_mesh + ".total.contact_force_z");
-    labels.append(getName() + "." + c_mesh + ".total.contact_moment_x");
-    labels.append(getName() + "." + c_mesh + ".total.contact_moment_y");
-    labels.append(getName() + "." + c_mesh + ".total.contact_moment_z");
+    appendMeshLabels(labels, getName() + "." + casting_mesh.getName(),
+        casting_mesh.getRegionalNames());
+    appendMeshLabels(labels, getName() + "." + target_mesh.getName(),
+        target_mesh.getRegionalNames());
 
-    labels.append(getName() + "." + c_mesh + ".regional.contact_area_0");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_area_1");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_area_2");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_area_3");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_area_4");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_area_5");
-
-    labels.append(getName() + "." + c_mesh + ".regional.mean_proximity_0");
-    labels.append(getName() + "." + c_mesh + ".regional.mean_proximity_1");
-    labels.append(getName() + "." + c_mesh + ".regional.mean_proximity_2");
-    labels.append(getName() + "." + c_mesh + ".regional.mean_proximity_3");
-    labels.append(getName() + "." + c_mesh + ".regional.mean_proximity_4");
-    labels.append(getName() + "." + c_mesh + ".regional.mean_proximity_5");
-
-    labels.append(getName() + "." + c_mesh + ".regional.max_proximity_0");
-    labels.append(getName() + "." + c_mesh + ".regional.max_proximity_1");
-    labels.append(getName() + "." + c_mesh + ".regional.max_proximity_2");
-    labels.append(getName() + "." + c_mesh + ".regional.max_proximity_3");
-    labels.append(getName() + "." + c_mesh + ".regional.max_proximity_4");
-    labels.append(getName() + "." + c_mesh + ".regional.max_proximity_5");
-
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_proximity_0_x");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_proximity_0_y");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_proximity_0_z");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_proximity_1_x");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_proximity_1_y");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_proximity_1_z");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_proximity_2_x");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_proximity_2_y");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_proximity_2_z");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_proximity_3_x");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_proximity_3_y");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_proximity_3_z");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_proximity_4_x");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_proximity_4_y");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_proximity_4_z");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_proximity_5_x");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_proximity_5_y");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_proximity_5_z");
-
-    labels.append(getName() + "." + c_mesh + ".regional.mean_pressure_0");
-    labels.append(getName() + "." + c_mesh + ".regional.mean_pressure_1");
-    labels.append(getName() + "." + c_mesh + ".regional.mean_pressure_2");
-    labels.append(getName() + "." + c_mesh + ".regional.mean_pressure_3");
-    labels.append(getName() + "." + c_mesh + ".regional.mean_pressure_4");
-    labels.append(getName() + "." + c_mesh + ".regional.mean_pressure_5");
-
-    labels.append(getName() + "." + c_mesh + ".regional.max_pressure_0");
-    labels.append(getName() + "." + c_mesh + ".regional.max_pressure_1");
-    labels.append(getName() + "." + c_mesh + ".regional.max_pressure_2");
-    labels.append(getName() + "." + c_mesh + ".regional.max_pressure_3");
-    labels.append(getName() + "." + c_mesh + ".regional.max_pressure_4");
-    labels.append(getName() + "." + c_mesh + ".regional.max_pressure_5");
-
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_pressure_0_x");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_pressure_0_y");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_pressure_0_z");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_pressure_1_x");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_pressure_1_y");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_pressure_1_z");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_pressure_2_x");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_pressure_2_y");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_pressure_2_z");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_pressure_3_x");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_pressure_3_y");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_pressure_3_z");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_pressure_4_x");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_pressure_4_y");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_pressure_4_z");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_pressure_5_x");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_pressure_5_y");
-    labels.append(getName() + "." + c_mesh + ".regional.center_of_pressure_5_z");
-
-    labels.append(getName() + "." + c_mesh + ".regional.contact_force_0_x");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_force_0_y");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_force_0_z");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_force_1_x");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_force_1_y");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_force_1_z");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_force_2_x");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_force_2_y");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_force_2_z");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_force_3_x");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_force_3_y");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_force_3_z");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_force_4_x");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_force_4_y");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_force_4_z");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_force_5_x");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_force_5_y");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_force_5_z");
-    
-    labels.append(getName() + "." + c_mesh + ".regional.contact_moment_0_x");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_moment_0_y");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_moment_0_z");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_moment_1_x");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_moment_1_y");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_moment_1_z");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_moment_2_x");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_moment_2_y");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_moment_2_z");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_moment_3_x");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_moment_3_y");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_moment_3_z");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_moment_4_x");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_moment_4_y");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_moment_4_z");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_moment_5_x");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_moment_5_y");
-    labels.append(getName() + "." + c_mesh + ".regional.contact_moment_5_z");
-    
-    labels.append(getName() + "." + t_mesh + ".total.contact_area");
-    labels.append(getName() + "." + t_mesh + ".total.mean_proximity");
-    labels.append(getName() + "." + t_mesh + ".total.max_proximity"); 
-    labels.append(getName() + "." + t_mesh + ".total.center_of_proximity_x");
-    labels.append(getName() + "." + t_mesh + ".total.center_of_proximity_y");
-    labels.append(getName() + "." + t_mesh + ".total.center_of_proximity_z");
-    labels.append(getName() + "." + t_mesh + ".total.mean_pressure");
-    labels.append(getName() + "." + t_mesh + ".total.max_pressure");
-    labels.append(getName() + "." + t_mesh + ".total.center_of_pressure_x");
-    labels.append(getName() + "." + t_mesh + ".total.center_of_pressure_y");
-    labels.append(getName() + "." + t_mesh + ".total.center_of_pressure_z");
-    labels.append(getName() + "." + t_mesh + ".total.contact_force_x");
-    labels.append(getName() + "." + t_mesh + ".total.contact_force_y");
-    labels.append(getName() + "." + t_mesh + ".total.contact_force_z");
-    labels.append(getName() + "." + t_mesh + ".total.contact_moment_x");
-    labels.append(getName() + "." + t_mesh + ".total.contact_moment_y");
-    labels.append(getName() + "." + t_mesh + ".total.contact_moment_z");
-
-    labels.append(getName() + "." + t_mesh + ".regional.contact_area_0");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_area_1");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_area_2");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_area_3");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_area_4");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_area_5");
-
-    labels.append(getName() + "." + t_mesh + ".regional.mean_proximity_0");
-    labels.append(getName() + "." + t_mesh + ".regional.mean_proximity_1");
-    labels.append(getName() + "." + t_mesh + ".regional.mean_proximity_2");
-    labels.append(getName() + "." + t_mesh + ".regional.mean_proximity_3");
-    labels.append(getName() + "." + t_mesh + ".regional.mean_proximity_4");
-    labels.append(getName() + "." + t_mesh + ".regional.mean_proximity_5");
-
-    labels.append(getName() + "." + t_mesh + ".regional.max_proximity_0");
-    labels.append(getName() + "." + t_mesh + ".regional.max_proximity_1");
-    labels.append(getName() + "." + t_mesh + ".regional.max_proximity_2");
-    labels.append(getName() + "." + t_mesh + ".regional.max_proximity_3");
-    labels.append(getName() + "." + t_mesh + ".regional.max_proximity_4");
-    labels.append(getName() + "." + t_mesh + ".regional.max_proximity_5");
-
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_proximity_0_x");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_proximity_0_y");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_proximity_0_z");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_proximity_1_x");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_proximity_1_y");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_proximity_1_z");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_proximity_2_x");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_proximity_2_y");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_proximity_2_z");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_proximity_3_x");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_proximity_3_y");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_proximity_3_z");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_proximity_4_x");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_proximity_4_y");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_proximity_4_z");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_proximity_5_x");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_proximity_5_y");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_proximity_5_z");
-
-    labels.append(getName() + "." + t_mesh + ".regional.mean_pressure_0");
-    labels.append(getName() + "." + t_mesh + ".regional.mean_pressure_1");
-    labels.append(getName() + "." + t_mesh + ".regional.mean_pressure_2");
-    labels.append(getName() + "." + t_mesh + ".regional.mean_pressure_3");
-    labels.append(getName() + "." + t_mesh + ".regional.mean_pressure_4");
-    labels.append(getName() + "." + t_mesh + ".regional.mean_pressure_5");
-
-    labels.append(getName() + "." + t_mesh + ".regional.max_pressure_0");
-    labels.append(getName() + "." + t_mesh + ".regional.max_pressure_1");
-    labels.append(getName() + "." + t_mesh + ".regional.max_pressure_2");
-    labels.append(getName() + "." + t_mesh + ".regional.max_pressure_3");
-    labels.append(getName() + "." + t_mesh + ".regional.max_pressure_4");
-    labels.append(getName() + "." + t_mesh + ".regional.max_pressure_5");
-
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_pressure_0_x");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_pressure_0_y");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_pressure_0_z");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_pressure_1_x");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_pressure_1_y");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_pressure_1_z");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_pressure_2_x");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_pressure_2_y");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_pressure_2_z");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_pressure_3_x");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_pressure_3_y");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_pressure_3_z");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_pressure_4_x");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_pressure_4_y");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_pressure_4_z");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_pressure_5_x");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_pressure_5_y");
-    labels.append(getName() + "." + t_mesh + ".regional.center_of_pressure_5_z");
-
-    labels.append(getName() + "." + t_mesh + ".regional.contact_force_0_x");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_force_0_y");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_force_0_z");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_force_1_x");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_force_1_y");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_force_1_z");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_force_2_x");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_force_2_y");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_force_2_z");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_force_3_x");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_force_3_y");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_force_3_z");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_force_4_x");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_force_4_y");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_force_4_z");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_force_5_x");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_force_5_y");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_force_5_z");
-    
-    labels.append(getName() + "." + t_mesh + ".regional.contact_moment_0_x");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_moment_0_y");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_moment_0_z");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_moment_1_x");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_moment_1_y");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_moment_1_z");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_moment_2_x");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_moment_2_y");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_moment_2_z");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_moment_3_x");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_moment_3_y");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_moment_3_z");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_moment_4_x");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_moment_4_y");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_moment_4_z");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_moment_5_x");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_moment_5_y");
-    labels.append(getName() + "." + t_mesh + ".regional.contact_moment_5_z");
-    
     return labels;
 }
 
@@ -1534,6 +1352,17 @@ getRecordValues(const SimTK::State& state) const {
             this->_casting_regional_contact_momentCV);
 
     OpenSim::Array<double> values;
+
+    // Regional values are written in the same order as the labels, region by
+    // region within each metric
+    auto appendScalars = [&values](const SimTK::Vector& v) {
+        for (int r = 0; r < v.size(); ++r) { values.append(v[r]); }
+    };
+    auto appendVec3 = [&values](const SimTK::Vector_<SimTK::Vec3>& v) {
+        for (int r = 0; r < v.size(); ++r) {
+            for (int k = 0; k < 3; ++k) { values.append(v[r][k]); }
+        }
+    };
     
     values.append(casting_contact_area);
     values.append(casting_mean_proximity);
@@ -1553,116 +1382,15 @@ getRecordValues(const SimTK::State& state) const {
     values.append(casting_contact_moment(1));
     values.append(casting_contact_moment(2));
 
-    values.append(casting_regional_contact_area(0));
-    values.append(casting_regional_contact_area(1));
-    values.append(casting_regional_contact_area(2));
-    values.append(casting_regional_contact_area(3));
-    values.append(casting_regional_contact_area(4));
-    values.append(casting_regional_contact_area(5));
-
-    values.append(casting_regional_mean_proximity(0));
-    values.append(casting_regional_mean_proximity(1));
-    values.append(casting_regional_mean_proximity(2));
-    values.append(casting_regional_mean_proximity(3));
-    values.append(casting_regional_mean_proximity(4));
-    values.append(casting_regional_mean_proximity(5));
-
-    values.append(casting_regional_max_proximity(0));
-    values.append(casting_regional_max_proximity(1));
-    values.append(casting_regional_max_proximity(2));
-    values.append(casting_regional_max_proximity(3));
-    values.append(casting_regional_max_proximity(4));
-    values.append(casting_regional_max_proximity(5));
-
-    values.append(casting_regional_center_of_proximity(0)(0));
-    values.append(casting_regional_center_of_proximity(0)(1));
-    values.append(casting_regional_center_of_proximity(0)(2));
-    values.append(casting_regional_center_of_proximity(1)(0));
-    values.append(casting_regional_center_of_proximity(1)(1));
-    values.append(casting_regional_center_of_proximity(1)(2));
-    values.append(casting_regional_center_of_proximity(2)(0));
-    values.append(casting_regional_center_of_proximity(2)(1));
-    values.append(casting_regional_center_of_proximity(2)(2));
-    values.append(casting_regional_center_of_proximity(3)(0));
-    values.append(casting_regional_center_of_proximity(3)(1));
-    values.append(casting_regional_center_of_proximity(3)(2));
-    values.append(casting_regional_center_of_proximity(4)(0));
-    values.append(casting_regional_center_of_proximity(4)(1));
-    values.append(casting_regional_center_of_proximity(4)(2));
-    values.append(casting_regional_center_of_proximity(5)(0));
-    values.append(casting_regional_center_of_proximity(5)(1));
-    values.append(casting_regional_center_of_proximity(5)(2));
-
-    values.append(casting_regional_mean_pressure(0));
-    values.append(casting_regional_mean_pressure(1));
-    values.append(casting_regional_mean_pressure(2));
-    values.append(casting_regional_mean_pressure(3));
-    values.append(casting_regional_mean_pressure(4));
-    values.append(casting_regional_mean_pressure(5));
-
-    values.append(casting_regional_max_pressure(0));
-    values.append(casting_regional_max_pressure(1));
-    values.append(casting_regional_max_pressure(2));
-    values.append(casting_regional_max_pressure(3));
-    values.append(casting_regional_max_pressure(4));
-    values.append(casting_regional_max_pressure(5));
-
-    values.append(casting_regional_center_of_pressure(0)(0));
-    values.append(casting_regional_center_of_pressure(0)(1));
-    values.append(casting_regional_center_of_pressure(0)(2));
-    values.append(casting_regional_center_of_pressure(1)(0));
-    values.append(casting_regional_center_of_pressure(1)(1));
-    values.append(casting_regional_center_of_pressure(1)(2));
-    values.append(casting_regional_center_of_pressure(2)(0));
-    values.append(casting_regional_center_of_pressure(2)(1));
-    values.append(casting_regional_center_of_pressure(2)(2));
-    values.append(casting_regional_center_of_pressure(3)(0));
-    values.append(casting_regional_center_of_pressure(3)(1));
-    values.append(casting_regional_center_of_pressure(3)(2));
-    values.append(casting_regional_center_of_pressure(4)(0));
-    values.append(casting_regional_center_of_pressure(4)(1));
-    values.append(casting_regional_center_of_pressure(4)(2));
-    values.append(casting_regional_center_of_pressure(5)(0));
-    values.append(casting_regional_center_of_pressure(5)(1));
-    values.append(casting_regional_center_of_pressure(5)(2));
-
-    values.append(casting_regional_contact_force(0)(0));
-    values.append(casting_regional_contact_force(0)(1));
-    values.append(casting_regional_contact_force(0)(2));
-    values.append(casting_regional_contact_force(1)(0));
-    values.append(casting_regional_contact_force(1)(1));
-    values.append(casting_regional_contact_force(1)(2));
-    values.append(casting_regional_contact_force(2)(0));
-    values.append(casting_regional_contact_force(2)(1));
-    values.append(casting_regional_contact_force(2)(2));
-    values.append(casting_regional_contact_force(3)(0));
-    values.append(casting_regional_contact_force(3)(1));
-    values.append(casting_regional_contact_force(3)(2));
-    values.append(casting_regional_contact_force(4)(0));
-    values.append(casting_regional_contact_force(4)(1));
-    values.append(casting_regional_contact_force(4)(2));
-    values.append(casting_regional_contact_force(5)(0));
-    values.append(casting_regional_contact_force(5)(1));
-    values.append(casting_regional_contact_force(5)(2));
-
-    values.append(casting_regional_contact_moment(0)(0));
-    values.append(casting_regional_contact_moment(0)(1));
-    values.append(casting_regional_contact_moment(0)(2));
-    values.append(casting_regional_contact_moment(1)(0));
-    values.append(casting_regional_contact_moment(1)(1));
-    values.append(casting_regional_contact_moment(1)(2));
-    values.append(casting_regional_contact_moment(2)(0));
-    values.append(casting_regional_contact_moment(2)(1));
-    values.append(casting_regional_contact_moment(2)(2));
-    values.append(casting_regional_contact_moment(3)(0));
-    values.append(casting_regional_contact_moment(3)(1));
-    values.append(casting_regional_contact_moment(3)(2));
-    values.append(casting_regional_contact_moment(4)(0));
-    values.append(casting_regional_contact_moment(4)(1));
-    values.append(casting_regional_contact_moment(4)(2));
-    values.append(casting_regional_contact_moment(5)(0));
-    values.append(casting_regional_contact_moment(5)(1));
-    values.append(casting_regional_contact_moment(5)(2));
+    appendScalars(casting_regional_contact_area);
+    appendScalars(casting_regional_mean_proximity);
+    appendScalars(casting_regional_max_proximity);
+    appendVec3(casting_regional_center_of_proximity);
+    appendScalars(casting_regional_mean_pressure);
+    appendScalars(casting_regional_max_pressure);
+    appendVec3(casting_regional_center_of_pressure);
+    appendVec3(casting_regional_contact_force);
+    appendVec3(casting_regional_contact_moment);
 
     
     if (getModelingOption(state, "flip_meshes")) {
@@ -1752,120 +1480,22 @@ getRecordValues(const SimTK::State& state) const {
         values.append(target_contact_moment(1));
         values.append(target_contact_moment(2));
 
-        values.append(target_regional_contact_area(0));
-        values.append(target_regional_contact_area(1));
-        values.append(target_regional_contact_area(2));
-        values.append(target_regional_contact_area(3));
-        values.append(target_regional_contact_area(4));
-        values.append(target_regional_contact_area(5));
-
-        values.append(target_regional_mean_proximity(0));
-        values.append(target_regional_mean_proximity(1));
-        values.append(target_regional_mean_proximity(2));
-        values.append(target_regional_mean_proximity(3));
-        values.append(target_regional_mean_proximity(4));
-        values.append(target_regional_mean_proximity(5));
-
-        values.append(target_regional_max_proximity(0));
-        values.append(target_regional_max_proximity(1));
-        values.append(target_regional_max_proximity(2));
-        values.append(target_regional_max_proximity(3));
-        values.append(target_regional_max_proximity(4));
-        values.append(target_regional_max_proximity(5));
-
-        values.append(target_regional_center_of_proximity(0)(0));
-        values.append(target_regional_center_of_proximity(0)(1));
-        values.append(target_regional_center_of_proximity(0)(2));
-        values.append(target_regional_center_of_proximity(1)(0));
-        values.append(target_regional_center_of_proximity(1)(1));
-        values.append(target_regional_center_of_proximity(1)(2));
-        values.append(target_regional_center_of_proximity(2)(0));
-        values.append(target_regional_center_of_proximity(2)(1));
-        values.append(target_regional_center_of_proximity(2)(2));
-        values.append(target_regional_center_of_proximity(3)(0));
-        values.append(target_regional_center_of_proximity(3)(1));
-        values.append(target_regional_center_of_proximity(3)(2));
-        values.append(target_regional_center_of_proximity(4)(0));
-        values.append(target_regional_center_of_proximity(4)(1));
-        values.append(target_regional_center_of_proximity(4)(2));
-        values.append(target_regional_center_of_proximity(5)(0));
-        values.append(target_regional_center_of_proximity(5)(1));
-        values.append(target_regional_center_of_proximity(5)(2));
-
-        values.append(target_regional_mean_pressure(0));
-        values.append(target_regional_mean_pressure(1));
-        values.append(target_regional_mean_pressure(2));
-        values.append(target_regional_mean_pressure(3));
-        values.append(target_regional_mean_pressure(4));
-        values.append(target_regional_mean_pressure(5));
-
-        values.append(target_regional_max_pressure(0));
-        values.append(target_regional_max_pressure(1));
-        values.append(target_regional_max_pressure(2));
-        values.append(target_regional_max_pressure(3));
-        values.append(target_regional_max_pressure(4));
-        values.append(target_regional_max_pressure(5));
-
-        values.append(target_regional_center_of_pressure(0)(0));
-        values.append(target_regional_center_of_pressure(0)(1));
-        values.append(target_regional_center_of_pressure(0)(2));
-        values.append(target_regional_center_of_pressure(1)(0));
-        values.append(target_regional_center_of_pressure(1)(1));
-        values.append(target_regional_center_of_pressure(1)(2));
-        values.append(target_regional_center_of_pressure(2)(0));
-        values.append(target_regional_center_of_pressure(2)(1));
-        values.append(target_regional_center_of_pressure(2)(2));
-        values.append(target_regional_center_of_pressure(3)(0));
-        values.append(target_regional_center_of_pressure(3)(1));
-        values.append(target_regional_center_of_pressure(3)(2));
-        values.append(target_regional_center_of_pressure(4)(0));
-        values.append(target_regional_center_of_pressure(4)(1));
-        values.append(target_regional_center_of_pressure(4)(2));
-        values.append(target_regional_center_of_pressure(5)(0));
-        values.append(target_regional_center_of_pressure(5)(1));
-        values.append(target_regional_center_of_pressure(5)(2));
-
-        values.append(target_regional_contact_force(0)(0));
-        values.append(target_regional_contact_force(0)(1));
-        values.append(target_regional_contact_force(0)(2));
-        values.append(target_regional_contact_force(1)(0));
-        values.append(target_regional_contact_force(1)(1));
-        values.append(target_regional_contact_force(1)(2));
-        values.append(target_regional_contact_force(2)(0));
-        values.append(target_regional_contact_force(2)(1));
-        values.append(target_regional_contact_force(2)(2));
-        values.append(target_regional_contact_force(3)(0));
-        values.append(target_regional_contact_force(3)(1));
-        values.append(target_regional_contact_force(3)(2));
-        values.append(target_regional_contact_force(4)(0));
-        values.append(target_regional_contact_force(4)(1));
-        values.append(target_regional_contact_force(4)(2));
-        values.append(target_regional_contact_force(5)(0));
-        values.append(target_regional_contact_force(5)(1));
-        values.append(target_regional_contact_force(5)(2));
-
-        values.append(target_regional_contact_moment(0)(0));
-        values.append(target_regional_contact_moment(0)(1));
-        values.append(target_regional_contact_moment(0)(2));
-        values.append(target_regional_contact_moment(1)(0));
-        values.append(target_regional_contact_moment(1)(1));
-        values.append(target_regional_contact_moment(1)(2));
-        values.append(target_regional_contact_moment(2)(0));
-        values.append(target_regional_contact_moment(2)(1));
-        values.append(target_regional_contact_moment(2)(2));
-        values.append(target_regional_contact_moment(3)(0));
-        values.append(target_regional_contact_moment(3)(1));
-        values.append(target_regional_contact_moment(3)(2));
-        values.append(target_regional_contact_moment(4)(0));
-        values.append(target_regional_contact_moment(4)(1));
-        values.append(target_regional_contact_moment(4)(2));
-        values.append(target_regional_contact_moment(5)(0));
-        values.append(target_regional_contact_moment(5)(1));
-        values.append(target_regional_contact_moment(5)(2));
+        appendScalars(target_regional_contact_area);
+        appendScalars(target_regional_mean_proximity);
+        appendScalars(target_regional_max_proximity);
+        appendVec3(target_regional_center_of_proximity);
+        appendScalars(target_regional_mean_pressure);
+        appendScalars(target_regional_max_pressure);
+        appendVec3(target_regional_center_of_pressure);
+        appendVec3(target_regional_contact_force);
+        appendVec3(target_regional_contact_moment);
     }
     else {
     // No Target data computed
-        int nTargetLabels = 119;
+        // 17 total columns plus 17 per region (5 scalar + 4 Vec3 metrics)
+        int nTargetLabels = 17 + 17 *
+            getSocket<Smith2018ContactMesh>("target_mesh").getConnectee().
+            getNumRegions();
 
         for (int i = 0; i < nTargetLabels; i++) {
             values.append(-1);

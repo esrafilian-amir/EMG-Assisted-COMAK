@@ -34,6 +34,8 @@
 // #include "simmath/internal/ContactGeometry.h"
 // #include "simmath/internal/OrientedBoundingBox.h"
 // #include "simmath/internal/OBBTree.h"
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <math.h>
 #include <set>
@@ -285,6 +287,296 @@ std::string Smith2018ContactMesh::findMeshFile(const std::string& file) {
     return attempts.back();
 }
 
+namespace {
+
+enum class MeshBone { Other, Tibia, Femur, Patella, Meniscus };
+
+std::string lowerCopy(std::string s) {
+    for (auto& c : s) { c = (char)std::tolower((unsigned char)c); }
+    return s;
+}
+
+// Bone a mesh belongs to, from a name, frame path or file name.
+MeshBone boneFromText(const std::string& text) {
+    const std::string t = lowerCopy(text);
+    auto has = [&](const char* s) { return t.find(s) != std::string::npos; };
+    if (has("menisc")) { return MeshBone::Meniscus; }
+    if (has("patell")) { return MeshBone::Patella; }
+    if (has("femur") || has("femor")) { return MeshBone::Femur; }
+    if (has("tibi")) { return MeshBone::Tibia; }
+    return MeshBone::Other;
+}
+
+// True if the text has a stand alone left side token ("_l", "-L", "left").
+bool hasLeftToken(const std::string& text) {
+    std::string token;
+    auto isLeft = [](const std::string& s) { return s == "l" || s == "left"; };
+    for (char c : lowerCopy(text)) {
+        if (std::isalnum((unsigned char)c)) {
+            token += c;
+        } else {
+            if (isLeft(token)) { return true; }
+            token.clear();
+        }
+    }
+    return isLeft(token);
+}
+
+} // namespace
+
+void Smith2018ContactMesh::computeRegions() {
+    /* Divide the triangles into regions used by the regional contact outputs.
+    The bone is taken from the mesh name, the frame it is attached to, or the
+    mesh file name (in that order), and the mesh is assumed to be expressed in
+    the knee frame (x anterior, y proximal, z lateral for a right knee, origin
+    at the knee joint center):
+
+    Tibia:    medial/lateral (z), then each compartment in an inner (towards
+              the midline) and outer half of its own z range, then in thirds of
+              its own x range (anterior, central, posterior): 12 regions.
+              Followed by 10 more regions that overlap the first 12, a
+              central/anterior/posterior/internal/external division of each
+              compartment (see below), so a triangle belongs to two regions.
+              The 5 regions of each compartment: an ellipse around the center
+              of the compartment (40% of its x and z extent) is "central" and
+              the rest is divided by the diagonals of the compartment extent
+              into anterior, posterior, internal (towards the midline) and
+              external.
+    Femur:    medial/lateral (z), then the angle in the sagittal plane about
+              the origin, from +y towards posterior: 0-135 posterior,
+              135-225 central, 225-360 anterior, then every angle (swept in 5 degree
+              bins) is split in an inner (towards the midline) and outer half
+              of the z range found at that angle: 12 regions.
+    Patella:  medial/lateral (z), then each compartment in thirds of its own
+              y range (proximal, central, distal).
+    Meniscus: angle in the transverse plane about the center of the meniscus
+              (circle fit, close to the center of the related tibial
+              compartment), 120 degree slices: central (+-60 degrees about
+              the direction away from the midline), anterior and posterior.
+    Other:    half spaces of the x, y, z axes.
+    */
+    const int nTri = _mesh.getNumFaces();
+    const double rad2deg = 180.0 / SimTK::Pi;
+
+    std::string frame_path;
+    try {
+        frame_path = getSocket<PhysicalFrame>("frame").getConnecteePath();
+    } catch (const std::exception&) {
+        frame_path.clear();
+    }
+    std::string file_name = _full_mesh_file_path;
+    file_name = file_name.substr(file_name.find_last_of("/\\") + 1);
+
+    MeshBone bone = boneFromText(getName());
+    if (bone == MeshBone::Other) { bone = boneFromText(frame_path); }
+    if (bone == MeshBone::Other) { bone = boneFromText(file_name); }
+
+    // Sign of z on the lateral side (a left knee is the mirror image)
+    const bool left = hasLeftToken(getName()) || hasLeftToken(frame_path);
+    const double lateral_sign = left ? -1.0 : 1.0;
+
+    auto setRegions = [&](const std::vector<std::string>& names) {
+        _regional_names = names;
+        _regional_tri_ind.assign(names.size(), std::vector<int>());
+        _regional_n_tri.assign(names.size(), 0);
+    };
+    auto assign = [&](int tri, int region) {
+        _regional_tri_ind[region].push_back(tri);
+        _regional_n_tri[region]++;
+    };
+
+    // Medial/lateral, then (optionally) the inner/outer half of the
+    // compartment in z, then thirds of the compartment range along one axis
+    auto splitInThirds = [&](int axis, const std::string& high,
+                                 const std::string& mid,
+                                 const std::string& low, bool halves) {
+        const int nPart = halves ? 6 : 3;
+        std::vector<std::string> names;
+        for (const char* side : {"medial_", "lateral_"}) {
+            for (const char* half : (halves ?
+                    std::vector<const char*>{"inner_", "outer_"} :
+                    std::vector<const char*>{""})) {
+                for (const std::string& t : {high, mid, low}) {
+                    names.push_back(std::string(side) + half + t);
+                }
+            }
+        }
+        setRegions(names);
+        double zlo[2] = {SimTK::Infinity, SimTK::Infinity};
+        double zhi[2] = {-SimTK::Infinity, -SimTK::Infinity};
+        double lo[2] = {SimTK::Infinity, SimTK::Infinity};
+        double hi[2] = {-SimTK::Infinity, -SimTK::Infinity};
+        std::vector<int> side(nTri);
+        for (int i = 0; i < nTri; ++i) {
+            side[i] = (_tri_center(i)(2) * lateral_sign > 0.0) ? 1 : 0;
+            lo[side[i]] = std::min(lo[side[i]], _tri_center(i)(axis));
+            hi[side[i]] = std::max(hi[side[i]], _tri_center(i)(axis));
+            const double z = _tri_center(i)(2) * lateral_sign;
+            zlo[side[i]] = std::min(zlo[side[i]], z);
+            zhi[side[i]] = std::max(zhi[side[i]], z);
+        }
+        for (int i = 0; i < nTri; ++i) {
+            const int c = side[i];
+            int third = 1;
+            if (hi[c] > lo[c]) {
+                third = (int)(3.0 * (_tri_center(i)(axis) - lo[c]) /
+                              (hi[c] - lo[c]));
+                third = std::min(std::max(third, 0), 2);
+            }
+            int half = 0;
+            if (halves) {
+                const double z = _tri_center(i)(2) * lateral_sign;
+                const bool towardsMidline = (c == 1) ?
+                    (z < 0.5 * (zlo[c] + zhi[c])) :
+                    (z > 0.5 * (zlo[c] + zhi[c]));
+                half = towardsMidline ? 0 : 1;
+            }
+            assign(i, c * nPart + half * 3 + (2 - third));
+        }
+    };
+
+    if (bone == MeshBone::Tibia) {
+        splitInThirds(0, "anterior", "central", "posterior", true);
+
+        // Additional overlapping regions: central disc and four sectors
+        const char* sector_names[5] = {"central_disc", "anterior_sector",
+                "posterior_sector", "internal_sector", "external_sector"};
+        const int first = (int)_regional_names.size();
+        for (const char* side : {"medial", "lateral"}) {
+            for (const char* sector : sector_names) {
+                _regional_names.push_back(std::string(side) + "_" + sector);
+            }
+        }
+        _regional_tri_ind.resize(first + 10);
+        _regional_n_tri.resize(first + 10, 0);
+        double xlo[2] = {SimTK::Infinity, SimTK::Infinity};
+        double xhi[2] = {-SimTK::Infinity, -SimTK::Infinity};
+        double zlo[2] = {SimTK::Infinity, SimTK::Infinity};
+        double zhi[2] = {-SimTK::Infinity, -SimTK::Infinity};
+        std::vector<int> side(nTri);
+        for (int i = 0; i < nTri; ++i) {
+            const double x = _tri_center(i)(0);
+            const double z = _tri_center(i)(2) * lateral_sign;
+            side[i] = (z > 0.0) ? 1 : 0;
+            xlo[side[i]] = std::min(xlo[side[i]], x);
+            xhi[side[i]] = std::max(xhi[side[i]], x);
+            zlo[side[i]] = std::min(zlo[side[i]], z);
+            zhi[side[i]] = std::max(zhi[side[i]], z);
+        }
+        for (int i = 0; i < nTri; ++i) {
+            const int c = side[i];
+            const double hx = 0.5 * (xhi[c] - xlo[c]);
+            const double hz = 0.5 * (zhi[c] - zlo[c]);
+            if (hx <= 0.0 || hz <= 0.0) { continue; }
+            const double u = (_tri_center(i)(0) - 0.5 * (xlo[c] + xhi[c])) / hx;
+            double v = (_tri_center(i)(2) * lateral_sign -
+                        0.5 * (zlo[c] + zhi[c])) / hz;
+            // positive towards the midline
+            const double towards = (c == 1) ? -v : v;
+            int sector;
+            if (std::sqrt(u * u + v * v) < 0.4) {
+                sector = 0;
+            } else if (std::abs(u) >= std::abs(towards)) {
+                sector = (u > 0.0) ? 1 : 2;
+            } else {
+                sector = (towards > 0.0) ? 3 : 4;
+            }
+            assign(i, first + c * 5 + sector);
+        }
+
+    } else if (bone == MeshBone::Patella) {
+        splitInThirds(1, "proximal", "central", "distal", false);
+
+    } else if (bone == MeshBone::Femur) {
+        setRegions({"medial_inner_anterior", "medial_inner_central",
+                "medial_inner_posterior", "medial_outer_anterior",
+                "medial_outer_central", "medial_outer_posterior",
+                "lateral_inner_anterior", "lateral_inner_central",
+                "lateral_inner_posterior", "lateral_outer_anterior",
+                "lateral_outer_central", "lateral_outer_posterior"});
+        // Inner/outer halves: sweep the angle in 5 degree bins and, in every
+        // bin of each compartment, split the z range of that bin in half
+        const int nBins = 72;
+        std::vector<int> bin(nTri);
+        std::vector<double> zlo(2 * nBins, SimTK::Infinity);
+        std::vector<double> zhi(2 * nBins, -SimTK::Infinity);
+        for (int i = 0; i < nTri; ++i) {
+            const double z = _tri_center(i)(2) * lateral_sign;
+            // angle from +y (proximal) towards -x (posterior)
+            double theta =
+                    std::atan2(-_tri_center(i)(0), _tri_center(i)(1)) * rad2deg;
+            if (theta < 0.0) { theta += 360.0; }
+            const int b = std::min((int)(theta / (360.0 / nBins)), nBins - 1);
+            bin[i] = ((z > 0.0) ? nBins : 0) + b;
+            zlo[bin[i]] = std::min(zlo[bin[i]], z);
+            zhi[bin[i]] = std::max(zhi[bin[i]], z);
+        }
+        for (int i = 0; i < nTri; ++i) {
+            const int k = bin[i];
+            const int c = k / nBins;
+            const double theta_bin = (k % nBins + 0.5) * (360.0 / nBins);
+            const int part = (theta_bin < 135.0) ? 2 : ((theta_bin < 225.0) ? 1 : 0);
+            const double z = _tri_center(i)(2) * lateral_sign;
+            const double zmid = 0.5 * (zlo[k] + zhi[k]);
+            const bool towardsMidline = (c == 1) ? (z < zmid) : (z > zmid);
+            assign(i, c * 6 + (towardsMidline ? 0 : 3) + part);
+        }
+
+    } else if (bone == MeshBone::Meniscus) {
+        setRegions({"anterior", "central", "posterior"});
+
+        // Circle fit (Kasa) of the triangle centers in the x-z plane
+        double mx = 0.0, mz = 0.0;
+        for (int i = 0; i < nTri; ++i) {
+            mx += _tri_center(i)(0);
+            mz += _tri_center(i)(2);
+        }
+        mx /= std::max(nTri, 1);
+        mz /= std::max(nTri, 1);
+        double suu = 0, svv = 0, suv = 0, suuu = 0, svvv = 0, suvv = 0,
+               suuv = 0;
+        for (int i = 0; i < nTri; ++i) {
+            const double u = _tri_center(i)(0) - mx;
+            const double v = _tri_center(i)(2) - mz;
+            suu += u * u;
+            svv += v * v;
+            suv += u * v;
+            suuu += u * u * u;
+            svvv += v * v * v;
+            suvv += u * v * v;
+            suuv += u * u * v;
+        }
+        double cx = mx, cz = mz;
+        const double det = suu * svv - suv * suv;
+        if (std::abs(det) > 1e-30) {
+            const double uc =
+                    0.5 * ((suuu + suvv) * svv - (svvv + suuv) * suv) / det;
+            const double vc =
+                    0.5 * ((svvv + suuv) * suu - (suuu + suvv) * suv) / det;
+            cx = mx + uc;
+            cz = mz + vc;
+        }
+
+        // Outward is the side of z=0 on which the meniscus center is located
+        const double outward = (cz >= 0.0) ? 1.0 : -1.0;
+        for (int i = 0; i < nTri; ++i) {
+            const double anterior = _tri_center(i)(0) - cx;
+            const double lateral = outward * (_tri_center(i)(2) - cz);
+            const double psi = std::atan2(anterior, lateral) * rad2deg;
+            assign(i, (psi > 60.0) ? 0 : ((psi < -60.0) ? 2 : 1));
+        }
+
+    } else {
+        setRegions({"x_negative", "x_positive", "y_negative", "y_positive",
+                "z_negative", "z_positive"});
+        for (int i = 0; i < nTri; ++i) {
+            for (int j = 0; j < 3; ++j) {
+                assign(i, j * 2 + ((_tri_center(i)(j) < 0.0) ? 0 : 1));
+            }
+        }
+    }
+}
+
 void Smith2018ContactMesh::initializeMesh() {
     _mesh_is_cached = true;
     _cached_mesh_file = get_mesh_file();
@@ -345,319 +637,6 @@ void Smith2018ContactMesh::initializeMesh() {
     _vertex_locations.resize(_mesh.getNumVertices());
     _face_vertex_locations.resize(_mesh.getNumFaces(), 3);
 
-    // Amir to calc regional JCF
-    if (_full_mesh_file_path.find("Tibia") != std::string::npos) {
-        std::cout << "Tibia found " << '\n';
-        _regional_tri_ind.clear();
-        _regional_tri_ind.resize(6);
-        _regional_n_tri.clear();
-        _regional_n_tri.assign(6, 0);
-        std::vector<double> _all_nodes(3 * _mesh.getNumFaces(), 0.0);
-        for (int i = 0; i < _mesh.getNumFaces(); ++i) {
-            // Get Triangle Vertice Positions
-            int v1_i = _mesh.getFaceVertex(i, 0);
-            int v2_i = _mesh.getFaceVertex(i, 1);
-            int v3_i = _mesh.getFaceVertex(i, 2);
-
-            SimTK::Vec3 v1 = _mesh.getVertexPosition(v1_i);
-            SimTK::Vec3 v2 = _mesh.getVertexPosition(v2_i);
-            SimTK::Vec3 v3 = _mesh.getVertexPosition(v3_i);
-
-            _all_nodes[(i * 3)] = v1[0];
-            _all_nodes[(i * 3) + 1] = v2[0];
-            _all_nodes[(i * 3) + 2] = v3[0];
-        }
-        auto minmax = std::minmax_element(
-                std::begin(_all_nodes), std::end(_all_nodes));
-        double _delta = (*minmax.second - *minmax.first) / 3;
-        double _post_marg = *minmax.first + _delta;
-        double _ant_marg = *minmax.first + _delta + _delta;
-        for (int i = 0; i < _mesh.getNumFaces(); ++i) {
-            // Get Triangle Vertice Positions
-            int v1_i = _mesh.getFaceVertex(i, 0);
-            int v2_i = _mesh.getFaceVertex(i, 1);
-            int v3_i = _mesh.getFaceVertex(i, 2);
-
-            SimTK::Vec3 v1 = _mesh.getVertexPosition(v1_i);
-            SimTK::Vec3 v2 = _mesh.getVertexPosition(v2_i);
-            SimTK::Vec3 v3 = _mesh.getVertexPosition(v3_i);
-
-            // Compute Triangle Center
-            _tri_center(i) = (v1 + v2 + v3) / 3.0;
-
-            // Compute Triangle Normal
-            SimTK::Vec3 e1 = v3 - v1;
-            SimTK::Vec3 e2 = v2 - v1;
-
-            SimTK::Vec3 cross = SimTK::cross(e1, e2);
-
-            double mag = cross.norm();
-
-            for (int j = 0; j < 3; ++j) {
-                _tri_normal(i).set(j, -cross[j] / mag);
-            }
-
-            // Compute Triangle Area
-            // Compute length of each side of the triangle
-            double s1 = 0;
-            double s2 = 0;
-            double s3 = 0;
-
-            for (int j = 0; j < 3; j++) {
-                s1 += (v2[j] - v1[j]) * (v2[j] - v1[j]);
-                s2 += (v3[j] - v2[j]) * (v3[j] - v2[j]);
-                s3 += (v1[j] - v3[j]) * (v1[j] - v3[j]);
-            }
-
-            s1 = sqrt(s1);
-            s2 = sqrt(s2);
-            s3 = sqrt(s3);
-
-            // Now employ Heron's formula
-            double s = (s1 + s2 + s3) / 2.0;
-            _tri_area[i] = sqrt(s * (s - s1) * (s - s2) * (s - s3));
-
-            // Determine regional triangle indices
-            if (_tri_center(i)(0) < _post_marg) {
-                _regional_tri_ind[0].push_back(i);
-                _regional_n_tri[0]++;
-            } else if (_tri_center(i)(0) > _ant_marg) {
-                _regional_tri_ind[2].push_back(i);
-                _regional_n_tri[2]++;
-            } else {
-                _regional_tri_ind[1].push_back(i);
-                _regional_n_tri[1]++;
-            }
-        }
-    } else if (_full_mesh_file_path.find("Femur") != std::string::npos) {
-        std::cout << "Femur found " << '\n';
-        _regional_tri_ind.clear();
-        _regional_tri_ind.resize(6);
-        _regional_n_tri.clear();
-        _regional_n_tri.assign(6, 0);
-        /* std::vector<double> _all_nodes(3 * _mesh.getNumFaces(), 0.0);
-        for (int i = 0; i < _mesh.getNumFaces(); ++i) {
-            // Get Triangle Vertice Positions
-            int v1_i = _mesh.getFaceVertex(i, 0);
-            int v2_i = _mesh.getFaceVertex(i, 1);
-            int v3_i = _mesh.getFaceVertex(i, 2);
-
-            SimTK::Vec3 v1 = _mesh.getVertexPosition(v1_i);
-            SimTK::Vec3 v2 = _mesh.getVertexPosition(v2_i);
-            SimTK::Vec3 v3 = _mesh.getVertexPosition(v3_i);
-
-            _all_nodes[(i * 3)] = v1[0];
-            _all_nodes[(i * 3) + 1] = v2[0];
-            _all_nodes[(i * 3) + 2] = v3[0];
-        }
-        auto minmax = std::minmax_element(
-                std::begin(_all_nodes), std::end(_all_nodes));
-        double _delta = (*minmax.second - *minmax.first) / 3;
-        double _post_marg = *minmax.first + _delta;
-        double _ant_marg = *minmax.first + _delta + _delta;*/
-        for (int i = 0; i < _mesh.getNumFaces(); ++i) {
-            // Get Triangle Vertice Positions
-            int v1_i = _mesh.getFaceVertex(i, 0);
-            int v2_i = _mesh.getFaceVertex(i, 1);
-            int v3_i = _mesh.getFaceVertex(i, 2);
-
-            SimTK::Vec3 v1 = _mesh.getVertexPosition(v1_i);
-            SimTK::Vec3 v2 = _mesh.getVertexPosition(v2_i);
-            SimTK::Vec3 v3 = _mesh.getVertexPosition(v3_i);
-
-            // Compute Triangle Center
-            _tri_center(i) = (v1 + v2 + v3) / 3.0;
-
-            // Compute Triangle Normal
-            SimTK::Vec3 e1 = v3 - v1;
-            SimTK::Vec3 e2 = v2 - v1;
-
-            SimTK::Vec3 cross = SimTK::cross(e1, e2);
-
-            double mag = cross.norm();
-
-            for (int j = 0; j < 3; ++j) {
-                _tri_normal(i).set(j, -cross[j] / mag);
-            }
-
-            // Compute Triangle Area
-            // Compute length of each side of the triangle
-            double s1 = 0;
-            double s2 = 0;
-            double s3 = 0;
-
-            for (int j = 0; j < 3; j++) {
-                s1 += (v2[j] - v1[j]) * (v2[j] - v1[j]);
-                s2 += (v3[j] - v2[j]) * (v3[j] - v2[j]);
-                s3 += (v1[j] - v3[j]) * (v1[j] - v3[j]);
-            }
-
-            s1 = sqrt(s1);
-            s2 = sqrt(s2);
-            s3 = sqrt(s3);
-
-            // Now employ Heron's formula
-            double s = (s1 + s2 + s3) / 2.0;
-            _tri_area[i] = sqrt(s * (s - s1) * (s - s2) * (s - s3));
-
-            // Determine regional triangle indices
-            double _atan = _tri_center(i)(1) / _tri_center(i)(0);
-            if (_tri_center(i)(0) < 0 && _atan <= 0.83) {
-                // this is posterior
-                if (_tri_center(i)(2) < 0) {
-                    _regional_tri_ind[0].push_back(i);
-                    _regional_n_tri[0]++;
-                } else {
-                    _regional_tri_ind[3].push_back(i);
-                    _regional_n_tri[3]++;
-                }
-            } else if (_tri_center(i)(1) < 0 && (_atan > 0.83 || _atan < -1)) {
-                // this is middle
-                if (_tri_center(i)(2) < 0) {
-                    _regional_tri_ind[1].push_back(i);
-                    _regional_n_tri[1]++;
-                } else {
-                    _regional_tri_ind[4].push_back(i);
-                    _regional_n_tri[4]++;
-                }
-            } else if (_tri_center(i)(0) > 0) {
-                // this is front
-                if (_tri_center(i)(2) < 0) {
-                    _regional_tri_ind[2].push_back(i);
-                    _regional_n_tri[2]++;
-                } else {
-                    _regional_tri_ind[5].push_back(i);
-                    _regional_n_tri[5]++;
-                }
-            }
-        }
-    } else if (_full_mesh_file_path.find("Patella") != std::string::npos) {
-        std::cout << "Patella found " << '\n';
-        _regional_tri_ind.clear();
-        _regional_tri_ind.resize(6);
-        _regional_n_tri.clear();
-        _regional_n_tri.assign(6, 0);
-        for (int i = 0; i < _mesh.getNumFaces(); ++i) {
-            // Get Triangle Vertice Positions
-            int v1_i = _mesh.getFaceVertex(i, 0);
-            int v2_i = _mesh.getFaceVertex(i, 1);
-            int v3_i = _mesh.getFaceVertex(i, 2);
-
-            SimTK::Vec3 v1 = _mesh.getVertexPosition(v1_i);
-            SimTK::Vec3 v2 = _mesh.getVertexPosition(v2_i);
-            SimTK::Vec3 v3 = _mesh.getVertexPosition(v3_i);
-
-            // Compute Triangle Center
-            _tri_center(i) = (v1 + v2 + v3) / 3.0;
-
-            // Compute Triangle Normal
-            SimTK::Vec3 e1 = v3 - v1;
-            SimTK::Vec3 e2 = v2 - v1;
-
-            SimTK::Vec3 cross = SimTK::cross(e1, e2);
-
-            double mag = cross.norm();
-
-            for (int j = 0; j < 3; ++j) {
-                _tri_normal(i).set(j, -cross[j] / mag);
-            }
-
-            // Compute Triangle Area
-            // Compute length of each side of the triangle
-            double s1 = 0;
-            double s2 = 0;
-            double s3 = 0;
-
-            for (int j = 0; j < 3; j++) {
-                s1 += (v2[j] - v1[j]) * (v2[j] - v1[j]);
-                s2 += (v3[j] - v2[j]) * (v3[j] - v2[j]);
-                s3 += (v1[j] - v3[j]) * (v1[j] - v3[j]);
-            }
-
-            s1 = sqrt(s1);
-            s2 = sqrt(s2);
-            s3 = sqrt(s3);
-
-            // Now employ Heron's formula
-            double s = (s1 + s2 + s3) / 2.0;
-            _tri_area[i] = sqrt(s * (s - s1) * (s - s2) * (s - s3));
-
-            // Determine regional triangle indices
-            if (_tri_center(i)(2) < 0) {
-                _regional_tri_ind[0].push_back(i);
-                _regional_n_tri[0]++;
-            } else {
-                _regional_tri_ind[1].push_back(i);
-                _regional_n_tri[1]++;
-            }
-        }
-    } else {
-        std::cout << "Generic mesh found " << '\n';
-        _regional_tri_ind.clear();
-        _regional_tri_ind.resize(6);
-        _regional_n_tri.clear();
-        _regional_n_tri.assign(6, 0);
-        for (int i = 0; i < _mesh.getNumFaces(); ++i) {
-
-            // Get Triangle Vertice Positions
-            int v1_i = _mesh.getFaceVertex(i, 0);
-            int v2_i = _mesh.getFaceVertex(i, 1);
-            int v3_i = _mesh.getFaceVertex(i, 2);
-
-            SimTK::Vec3 v1 = _mesh.getVertexPosition(v1_i);
-            SimTK::Vec3 v2 = _mesh.getVertexPosition(v2_i);
-            SimTK::Vec3 v3 = _mesh.getVertexPosition(v3_i);
-
-            // Compute Triangle Center
-            _tri_center(i) = (v1 + v2 + v3) / 3.0;
-
-            // Compute Triangle Normal
-            SimTK::Vec3 e1 = v3 - v1;
-            SimTK::Vec3 e2 = v2 - v1;
-
-            SimTK::Vec3 cross = SimTK::cross(e1, e2);
-
-            double mag = cross.norm();
-
-            for (int j = 0; j < 3; ++j) {
-                _tri_normal(i).set(j, -cross[j] / mag);
-            }
-
-            // Compute Triangle Area
-            // Compute length of each side of the triangle
-            double s1 = 0;
-            double s2 = 0;
-            double s3 = 0;
-
-            for (int j = 0; j < 3; j++) {
-                s1 += (v2[j] - v1[j]) * (v2[j] - v1[j]);
-                s2 += (v3[j] - v2[j]) * (v3[j] - v2[j]);
-                s3 += (v1[j] - v3[j]) * (v1[j] - v3[j]);
-            }
-
-            s1 = sqrt(s1);
-            s2 = sqrt(s2);
-            s3 = sqrt(s3);
-
-            // Now employ Heron's formula
-            double s = (s1 + s2 + s3) / 2.0;
-            _tri_area[i] = sqrt(s * (s - s1) * (s - s2) * (s - s3));
-
-            // Determine regional triangle indices
-            for (int j = 0; j < 3; ++j) {
-                if (_tri_center(i)(j) < 0.0) {
-                    _regional_tri_ind[j * 2].push_back(i);
-                    _regional_n_tri[j * 2]++;
-                } else {
-                    _regional_tri_ind[j * 2 + 1].push_back(i);
-                    _regional_n_tri[j * 2 + 1]++;
-                }
-            }
-        }
-    } //->Amir
-
-    // Amir ->
-    /*
     // Compute Mesh Properties
     //========================
 
@@ -685,14 +664,7 @@ void Smith2018ContactMesh::initializeMesh() {
 
         for (int j = 0; j < 3; ++j) {
             _tri_normal(i).set(j, -cross[j] / mag);
-
-            if (SimTK::isNaN(_tri_normal(i)(0))){
-                OPENSIM_THROW(Exception, "Smith2018ContactMesh " + getName() +
-                    " Triangle Number (0-index): " + std::to_string(i) + " has
-    NaN normal.");
-            }
         }
-
 
         // Compute Triangle Area
         // Compute length of each side of the triangle
@@ -700,10 +672,10 @@ void Smith2018ContactMesh::initializeMesh() {
         double s2 = 0;
         double s3 = 0;
 
-        for (int j = 0; j<3; j++) {
-            s1 += (v2[j] - v1[j])*(v2[j] - v1[j]);
-            s2 += (v3[j] - v2[j])*(v3[j] - v2[j]);
-            s3 += (v1[j] - v3[j])*(v1[j] - v3[j]);
+        for (int j = 0; j < 3; j++) {
+            s1 += (v2[j] - v1[j]) * (v2[j] - v1[j]);
+            s2 += (v3[j] - v2[j]) * (v3[j] - v2[j]);
+            s3 += (v1[j] - v3[j]) * (v1[j] - v3[j]);
         }
 
         s1 = sqrt(s1);
@@ -712,27 +684,11 @@ void Smith2018ContactMesh::initializeMesh() {
 
         // Now employ Heron's formula
         double s = (s1 + s2 + s3) / 2.0;
-        _tri_area[i] = sqrt(s*(s - s1)*(s - s2)*(s - s3));
+        _tri_area[i] = sqrt(s * (s - s1) * (s - s2) * (s - s3));
+    }
 
-        if (_tri_area[i]<=0) {
-            OPENSIM_THROW(Exception, "Smith2018ContactMesh " + getName() +
-                " Triangle Number (0-index): " + std::to_string(i) +
-                " has an area <= 0.");
-        }
-
-        //Determine regional triangle indices
-        for (int j = 0; j < 3; ++j) {
-            if (_tri_center(i)(j) < 0.0) {
-                _regional_tri_ind[j * 2].push_back(i);
-                _regional_n_tri[j * 2]++;
-            }
-            else {
-                _regional_tri_ind[j * 2 + 1].push_back(i);
-                _regional_n_tri[j * 2 + 1]++;
-            }
-        }
-    } */
-    //-> Amir
+    // Regional triangle indices (needs the triangle centers)
+    computeRegions();
 
     // Vertex Locations
     for (int i = 0; i < _mesh.getNumVertices(); ++i) {

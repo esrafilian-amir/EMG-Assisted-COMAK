@@ -238,20 +238,36 @@ target or casting mesh.
 There are also "summary" outputs that return values associated with the entire 
 mesh such as contact area, mean/max proximity/pressure, center of
 proximity/pressure etc. Finally, there are regional summary outputs which
-return a SimTK::Vector (size = 6). Here, the entries in the vector reflect the
-summary metrics corresponding to subset of mesh triangles located in six 
-specific regions. These six regions are defined as the subset of mesh triangles 
-whose center is located in half spaces defined by the x y z axes in the local
-mesh coordinate system. Thus, the size 6 vector contains metrics corresponding
-to triangles in the following half spaces [-x, +x, -y, +y, -z, +z]. 
-If the mesh coordinate system is aligned with anatomical axes, then this 
-enables simulation results to be more readily 
-interpreted. For example, when performing simulations of the knee, if the 
-z axis is aligned to the medial-lateral axis, points medially, and the origin 
-is located between the femoral condyles, then the regional outputs 
-corresponding to +z and -z will summarize the mesh triangles located on the 
-medial and lateral condyles and thus enable comparisons of the loading in the 
-medial and lateral compartments.
+return a SimTK::Vector (size = number of regions of the mesh). Here, the
+entries in the vector reflect the summary metrics corresponding to the subset
+of mesh triangles located in each anatomical region. The regions and their
+names (Smith2018ContactMesh::getRegionalNames()) depend on the bone the mesh is
+attached to (taken from the mesh name, the frame it is attached to, or the mesh
+file name) and assume the mesh is expressed in the knee frame (x anterior,
+y proximal, z lateral for a right knee, origin at the knee joint center):
+
+- tibia: medial/lateral (z), each divided in an inner (towards the midline) and
+  outer half of its z range, each divided in thirds of its anterior-posterior
+  range (anterior, central, posterior), 12 regions (e.g. medial_inner_anterior).
+  Followed by 10 regions that overlap them (medial_central_disc,
+  medial_anterior_sector, _posterior_, _internal_, _external_ and the same for
+  lateral): a central
+  ellipse (40% of the compartment extent) and four sectors cut by the diagonals
+  of the compartment extent, 22 regions in total.
+- femur: medial/lateral (z), each divided by the sagittal plane angle from +y
+  towards posterior (0-135 posterior, 135-225 central, 225-360 anterior), each
+  divided in an inner (towards the midline) and outer half of the z range found
+  at that angle (5 degree bins), 12 regions (e.g. medial_inner_anterior).
+- patella: medial/lateral (z), each divided in thirds of its proximal-distal
+  range (proximal, central, distal), 6 regions.
+- meniscus: angle in the transverse plane about the center of the meniscus, in
+  three 120 degree slices (anterior, central, posterior), 3 regions.
+- any other mesh: the half spaces [-x, +x, -y, +y, -z, +z] of the local mesh
+  coordinate system (x_negative, x_positive, ...), 6 regions.
+
+The regional columns of the report (e.g. in the ForceReporter .mot file) and the
+regional datasets of the JointMechanicsTool h5 file are named with the region
+names, such as contact_force_medial_anterior_x.
 
 All outputs are reported in the local mesh reference frame (ie the reference
 frame of the mesh_file. The ContactForce and ContactMoment outputs are 

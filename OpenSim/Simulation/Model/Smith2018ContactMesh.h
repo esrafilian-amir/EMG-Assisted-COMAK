@@ -206,6 +206,17 @@ class OSIMSIMULATION_API Smith2018ContactMesh : public ContactGeometry {
         return _regional_tri_ind;
     }
 
+    /** Number of regions the mesh triangles are divided into for the regional
+        contact outputs (6 for tibia, femur, patella and generic meshes, 3 for
+        menisci). */
+    int getNumRegions() const { return (int)_regional_names.size(); }
+
+    /** Anatomical name of each region, in the same order as
+        getRegionalTriangleIndices() (e.g. "medial_anterior"). */
+    const std::vector<std::string>& getRegionalNames() const {
+        return _regional_names;
+    }
+
     const double& getTriangleThickness(int i) const {
         return _tri_thickness(i);
     }
@@ -305,6 +316,10 @@ private:
 
     void computeVariableThickness();
 
+    // Divide the triangles into anatomical regions (_regional_tri_ind and
+    // _regional_names) based on the bone the mesh is attached to.
+    void computeRegions();
+
     // Member Variables
     SimTK::PolygonalMesh _mesh;
     SimTK::PolygonalMesh _mesh_back;
@@ -314,6 +329,7 @@ private:
     SimTK::Vector _tri_area;
     std::vector<std::vector<int>> _regional_tri_ind;
     std::vector<int> _regional_n_tri;
+    std::vector<std::string> _regional_names;
     std::vector<std::set<int>> _tri_neighbors;
     int _num_vertices;
     int _num_faces;

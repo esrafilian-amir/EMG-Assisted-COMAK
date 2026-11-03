@@ -2491,6 +2491,27 @@ void JointMechanicsTool::writeVTPFile(const std::string& mesh_path,
     collectMeshContactOutputData(mesh_name,
         triData, triDataNames, vertexData, vertexDataNames);
 
+    // Contact pressure of each region: the region is used as a mask, so the
+    // pressure is zero on the triangles outside of the region
+    const std::vector<std::string>& region_names = cnt_mesh.getRegionalNames();
+    const std::vector<std::vector<int>>& region_tri =
+        cnt_mesh.getRegionalTriangleIndices();
+    const int nDataArrays = (int)triDataNames.size();
+    for (int i = 0; i < nDataArrays; ++i) {
+        if (triDataNames[i] != "casting_triangle_pressure" &&
+            triDataNames[i] != "target_triangle_pressure") {
+            continue;
+        }
+        for (int r = 0; r < (int)region_names.size(); ++r) {
+            SimTK::Matrix masked(triData[i].nrow(), triData[i].ncol(), 0.0);
+            for (int tri : region_tri[r]) {
+                masked.updCol(tri) = triData[i].col(tri);
+            }
+            triDataNames.push_back(triDataNames[i] + "_" + region_names[r]);
+            triData.push_back(masked);
+        }
+    }
+
     //Mesh face connectivity
     const SimTK::PolygonalMesh& mesh = cnt_mesh.getPolygonalMesh();
     
@@ -2952,9 +2973,19 @@ void JointMechanicsTool::writeH5File(
                     cnt_group + "/" + mesh_name + "/" + data_label;
                 h5.createGroup(data_path);
 
+                // One dataset per region, named with the anatomical region
+                // names of the mesh (e.g. medial_anterior)
+                const std::string mesh_socket =
+                    (split_name[0] == "casting") ? "casting_mesh" : "target_mesh";
+                const std::vector<std::string>& region_names =
+                    _model.getComponent<Smith2018ArticularContactForce>(
+                        _contact_force_paths[i]).
+                        getSocket<Smith2018ContactMesh>(mesh_socket).
+                        getConnectee().getRegionalNames();
+
                 std::vector<std::string> reg_data_path;
-                for (int r = 0; r < 6; ++r) {
-                    reg_data_path.push_back(data_path + "/" + std::to_string(r));
+                for (int r = 0; r < data.ncol(); ++r) {
+                    reg_data_path.push_back(data_path + "/" + region_names[r]);
                 }
 
                 h5.writeDataSetSimTKMatrixVec3Columns(data, reg_data_path);
