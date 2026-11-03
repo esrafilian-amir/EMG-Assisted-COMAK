@@ -27,6 +27,14 @@
 
 namespace OpenSim {
 
+bool isCasadiQPAvailable() {
+#ifdef OPENSIM_JAM_WITH_CASADI
+    return true;
+#else
+    return false;
+#endif
+}
+
 bool solveCasadiQP(const std::string& plugin, const SimTK::Vector& hdiag,
         const SimTK::Vector& g, const SimTK::Matrix& A,
         const SimTK::Vector& rhs, const SimTK::Vector& lower,
@@ -55,8 +63,9 @@ bool solveCasadiQP(const std::string& plugin, const SimTK::Vector& hdiag,
     for (int i = 0; i < n; ++i) {
         h[i] += hdiag[i];
         gv[i] = g[i];
-        lbx[i] = lower[i];
-        ubx[i] = upper[i];
+        // bounds of 1e19 and larger are infinite
+        lbx[i] = lower[i] <= -1e19 ? -inf : lower[i];
+        ubx[i] = upper[i] >= 1e19 ? inf : upper[i];
         x0v[i] = x0[i];
     }
     // quadratic penalty on the slack: a strictly convex QP that is always
@@ -90,17 +99,33 @@ bool solveCasadiQP(const std::string& plugin, const SimTK::Vector& hdiag,
     if (it == solvers.end()) {
         casadi::SpDict qp = {{"h", H.sparsity()}, {"a", Am.sparsity()}};
         casadi::Dict options;
-        options["print_iter"] = false;
-        options["print_header"] = false;
-        options["print_info"] = false;
+        std::string conic_plugin = plugin;
         // return the best point instead of throwing when a solve is hard
         options["error_on_fail"] = false;
+        if (plugin == "ipopt") {
+            // the quadratic program solved by IPOPT with the exact Hessian
+            conic_plugin = "nlpsol";
+            options["nlpsol"] = std::string("ipopt");
+            casadi::Dict nlpsol_options;
+            nlpsol_options["ipopt.print_level"] = 0;
+            nlpsol_options["ipopt.sb"] = std::string("yes");
+            nlpsol_options["ipopt.max_iter"] = 200;
+            nlpsol_options["print_time"] = false;
+            options["nlpsol_options"] = nlpsol_options;
+        } else {
+            options["print_iter"] = false;
+            options["print_header"] = false;
+            options["print_info"] = false;
+        }
         casadi::Function solver;
         try {
-            solver = casadi::conic("comak_qp", plugin, qp, options);
+            solver = casadi::conic("comak_qp", conic_plugin, qp, options);
         } catch (const std::exception&) {
             // the plugin does not know one of the printing options
-            solver = casadi::conic("comak_qp", plugin, qp);
+            options.erase("print_iter");
+            options.erase("print_header");
+            options.erase("print_info");
+            solver = casadi::conic("comak_qp", conic_plugin, qp, options);
         }
         it = solvers.emplace(key, solver).first;
     }

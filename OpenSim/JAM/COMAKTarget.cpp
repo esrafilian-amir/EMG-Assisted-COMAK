@@ -74,8 +74,6 @@ void ComakTarget::initialize(){
     _nActuators = _nMuscles + _nNonMuscleActuators;
 
     _nParameters = _nActuators + _nSecondaryCoord;
-    setNumParameters(_nParameters);
-    setParameterBounds(1);
     
     //Number of Constraints
     int nC = 0;
@@ -96,6 +94,11 @@ void ComakTarget::initialize(){
     }
     _nConstraints = nC;
     _nCoordinates = nCoord;
+
+    // Optimization variables: the parameters and the slack variables
+    _nSlack = _relax ? nC : 0;
+    setNumParameters(_nParameters + _nSlack);
+    setParameterBounds(1);
 
     setNumEqualityConstraints(nC);
     setNumLinearEqualityConstraints(nC);
@@ -437,6 +440,12 @@ void ComakTarget::precomputeConstraintMatrix() {
         }
     }
 
+    // The slack variables of the relaxed constraints are in the units of the
+    // constraint rows (accelerations). Scaling the rows by their largest entry
+    // would hide large acceleration errors in rows with large entries.
+    _row_scale.resize(_nConstraints);
+    _row_scale = 1.0;
+
     if (_verbose > 1) {
         log_trace("Constraint Matrix: ");
         for (int i = 0; i < _nConstraints; ++i) {
@@ -572,6 +581,16 @@ objectiveFunc(const SimTK::Vector &parameters, const bool new_parameters,
         performance += _step_penalty_weight * step_cost;
     }
 
+    // Penalty on the slack variables of the relaxed constraints
+    if (_nSlack > 0 && parameters.size() == _nParameters + _nSlack) {
+        double slack_cost = 0.0;
+        for (int i = 0; i < _nSlack; ++i) {
+            slack_cost += parameters(_nParameters + i) *
+                    parameters(_nParameters + i);
+        }
+        performance += _slack_penalty * slack_cost;
+    }
+
     if (_verbose > 1) {
         std::cout << "Total Cost: " << performance << "\t";
         std::cout << "Muscle Cost: " << msl_cost << "\t";
@@ -640,6 +659,12 @@ gradientFunc(const SimTK::Vector &parameters, const bool new_parameters,
                     parameters(_nActuators + j);
         }
     }
+    if (_nSlack > 0 && parameters.size() == _nParameters + _nSlack) {
+        for (int i = 0; i < _nSlack; ++i) {
+            gradient(_nParameters + i) =
+                    2.0 * _slack_penalty * parameters(_nParameters + i);
+        }
+    }
     if (_verbose > 1) {
         log_trace("Cost Gradient");
         for (int i = 0; i < _nParameters; ++i) {
@@ -655,12 +680,21 @@ gradientFunc(const SimTK::Vector &parameters, const bool new_parameters,
 //-----------------------------------------------------------------------------
 
 int ComakTarget::
-constraintFunc(const SimTK::Vector &parameters, bool new_parameters, 
+constraintFunc(const SimTK::Vector &parameters, bool new_parameters,
     SimTK::Vector &constraints) const
 {
-    constraints = _constraint_initial_udot - _constraint_desired_udot + 
-        _constraint_matrix * (parameters - _init_parameters);
- 
+    const SimTK::Vector x = parameters(0, _nParameters);
+    constraints = _constraint_initial_udot - _constraint_desired_udot +
+        _constraint_matrix * (x - _init_parameters);
+
+    // relaxed constraints: row / scale + slack = 0
+    if (_nSlack > 0 && parameters.size() == _nParameters + _nSlack) {
+        for (int i = 0; i < _nConstraints; ++i) {
+            constraints[i] = constraints[i] / _row_scale[i] +
+                    parameters(_nParameters + i);
+        }
+    }
+
     return 0;
 }
 
@@ -671,7 +705,18 @@ constraintFunc(const SimTK::Vector &parameters, bool new_parameters,
 int ComakTarget::constraintJacobian(const SimTK::Vector &parameters,
     bool new_parameters, SimTK::Matrix &jac) const
 {
-    jac = _constraint_matrix;
+    if (_nSlack > 0 && parameters.size() == _nParameters + _nSlack) {
+        jac.resize(_nConstraints, _nParameters + _nSlack);
+        jac = 0.0;
+        for (int i = 0; i < _nConstraints; ++i) {
+            for (int p = 0; p < _nParameters; ++p) {
+                jac(i, p) = _constraint_matrix(i, p) / _row_scale[i];
+            }
+            jac(i, _nParameters + i) = 1.0;
+        }
+    } else {
+        jac = _constraint_matrix;
+    }
 
     return 0;
 }
@@ -721,8 +766,10 @@ void ComakTarget::setParameterBounds(double scale) {
     //Secondary Coordinates
     for (int j = 0; j < _nSecondaryCoord; j++) {
         // change of the coordinate value allowed in this optimization
-        double change_lower = -_max_change[j] * scale;
-        double change_upper = _max_change[j] * scale;
+        // A maximum change of 0 or less means the coordinate is free
+        const bool limited = _max_change[j] > 0;
+        double change_lower = limited ? -_max_change[j] * scale : -1e19;
+        double change_upper = limited ? _max_change[j] * scale : 1e19;
 
         const Coordinate& coord =
                 _model->getComponent<Coordinate>(_secondary_coords[j]);
@@ -730,7 +777,7 @@ void ComakTarget::setParameterBounds(double scale) {
 
         // The change since the previous time step, summed over the COMAK
         // iterations, also stays within the maximum change
-        if (_reference_values.size() == _nSecondaryCoord) {
+        if (limited && _reference_values.size() == _nSecondaryCoord) {
             change_lower = std::max(change_lower,
                     _reference_values[j] - _max_change[j] * scale - value);
             change_upper = std::min(change_upper,
@@ -753,6 +800,17 @@ void ComakTarget::setParameterBounds(double scale) {
         lower_bounds(p) = change_lower / _scale_delta_coord;
         upper_bounds(p) = change_upper / _scale_delta_coord;
         p++;
+    }
+    if (_nSlack > 0) {
+        // the slack variables are free
+        SimTK::Vector lower_all(_nParameters + _nSlack, -1e20);
+        SimTK::Vector upper_all(_nParameters + _nSlack, 1e20);
+        for (int i = 0; i < _nParameters; ++i) {
+            lower_all[i] = lower_bounds[i];
+            upper_all[i] = upper_bounds[i];
+        }
+        lower_bounds = lower_all;
+        upper_bounds = upper_all;
     }
     setParameterLimits(lower_bounds, upper_bounds);
     if (_verbose > 1) {

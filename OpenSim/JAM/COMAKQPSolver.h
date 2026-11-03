@@ -21,6 +21,10 @@
 
 namespace OpenSim {
 
+/** True if OpenSim was built with CasADi (OPENSIM_WITH_CASADI), which the
+COMAKTool solvers 'casadi_ipopt' and 'casadi_qrqp' need. */
+OSIMJAM_API bool isCasadiQPAvailable();
+
 /** Solve the quadratic program
 
         minimize    0.5 * x' * diag(hdiag) * x + g' * x

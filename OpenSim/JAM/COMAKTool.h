@@ -338,18 +338,34 @@ public:
         "The default value is 1e-3.")
 
     OpenSim_DECLARE_PROPERTY(solver, std::string,
-        "The solver for the optimization of each COMAK iteration: 'ipopt' "
-        "(default), or 'casadi_qrqp', the CasADi active-set quadratic "
-        "programming solver, which needs activation_exponent = 2. The "
-        "quadratic program relaxes equality constraints that cannot be met, "
-        "instead of failing. It needs OpenSim to be built with "
-        "OPENSIM_WITH_CASADI. The ipopt_* properties only apply to 'ipopt'.")
+        "The solver for the optimization of each COMAK iteration: "
+        "'casadi_ipopt' (default), IPOPT through CasADi with the exact "
+        "Hessian; 'ipopt', IPOPT with a limited-memory approximation of the "
+        "Hessian; or 'casadi_qrqp', the CasADi active-set quadratic "
+        "programming solver. The cost is quadratic and the constraints are "
+        "linear, so the exact Hessian lets 'casadi_ipopt' converge in few "
+        "iterations where 'ipopt' can reach its iteration limit and return "
+        "an unconverged result. The CasADi solvers need activation_exponent "
+        "= 2 and OpenSim to be built with OPENSIM_WITH_CASADI; without it "
+        "'ipopt' is used with a warning. The ipopt_* properties only apply "
+        "to 'ipopt'.")
+
+    OpenSim_DECLARE_PROPERTY(relax_acceleration_constraints, bool,
+        "Relax the acceleration constraints of the optimization with a "
+        "penalized slack variable per constraint, so the optimization always "
+        "has a solution. When the secondary coordinates cannot reach zero "
+        "acceleration within their maximum change (for example in fast or "
+        "large movements), the result is the best compromise with a small "
+        "acceleration error, instead of a failed solve with an arbitrary "
+        "result. Used by 'ipopt' (and by 'casadi_qrqp', which relaxes the "
+        "constraints in any case). The default value is true.")
 
     OpenSim_DECLARE_PROPERTY(qp_slack_penalty, double,
-        "For the CasADi quadratic programming solvers: weight of the squared "
-        "violation of an acceleration constraint (rows scaled to a largest "
-        "entry of 1) that cannot be met. "
-        "The default value is 1e4.")
+        "Weight of the squared violation of an acceleration constraint that "
+        "is relaxed, see relax_acceleration_constraints: in (rad/s^2 or "
+        "m/s^2)^2 for ipopt, and for rows scaled to a largest entry of 1 for "
+        "casadi_qrqp. A larger weight keeps the constraints tighter. The "
+        "default value is 1e4.")
 
     OpenSim_DECLARE_PROPERTY(ipopt_diagnostics_level, int,
         "Set the verbosity of the IPOPT optimizer must be within 0-12. "

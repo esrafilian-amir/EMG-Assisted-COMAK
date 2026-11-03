@@ -43,7 +43,7 @@ COMAKSecondaryCoordinate::COMAKSecondaryCoordinate()
 void COMAKSecondaryCoordinate::constructProperties() 
 {
     constructProperty_coordinate("");
-    constructProperty_max_change(0.05);
+    constructProperty_max_change(0.0);
 }
 
 COMAKCostFunctionParameter::COMAKCostFunctionParameter()

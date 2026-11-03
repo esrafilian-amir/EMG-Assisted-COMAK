@@ -182,6 +182,21 @@ public:
         _previous_activations = previous_activations;
     }
 
+    /** Relax the acceleration constraints with a penalized slack variable per
+    constraint row, so the optimization always has a solution: row + slack =
+    0 (in the units of the row), and the squared slack times the penalty is
+    added to the cost. The optimization then
+    has getNumVariables() = number of parameters + number of constraints
+    variables, with the slack variables last. Call before initialize(). */
+    void setRelaxConstraints(bool relax, double slack_penalty) {
+        _relax = relax;
+        _slack_penalty = slack_penalty;
+    }
+
+    /** The number of optimization variables: the parameters, and the slack
+    variables if the constraints are relaxed. */
+    int getNumVariables() const { return _nParameters + _nSlack; }
+
     /** Keep the secondary coordinates within their range [range min, range
     max] in the optimization. Call before initialize(). */
     void setEnforceCoordinateRange(bool enforce) {
@@ -256,6 +271,10 @@ private:
     bool _ignore_secondary_speed_term = false;
     bool _normalize_rows = false;
     bool _enforce_coordinate_range = false;
+    bool _relax = false;
+    double _slack_penalty = 1e4;
+    int _nSlack = 0;
+    SimTK::Vector _row_scale;
     double _act_change_weight = 0.0;
     SimTK::Vector _previous_activations;
     SimTK::Vector _reference_values;

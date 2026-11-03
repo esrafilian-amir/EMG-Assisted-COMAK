@@ -47,8 +47,10 @@ public:
         "The default value is 1.0.")*/
 
     OpenSim_DECLARE_PROPERTY(max_change, double, "Limit on the maximum "
-        "frame-to-frame changes in secondary coordinate values. "
-        "The default value is 0.05.")
+        "frame-to-frame changes in secondary coordinate values (rad or m), "
+        "summed over the COMAK iterations of a time step. A value of 0 or "
+        "less removes the limit for this coordinate, which shows how much "
+        "the coordinate moves when it is free. The default value is 0, which means no limit.")
 
     COMAKSecondaryCoordinate();
     void constructProperties();

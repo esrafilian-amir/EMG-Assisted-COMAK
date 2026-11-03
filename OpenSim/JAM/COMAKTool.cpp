@@ -105,7 +105,8 @@ void COMAKTool::constructProperties() {
     constructProperty_enforce_secondary_coordinate_range(false);
     constructProperty_optimization_scale_delta_coord(1e-3);
 
-    constructProperty_solver("ipopt");
+    constructProperty_solver("casadi_ipopt");
+    constructProperty_relax_acceleration_constraints(true);
     constructProperty_qp_slack_penalty(1e4);
     constructProperty_ipopt_diagnostics_level(0);
     constructProperty_ipopt_max_iterations(500);
@@ -821,6 +822,7 @@ void COMAKTool::performCOMAK() {
     // secondary coordinate values at the start of the time step
     SimTK::Vector secondary_reference(_n_secondary_coord, 0.0);
     int frames_done = 0;
+    bool warned_no_casadi = false;
     if (get_activation_change_penalty_weight() < 0) {
         OPENSIM_THROW(Exception, "COMAKTool: the activation change penalty "
                 "weight cannot be negative.");
@@ -886,9 +888,11 @@ void COMAKTool::performCOMAK() {
 
             double new_value = prev_value +
                     get_secondary_velocity_carryover_to_next_step() * prev_speed * _dt;
-            new_value = std::min(std::max(new_value,
-                    prev_value - _secondary_coord_max_change[j]),
-                    prev_value + _secondary_coord_max_change[j]);
+            if (_secondary_coord_max_change[j] > 0) {
+                new_value = std::min(std::max(new_value,
+                        prev_value - _secondary_coord_max_change[j]),
+                        prev_value + _secondary_coord_max_change[j]);
+            }
             coord.setValue(state, new_value);
         }
 
@@ -1000,6 +1004,8 @@ void COMAKTool::performCOMAK() {
                 }
             }
             target.setReferenceValues(secondary_reference);
+            target.setRelaxConstraints(get_relax_acceleration_constraints(),
+                    get_qp_slack_penalty());
             if (frames_done > 0) {
                 SimTK::Vector previous_activations(_n_muscles);
                 for (int m = 0; m < _n_muscles; ++m) {
@@ -1068,11 +1074,22 @@ void COMAKTool::performCOMAK() {
                         + "'. Use 'acceleration' or 'force'.");
             }
 
-            const std::string solver_name = get_solver();
+            std::string solver_name = get_solver();
+            if (solver_name != "ipopt" && !isCasadiQPAvailable()) {
+                if (!warned_no_casadi) {
+                    log_warn("The solver '{}' needs OpenSim to be built with "
+                             "CasADi (OPENSIM_WITH_CASADI). Using 'ipopt'.",
+                            solver_name);
+                    warned_no_casadi = true;
+                }
+                solver_name = "ipopt";
+            }
             const bool use_qp = (solver_name != "ipopt");
-            if (use_qp && solver_name != "casadi_qrqp") {
+            if (use_qp && solver_name != "casadi_qrqp" &&
+                    solver_name != "casadi_ipopt") {
                 OPENSIM_THROW(Exception, "COMAKTool: unknown solver '" +
-                        solver_name + "'. Use 'ipopt' or 'casadi_qrqp'.");
+                        solver_name + "'. Use 'ipopt', 'casadi_ipopt' or "
+                        "'casadi_qrqp'.");
             }
             if (use_qp && get_activation_exponent() != 2) {
                 OPENSIM_THROW(Exception, "COMAKTool: the solver '" +
@@ -1181,7 +1198,42 @@ void COMAKTool::performCOMAK() {
             */
 
             try {
-                optimizer.optimize(_optim_parameters);
+                // The variables are the parameters and, if the constraints
+                // are relaxed, a slack variable per constraint that starts
+                // at the value that satisfies its constraint.
+                SimTK::Vector variables(target.getNumVariables(), 0.0);
+                for (int p = 0; p < _n_parameters; ++p) {
+                    variables[p] = _optim_parameters[p];
+                }
+                if (target.getNumVariables() > _n_parameters) {
+                    SimTK::Vector constraints;
+                    target.constraintFunc(variables, true, constraints);
+                    for (int i = 0; i < constraints.size(); ++i) {
+                        variables[_n_parameters + i] = -constraints[i];
+                    }
+                }
+                try {
+                    optimizer.optimize(variables);
+                } catch (...) {
+                    // keep the variables the optimizer reached
+                    for (int p = 0; p < _n_parameters; ++p) {
+                        _optim_parameters[p] = variables[p];
+                    }
+                    throw;
+                }
+                for (int p = 0; p < _n_parameters; ++p) {
+                    _optim_parameters[p] = variables[p];
+                }
+                if (target.getNumVariables() > _n_parameters) {
+                    double max_slack = 0.0;
+                    for (int i = _n_parameters; i < variables.size(); ++i) {
+                        max_slack = std::max(max_slack, std::abs(variables[i]));
+                    }
+                    if (max_slack > 1e-6) {
+                        log_info("The optimization relaxed an acceleration "
+                                 "constraint by up to {} (scaled)", max_slack);
+                    }
+                }
             }
             catch (const SimTK::Exception::Base& ex) {
                 log_error("COMAK Optimization failed: {}", ex.getMessage());
@@ -1363,7 +1415,9 @@ void COMAKTool::performCOMAK() {
                 const double change = std::abs(
                         _model.getComponent<Coordinate>(_secondary_coord_path[j])
                                 .getValue(state) - secondary_reference[j]);
-                if (change > _secondary_coord_max_change[j] * (1 + 1e-6) + 1e-12) {
+                if (_secondary_coord_max_change[j] > 0 &&
+                        change > _secondary_coord_max_change[j] * (1 + 1e-6) +
+                                1e-7) {
                     log_warn("{} changed by {} in this time step, "
                              "more than its max_change {}",
                             _secondary_coord_name[j], change,
@@ -2226,7 +2280,8 @@ void COMAKTool::printOptimizationResultsToConsole(
         const SimTK::Vector& parameters, const SimTK::State& state) {
 
     for (int k = 0; k < _n_secondary_coord; ++k) {
-        if (parameters[_n_actuators + k] == _secondary_coord_max_change[k]) {
+        if (_secondary_coord_max_change[k] > 0 &&
+                parameters[_n_actuators + k] == _secondary_coord_max_change[k]) {
             log_warn("Warning: {} optimized to max change: {}",
                     _secondary_coord_name[k], _secondary_coord_max_change[k]);
         }

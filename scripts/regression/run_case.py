@@ -111,6 +111,8 @@ def main():
                     metavar="BODY=FACTOR",
                     help="multiply the diagonal inertia of this body by FACTOR in a "
                          "modified copy of the model (Geometry is linked)")
+    ap.add_argument("--scale-max-change", type=float, metavar="FACTOR",
+                    help="multiply every set_max_change(value) of the script by FACTOR")
     ap.add_argument("--insert-after", action="append", default=[],
                     metavar="REGEX::LINE",
                     help="add LINE after the first script line matching REGEX "
@@ -136,6 +138,10 @@ def main():
     text = (EXAMPLES / folder / script).read_text()
     for pat, rep in COMMON_PATCHES + extra:
         text = re.sub(pat, rep, text, flags=re.M)
+    if a.scale_max_change is not None:
+        text = re.sub(r"set_max_change\(([0-9.eE+-]+)\)",
+                      lambda m: "set_max_change(%g)" % (float(m.group(1)) * a.scale_max_change),
+                      text)
     if a.disable_muscle or a.scale_inertia:
         text = disable_muscle_in_model(text, folder, root, a.disable_muscle,
                                        a.scale_inertia)
