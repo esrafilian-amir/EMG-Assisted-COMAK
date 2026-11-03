@@ -209,19 +209,19 @@ MCL1_pt1 = Vec3(0.0115, 0.0075, -0.0405);
 MCL1_pt2 = Vec3(0.0149, -0.0618, -0.0153);
 MCL1 = Blankevoort1991Ligament('MCL1',femur,MCL1_pt1,tibia,MCL1_pt2);
 model.addForce(MCL1);
-MCL1.get_GeometryPath().addPathWrap(mcl_wrap);
+MCL1.updGeometryPath().addPathWrap(mcl_wrap);
 
 MCL2_pt1 = Vec3(0.0052, 0.0083, -0.0406);
 MCL2_pt2 = Vec3(0.0076, -0.0611, -0.0191);
 MCL2 = Blankevoort1991Ligament('MCL2',femur,MCL2_pt1,tibia,MCL2_pt2);
 model.addForce(MCL2);
-MCL2.get_GeometryPath().addPathWrap(mcl_wrap);
+MCL2.updGeometryPath().addPathWrap(mcl_wrap);
 
 MCL3_pt1 = Vec3(-0.0004, 0.0072, -0.0388);
 MCL3_pt2 = Vec3(0.0012, -0.0619, -0.0188);
 MCL3 = Blankevoort1991Ligament('MCL3',femur,MCL3_pt1,tibia,MCL3_pt2);
 model.addForce(MCL3);
-MCL3.get_GeometryPath().addPathWrap(mcl_wrap);
+MCL3.updGeometryPath().addPathWrap(mcl_wrap);
 
 state = model.initSystem();
 

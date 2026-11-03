@@ -510,7 +510,6 @@ jnt_mech.set_h5_states_data(True)
 jnt_mech.set_write_transforms_file(False)
 jnt_mech.set_output_transforms_file_type('sto')
 jnt_mech.set_use_visualizer(True)
-jnt_mech.set_verbose(0)
 
 analysis_set = osim.AnalysisSet()
 

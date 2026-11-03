@@ -74,14 +74,6 @@ ik_task_set = osim.IKTaskSet()
 
 ik_task=osim.IKMarkerTask()
 
-ik_task.setName('R_HJC')
-ik_task.setWeight(0)
-ik_task_set.cloneAndAppend(ik_task)
-
-ik_task.setName('L_HJC')
-ik_task.setWeight(0)
-ik_task_set.cloneAndAppend(ik_task)
-
 ik_task.setName('S2')
 ik_task.setWeight(10)
 ik_task_set.cloneAndAppend(ik_task)
@@ -107,14 +99,6 @@ ik_task.setWeight(1)
 ik_task_set.cloneAndAppend(ik_task)
 
 ik_task.setName('L.Clavicle')
-ik_task.setWeight(1)
-ik_task_set.cloneAndAppend(ik_task)
-
-ik_task.setName('R.Scapula')
-ik_task.setWeight(1)
-ik_task_set.cloneAndAppend(ik_task)
-
-ik_task.setName('L.Scapula')
 ik_task.setWeight(1)
 ik_task_set.cloneAndAppend(ik_task)
 
@@ -171,10 +155,6 @@ ik_task.setWeight(5)
 ik_task_set.cloneAndAppend(ik_task)
 
 ik_task.setName('R.TH3')
-ik_task.setWeight(5)
-ik_task_set.cloneAndAppend(ik_task)
-
-ik_task.setName('R.TH4')
 ik_task.setWeight(5)
 ik_task_set.cloneAndAppend(ik_task)
 
@@ -239,10 +219,6 @@ ik_task.setWeight(5)
 ik_task_set.cloneAndAppend(ik_task)
 
 ik_task.setName('L.SH3')
-ik_task.setWeight(5)
-ik_task_set.cloneAndAppend(ik_task)
-
-ik_task.setName('L.SH4')
 ik_task.setWeight(5)
 ik_task_set.cloneAndAppend(ik_task)
 
@@ -640,7 +616,6 @@ jnt_mech.set_h5_states_data(True)
 jnt_mech.set_write_transforms_file(False)
 jnt_mech.set_output_transforms_file_type('sto')
 jnt_mech.set_use_visualizer(True)
-jnt_mech.set_verbose(0)
 
 analysis_set = osim.AnalysisSet()
 

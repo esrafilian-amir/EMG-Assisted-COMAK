@@ -88,8 +88,8 @@ forsim.set_start_time(-1);
 forsim.set_stop_time(-1);
 forsim.set_integrator_accuracy(1e-2); %Note this should be 1e-6 for research
 forsim.set_constant_muscle_control(0.02); %Set all muscles to 2% activation to represent passive state
-forsim.set_ignore_activation_dynamics(true);
-forsim.set_ignore_tendon_compliance(true);
+forsim.set_use_activation_dynamics(false);
+forsim.set_use_tendon_compliance(false);
 forsim.set_unconstrained_coordinates(0,'/jointset/knee_r/knee_add_r');
 forsim.set_unconstrained_coordinates(1,'/jointset/knee_r/knee_rot_r');
 forsim.set_unconstrained_coordinates(2,'/jointset/knee_r/knee_tx_r');
@@ -102,7 +102,6 @@ forsim.set_unconstrained_coordinates(8,'/jointset/pf_r/pf_tx_r');
 forsim.set_unconstrained_coordinates(9,'/jointset/pf_r/pf_ty_r');
 forsim.set_unconstrained_coordinates(10,'/jointset/pf_r/pf_tz_r');
 forsim.set_prescribed_coordinates_file(prescribed_coord_file);
-forsim.set_verbose(5);
 forsim.set_use_visualizer(true);
 forsim.print('./inputs/forsim_settings.xml');
 

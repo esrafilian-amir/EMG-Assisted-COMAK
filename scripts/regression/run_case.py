@@ -29,6 +29,21 @@ CASES = {
         "exampleWalkingMeniscus", "exampleWalkingMeniscus.m",
         [(r"^%\s*(comak_ik\.run\(\);)", r"\1"), (r"^%\s*(comak\.run\(\);)", r"\1")]),
     "emg": ("exampleWalking_EMG_Assisted", "exampleWalking_EMG_Assisted.m", []),
+    # examples without COMAK: forward simulation, joint mechanics, ligaments, contact
+    "anterior_laxity": ("exampleAnteriorLaxity", "exampleAnteriorLaxity.m", []),
+    "passive_flexion": ("examplePassiveFlexion", "examplePassiveFlexion.m", []),
+    "passive_flexion_meniscus": (
+        "examplePassiveFlexionMeniscus", "examplePassiveFlexionMeniscus.m", []),
+    "sensitivity": (
+        "exampleSensitivity", "exampleLigamentAndContactSensitivity.m", []),
+    "visualize_kinematics": (
+        "exampleVisualizeKinematics", "exampleVisualizeKinematics.m", []),
+    # the shipped example has the four COMAK runs commented out
+    "muscle_coordination": (
+        "exampleWalkingMuscleCoordination", "exampleWalkingMuscleCoordination.m",
+        [(r"^%\s*(comak_ik\.run\(\);)", r"\1"), (r"^%\s*(comak\.run\(\);)", r"\1"),
+         (r"^%\s*(comak_muscle_weight\.run\(\);)", r"\1"),
+         (r"^%\s*(comak_emg\.run\(\);)", r"\1")]),
 }
 
 # Logging/visualization only; none of these change the numerical results.
@@ -175,7 +190,10 @@ def main():
     env = dict(os.environ)
     env["PATH"] = str(binp) + os.pathsep + env.get("PATH", "")
     wrapper = work / "run_wrapper.m"
+    utilities = (install / "Resources" / "Code" / "Matlab" / "Utilities").as_posix()
     wrapper.write_text(
+        # the MATLAB helper functions of the install (osimTableFromStruct, ...)
+        f"addpath('{utilities}');\n"
         "disp(['OpenSim jar in use: ' which('org.opensim.modeling.COMAKTool')]);\n"
         f"run('{(work / script).as_posix()}');\n")
 
@@ -188,7 +206,13 @@ def main():
             stderr=subprocess.STDOUT).returncode
     wall = time.time() - t0
 
+    # The tools catch their own exceptions and log them as [error], so MATLAB can
+    # exit with 0 although a tool did nothing. Count them.
+    error_lines = [l.rstrip() for l in open(log, errors="replace")
+                   if l.startswith("[error]") or l.startswith("[critical] Error")]
+
     meta = dict(case=a.case, tag=a.tag, install=str(install), returncode=rc,
+                error_lines=len(error_lines), first_errors=error_lines[:3],
                 wall_seconds=round(wall, 1), git_head=git("rev-parse", "HEAD"),
                 git_dirty=bool(git("status", "--porcelain")),
                 patches=[p for p, _ in COMMON_PATCHES + extra],

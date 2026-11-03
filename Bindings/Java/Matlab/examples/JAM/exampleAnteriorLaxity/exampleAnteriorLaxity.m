@@ -206,8 +206,8 @@ forsim.set_stop_time(-1);
 forsim.set_integrator_accuracy(1e-2);%Note this should be 1e-6 for research
 %Set all muscles to 2% activation to represent passive state
 forsim.set_constant_muscle_control(0.02); 
-forsim.set_ignore_activation_dynamics(true);
-forsim.set_ignore_tendon_compliance(true);
+forsim.set_use_activation_dynamics(false);
+forsim.set_use_tendon_compliance(false);
 forsim.set_unconstrained_coordinates(0,'/jointset/knee_r/knee_add_r');
 forsim.set_unconstrained_coordinates(1,'/jointset/knee_r/knee_rot_r');
 forsim.set_unconstrained_coordinates(2,'/jointset/knee_r/knee_tx_r');
@@ -220,7 +220,7 @@ forsim.set_unconstrained_coordinates(8,'/jointset/pf_r/pf_tx_r');
 forsim.set_unconstrained_coordinates(9,'/jointset/pf_r/pf_ty_r');
 forsim.set_unconstrained_coordinates(10,'/jointset/pf_r/pf_tz_r');
 forsim.set_prescribed_coordinates_file(prescribed_coordinates_file);
-forsim.set_external_loads_file('external_loads.xml');%external_loads_xml_file);
+forsim.set_external_loads_file(external_loads_xml_file);
 forsim.set_use_visualizer(true);
 forsim.print('./inputs/healthy_forsim_settings.xml');
 
@@ -271,6 +271,7 @@ jnt_mech.setModel(acld_model);
 jnt_mech.set_input_states_file(...
     [acld_forsim_result_dir '/' acld_basename '_states.sto']);
 jnt_mech.set_results_file_basename(acld_basename);
+acld_jnt_mech_result_dir = './results/acld_joint_mechanics';
 jnt_mech.set_results_directory(acld_jnt_mech_result_dir);
 jnt_mech.print('./inputs/acld_joint_mechanics_settings.xml');
 

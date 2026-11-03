@@ -47,7 +47,7 @@ ACLpl1.setSlackLengthFromReferenceStrain(0.02,state);
 %ACLpl1.setSlackLengthFromReferenceForce(20,state)
 
 % Move attachment point
-ACLp1_pt0 = PathPoint.safeDownCast(ACLpl1.get_GeometryPath().getPathPointSet().get(0));
+ACLp1_pt0 = PathPoint.safeDownCast(ACLpl1.updGeometryPath().getPathPointSet().get(0));
 ACLp1_pt0.set_location(Vec3(1.0,2.0,3.0));
 
 % Add wrap object
@@ -67,7 +67,7 @@ MCL1 = Blankevoort1991Ligament('MCL1',...
     model.getBodySet().get('femur_distal_r'),MCL1_pt1,...
     model.getBodySet().get('tibia_proximal_r'),MCL1_pt2);
 model.addForce(MCL1);
-MCL1.get_GeometryPath().addPathWrap(mcl_wrap);
+MCL1.updGeometryPath().addPathWrap(mcl_wrap);
 MCL1.set_linear_stiffness(300);
 MCL1.set_slack_length(0.05);
 

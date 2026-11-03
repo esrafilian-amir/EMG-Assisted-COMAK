@@ -2,7 +2,7 @@
 import org.opensim.modeling.*
 Logger.setLevelString('Info');
 
-model_file = '../healthy/models/smith2019/smith2019.osim';
+model_file = '../models/healthy/smith2019/smith2019.osim';
 results_basename = 'passive_flexion_meniscus';
 forsim_result_dir = './results/forsim';
 jnt_mech_result_dir = './results/joint-mechanics';
@@ -87,8 +87,8 @@ forsim.set_start_time(-1);
 forsim.set_stop_time(-1);
 forsim.set_integrator_accuracy(1e-2); %Note this should be 1e-6 for research
 forsim.set_constant_muscle_control(0.02); %Set all muscles to 2% activation to represent passive state
-forsim.set_ignore_activation_dynamics(true);
-forsim.set_ignore_tendon_compliance(true);
+forsim.set_use_activation_dynamics(false);
+forsim.set_use_tendon_compliance(false);
 forsim.set_unconstrained_coordinates(0,'/jointset/knee_r/knee_add_r');
 forsim.set_unconstrained_coordinates(1,'/jointset/knee_r/knee_rot_r');
 forsim.set_unconstrained_coordinates(2,'/jointset/knee_r/knee_tx_r');
@@ -114,7 +114,6 @@ forsim.set_unconstrained_coordinates(21,'/jointset/meniscus_lateral_r/meniscus_l
 forsim.set_unconstrained_coordinates(22,'/jointset/meniscus_lateral_r/meniscus_lateral_tz_r');
 
 forsim.set_prescribed_coordinates_file(prescribed_coord_file);
-forsim.set_verbose(5);
 forsim.set_use_visualizer(true);
 forsim.print('./inputs/forsim_settings.xml');
 

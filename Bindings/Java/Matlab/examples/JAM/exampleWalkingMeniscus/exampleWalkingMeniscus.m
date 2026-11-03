@@ -502,7 +502,6 @@ jnt_mech.set_h5_states_data(true);
 jnt_mech.set_write_transforms_file(false);
 jnt_mech.set_output_transforms_file_type('sto');
 jnt_mech.set_use_visualizer(true);
-jnt_mech.set_verbose(0);
 
 analysis_set = AnalysisSet();
 
