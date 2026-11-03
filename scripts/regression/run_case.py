@@ -124,6 +124,9 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--tag", required=True)
     ap.add_argument("--matlab", default=MATLAB)
+    ap.add_argument("--examples-dir", metavar="DIR",
+                    help="take the example scripts (and models) from this JAM examples "
+                         "folder instead of the repository, e.g. an older checkout")
     ap.add_argument("--disable-muscle", metavar="NAME",
                     help="run with this muscle set to appliesForce=false, using "
                          "a modified copy of the model (Geometry is linked)")
@@ -150,6 +153,9 @@ def main():
                          "constraint functions) and still run the IK tool")
     a = ap.parse_args()
 
+    global EXAMPLES
+    if a.examples_dir:
+        EXAMPLES = Path(a.examples_dir)
     folder, script, extra = CASES[a.case]
     root = Path(a.out) / a.tag / a.case
     work = root / "JAM" / folder

@@ -20,6 +20,7 @@
 #include <OpenSim/Simulation/Model/Model.h>
 #include "OpenSim/Simulation/Model/Smith2018ArticularContactForce.h"
 //#include "H5FileAdapter.h"
+#include <map>
 #include "osimJAMDLL.h"
 //#include "H5Cpp.h"
 //#include "hdf5_hl.h"
@@ -139,6 +140,19 @@ public:
         " after setting every coordinate when posing model according to the "
         "input_transforms_file. "
         "The default value is 100. ")
+
+    OpenSim_DECLARE_PROPERTY(comak_setup_file, std::string,
+        "Path to the COMAKTool setup (.xml) that produced the results to be "
+        "analyzed. The muscle force model of COMAK (use_force_length_velocity, "
+        "use_passive_muscle_force, use_tendon_compliance) is read from it and "
+        "applied to the muscle activations of the input_states_file or "
+        "input_activations_file, so that the muscle forces are the ones COMAK "
+        "used. use_muscle_physiology, use_activation_dynamics and "
+        "use_tendon_compliance of this tool are then not used. It is ignored if "
+        "input_forces_file is set, which sets the muscle forces directly. "
+        "A relative path is relative to the working directory. "
+        "Empty by default: the muscle forces are activation * "
+        "max_isometric_force if use_muscle_physiology is false.")
 
     OpenSim_DECLARE_PROPERTY(input_forces_file, std::string,
         "Path to storage file (.sto) containing forces vs time for actuators "
@@ -335,6 +349,14 @@ private:
     void assembleStatesTrajectoryFromStatesData(SimTK::State s);
     void assembleStatesTrajectoryFromActivationsData(SimTK::State s);
     void assembleStatesTrajectoryFromForcesData(SimTK::State s);
+    // muscle forces of the COMAK force model for the activations of a state
+    std::vector<double> comakMuscleForces(const SimTK::State& state,
+            const std::vector<double>& activation);
+    bool _use_comak_force_model = false;
+    bool _comak_flv = false;
+    bool _comak_passive = false;
+    bool _comak_tendon = false;
+    std::map<std::string, double> _comak_passive_scale;  // by muscle path
     void processInputFiles();
     void processInputFileTime(std::string file);
     Storage processInputStorage(std::string file);

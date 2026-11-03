@@ -76,6 +76,8 @@ COMAKInverseKinematicsTool::COMAKInverseKinematicsTool(const std::string file)
  */
 void COMAKInverseKinematicsTool::constructProperties()
 {
+    constructProperty_setup_version(0);
+    constructProperty_upgrade_old_setup(true);
     constructProperty_model_file("");
     constructProperty_results_directory("");
     constructProperty_results_prefix("");
@@ -84,8 +86,8 @@ void COMAKInverseKinematicsTool::constructProperties()
     constructProperty_secondary_coordinates();
     constructProperty_constrained_coordinates();
     constructProperty_secondary_coupled_coordinate("");
-    constructProperty_secondary_constraint_sim_settle_threshold(1e-3);
-    constructProperty_secondary_constraint_sim_settle_plateau_tolerance(0.0);
+    constructProperty_secondary_constraint_sim_settle_threshold(5e-4);
+    constructProperty_secondary_constraint_sim_settle_plateau_tolerance(0.1);
     constructProperty_secondary_constraint_sim_settle_plateau_window(10);
     constructProperty_secondary_constraint_sim_muscle_activation(0.02);
     constructProperty_settling_sim_dt(0.005);
@@ -93,7 +95,7 @@ void COMAKInverseKinematicsTool::constructProperties()
     constructProperty_secondary_constraint_sim_sweep_time(3.0);
     constructProperty_sweep_dt(0.005);
     constructProperty_secondary_coupled_coordinate_start_value(0.0);
-    constructProperty_secondary_coupled_coordinate_stop_value(90.0);
+    constructProperty_secondary_coupled_coordinate_stop_value(100.0);
     constructProperty_secondary_constraint_sim_integrator_accuracy(1e-6);
     constructProperty_settling_sim_integrator_accuracy(1e-10);
     constructProperty_secondary_constraint_sim_internal_step_limit(-1);
@@ -129,9 +131,62 @@ void COMAKInverseKinematicsTool::setModel(Model& model) {
     _model_exists = true;
 }
 
+void COMAKInverseKinematicsTool::updateFromXMLNode(SimTK::Xml::Element& node,
+        int versionNumber) {
+    // A setup file without setup_version was written for the old defaults,
+    // unless it already has properties that were added later. The upgrade is
+    // done right after the file is read, so values set afterwards in a
+    // script are kept.
+    const bool no_version = !node.hasElement("setup_version");
+    const bool has_newer = node.hasElement("enforce_secondary_coordinate_range");
+    const bool old_file = no_version && !has_newer;
+    Super::updateFromXMLNode(node, versionNumber);
+    if (no_version && has_newer) { set_setup_version(1); }
+    if (old_file) { upgradeOldSetup(); }
+}
+
+void COMAKInverseKinematicsTool::upgradeOldSetup() {
+    if (get_setup_version() >= 1) { return; }
+    set_setup_version(1);
+    _old_setup_notice = true;
+    if (!get_upgrade_old_setup()) { return; }
+    _setup_upgraded = true;
+
+    log_warn("This COMAKInverseKinematicsTool has no setup_version: it was "
+             "written for an older version, so it is upgraded to version 1 "
+             "(settle settings). To use the settings exactly as given, call "
+             "set_setup_version(1) in the script or set upgrade_old_setup to "
+             "false.");
+    // the settle threshold of an old setup is replaced by the current default
+    if (std::abs(get_secondary_constraint_sim_settle_threshold() - 5e-4) >
+            1e-13) {
+        _upgrade_changes.push_back(
+                "secondary_constraint_sim_settle_threshold: " +
+                std::to_string(get_secondary_constraint_sim_settle_threshold()) +
+                " -> 5e-4");
+        set_secondary_constraint_sim_settle_threshold(5e-4);
+    }
+    if (get_secondary_constraint_sim_settle_plateau_tolerance() == 0.0) {
+        _upgrade_changes.push_back(
+                "secondary_constraint_sim_settle_plateau_tolerance: 0 -> 0.1");
+        set_secondary_constraint_sim_settle_plateau_tolerance(0.1);
+    }
+}
+
+std::string COMAKInverseKinematicsTool::saveUpgradedSetup(
+        const std::string& where) {
+    upgradeOldSetup();
+    const std::string file = upgradedSetupFile(getDocumentFileName(), where,
+            get_setup_version(), "comak_inverse_kinematics_settings");
+    print(file);
+    log_info("Saved the setup (version {}) to {}", get_setup_version(), file);
+    return file;
+}
+
 bool COMAKInverseKinematicsTool::run()
 {
     bool completed = false;
+    upgradeOldSetup();
     
     auto cwd = IO::CwdChanger::changeToParentOf(getDocumentFileName());
 
@@ -142,6 +197,10 @@ bool COMAKInverseKinematicsTool::run()
         log_critical("COMAKInverseKinematicsTool");
         log_critical("==========================");
         log_critical("");
+        if (_old_setup_notice) {
+            logOldSetupNotice("COMAKInverseKinematicsTool", _upgrade_changes,
+                    _setup_upgraded);
+        }
 
         initialize();
     

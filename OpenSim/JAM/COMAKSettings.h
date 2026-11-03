@@ -89,6 +89,34 @@ public:
         "COMAK optimization constraints."
         "The Default value is Constant(1.0).")
 
+    OpenSim_DECLARE_PROPERTY(emg_mapping, std::string,
+        "Which channels of the COMAKTool emg_file drive this muscle: terms "
+        "separated by semicolons, each 'label' or 'weight*label'. The "
+        "desired activation of the muscle is the sum of weight*channel at "
+        "the time of the simulation minus the electromechanical delay, e.g. "
+        "'0.5*vasmed; 0.5*vaslat' or 'Rectus Femoris'. Labels may contain "
+        "spaces. They are matched ignoring case, leading and trailing "
+        "spaces, repeated spaces, and the difference between '_' and ' '. "
+        "A weight is optional (1). Values above 1 are set to 1. A muscle "
+        "whose desired_activation is set explicitly keeps that function. "
+        "Empty by default.")
+
+    OpenSim_DECLARE_PROPERTY(passive_force_scale, double,
+        "Scale of the passive fiber force of this muscle when "
+        "use_passive_muscle_force of the COMAKTool is true: 1 keeps it, 0 "
+        "removes it (e.g. for a muscle with a very long tendon such as the "
+        "soleus, whose fiber length is unrealistic with a rigid tendon). It "
+        "has no effect if use_passive_muscle_force is false, and it is not "
+        "used with use_tendon_compliance, where the passive force comes from "
+        "the equilibrium of the fiber and the tendon. Muscles without a "
+        "COMAKCostFunctionParameter use 1. The default value is 1.")
+
+    OpenSim_DECLARE_PROPERTY(emg_delay, double,
+        "Electromechanical delay (s) of this muscle: the EMG at time t - "
+        "emg_delay drives the activation at t. A value below 0 or a missing "
+        "property uses the COMAKTool emg_electromechanical_delay. The default "
+        "value is -1.")
+
     COMAKCostFunctionParameter();
     void constructProperties();
 }; //END of class COMAKCostFunctionParameter

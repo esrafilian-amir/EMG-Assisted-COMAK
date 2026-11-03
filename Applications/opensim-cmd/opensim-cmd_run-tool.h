@@ -32,12 +32,17 @@ static const char HELP_RUN_TOOL[] =
 R"(Run a tool (e.g., Inverse Kinematics) from an XML setup file.
 
 Usage:
-  opensim-cmd [options]... run-tool <setup-xml-file>
+  opensim-cmd [options]... run-tool <setup-xml-file> [--save-upgraded]
+  opensim-cmd [options]... run-tool <setup-xml-file> --save-upgraded-to <where>
   opensim-cmd run-tool -h | --help
 
 Options:
   -L <path>, --library <path>  Load a plugin.
   -o <level>, --log <level>  Logging level.
+  --save-upgraded  For COMAK and COMAK IK setups from an older version: also
+                   save the upgraded setup next to the file as <name>_v1.xml.
+  --save-upgraded-to <where>  Same, saved to <where>: a file name, a folder
+                   (ending with a slash) or "inplace" to overwrite the file.
 
 Description:
   The Tool to run is detected from the setup file you provide. Supported tools
@@ -123,11 +128,21 @@ int run_tool(int argc, const char** argv) {
         else return EXIT_FAILURE;
     } else if (auto* comak_ik = dynamic_cast<COMAKInverseKinematicsTool*>(obj.get())) {
         log_info("Preparing to run {}.", comak_ik->getConcreteClassName());
+        if (args["--save-upgraded-to"]) {
+            comak_ik->saveUpgradedSetup(args["--save-upgraded-to"].asString());
+        } else if (args["--save-upgraded"].asBool()) {
+            comak_ik->saveUpgradedSetup();
+        }
         bool success = comak_ik->run();
         if (success) return EXIT_SUCCESS;
         else return EXIT_FAILURE;
     } else if (auto* comak = dynamic_cast<COMAKTool*>(obj.get())) {
         log_info("Preparing to run {}.", comak->getConcreteClassName());
+        if (args["--save-upgraded-to"]) {
+            comak->saveUpgradedSetup(args["--save-upgraded-to"].asString());
+        } else if (args["--save-upgraded"].asBool()) {
+            comak->saveUpgradedSetup();
+        }
         const bool success = comak->run();
         if (success) return EXIT_SUCCESS;
         else return EXIT_FAILURE;

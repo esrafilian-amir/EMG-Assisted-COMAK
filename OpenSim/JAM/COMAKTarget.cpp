@@ -120,6 +120,10 @@ void ComakTarget::initialize(){
         _optimal_force.resize(_nActuators);
         _optimal_force = 1.0;
     }
+    if (_passive_force.size() == 0) {
+        _passive_force.resize(_nActuators);
+        _passive_force = 0.0;
+    }
     if (_parameter_names.size() == 0) {
         _parameter_names.setSize(_nParameters);
     }
@@ -216,7 +220,7 @@ void ComakTarget::precomputeConstraintMatrix() {
     for (int i = 0; i < _nMuscles; ++i) {
         Muscle &msl = _model->updComponent<Muscle>(_muscle_path[i]);
 
-        double force = _init_parameters[j] * _optimal_force[j];
+        double force = _init_parameters[j] * _optimal_force[j] + _passive_force[j];
 
         msl.setOverrideActuation(_state, force + 1.0);
 
@@ -484,7 +488,7 @@ void ComakTarget::realizeAccelerationFromParameters
     for (int i = 0; i < _nMuscles; ++i) {
         Muscle &msl = _model->updComponent<Muscle>(_muscle_path[i]);
         msl.overrideActuation(s, true);
-        double force = _optimal_force[j] * parameters[j];
+        double force = _optimal_force[j] * parameters[j] + _passive_force[j];
         msl.setOverrideActuation(s,force);
         j++;
     }

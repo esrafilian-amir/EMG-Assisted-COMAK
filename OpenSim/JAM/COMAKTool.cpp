@@ -22,6 +22,7 @@
 #include <cstring>
 #include <memory>
 #include "JAMUtilities.h"
+#include <cmath>
 #include "OpenSim/Actuators/CoordinateActuator.h"
 #include "OpenSim/Common/Constant.h"
 #include "OpenSim/Simulation/Model/Blankevoort1991Ligament.h"
@@ -36,6 +37,8 @@
 #include <OpenSim/Common/XMLDocument.h>
 
 using namespace OpenSim;
+
+namespace { bool isDefaultDesiredActivation(const COMAKCostFunctionParameter& p); }
 using namespace SimTK;
 
 COMAKTool::COMAKTool() {
@@ -53,6 +56,8 @@ COMAKTool::COMAKTool(const std::string file) : Object(file) {
 }
 
 void COMAKTool::constructProperties() {
+    constructProperty_setup_version(0);
+    constructProperty_upgrade_old_setup(true);
     constructProperty_model_file("");
     constructProperty_coordinates_file("");
     constructProperty_external_loads_file("");
@@ -76,10 +81,10 @@ void COMAKTool::constructProperties() {
             COMAKSecondaryCoordinateSet());
 
     constructProperty_settle_secondary_coordinates_at_start(true);
-    constructProperty_settle_threshold(1e-3);
+    constructProperty_settle_threshold(5e-4);
     constructProperty_settle_accuracy(1e-6);
     constructProperty_settle_internal_step_limit(-1);
-    constructProperty_settle_plateau_tolerance(0.0);
+    constructProperty_settle_plateau_tolerance(0.1);
     constructProperty_settle_plateau_window(10);
     constructProperty_settle_zero_initial_speeds(false);
     constructProperty_print_settle_sim_results(false);
@@ -95,6 +100,7 @@ void COMAKTool::constructProperties() {
     constructProperty_force_tolerance_translation(1.0);
     constructProperty_unit_udot_epsilon(1e-8);
     constructProperty_use_central_difference_jacobian(true);
+    constructProperty_emg_electromechanical_delay(0.04);
     constructProperty_ignore_secondary_speed_term(false);
     constructProperty_normalize_constraint_rows(false);
     constructProperty_secondary_step_penalty_weight(0.0);
@@ -123,7 +129,10 @@ void COMAKTool::constructProperties() {
     constructProperty_COMAKCostFunctionParameterSet(
             COMAKCostFunctionParameterSet());
 
+    constructProperty_use_force_length_velocity(false);
     constructProperty_use_muscle_physiology(false);
+    constructProperty_use_passive_muscle_force(false);
+    constructProperty_use_tendon_compliance(false);
 
     constructProperty_model_assembly_accuracy(1e-12);
     constructProperty_geometry_folder("");
@@ -157,18 +166,97 @@ void COMAKTool::setModel(Model& model) {
     _model_exists = true;
 }
 
+void COMAKTool::updateFromXMLNode(SimTK::Xml::Element& node,
+        int versionNumber) {
+    // A setup file without setup_version was written for the old defaults,
+    // unless it already has properties that were added later (it was printed
+    // by a version in between). The upgrade is done here, right after the
+    // file is read, so values set afterwards in a script are kept.
+    const bool no_version = !node.hasElement("setup_version");
+    const bool has_newer = node.hasElement("convergence_criterion");
+    const bool old_file = no_version && !has_newer;
+    const bool custom_ipopt = node.hasElement("ipopt_max_iterations") ||
+            node.hasElement("ipopt_convergence_tolerance") ||
+            node.hasElement("ipopt_constraint_tolerance") ||
+            node.hasElement("ipopt_limited_memory_history");
+    Super::updateFromXMLNode(node, versionNumber);
+    if (no_version && has_newer) { set_setup_version(1); }
+    if (old_file) {
+        if (custom_ipopt) {
+            log_info("The ipopt_* settings of this setup only apply to the "
+                     "solver 'ipopt'. The default solver is now "
+                     "'casadi_ipopt'.");
+        }
+        if (get_udot_tolerance() < 0.5) {
+            log_warn("udot_tolerance is {}. With the default "
+                     "convergence_criterion 'force' it is a multiple of the "
+                     "force tolerance (1 = within the tolerance), so this is "
+                     "stricter than before.", get_udot_tolerance());
+        }
+        upgradeOldSetup();
+    }
+}
+
+void COMAKTool::upgradeOldSetup() {
+    if (get_setup_version() >= 1) { return; }
+    set_setup_version(1);
+    _old_setup_notice = true;
+    if (!get_upgrade_old_setup()) { return; }
+    _setup_upgraded = true;
+
+    auto same = [](double a, double b) {
+        return std::abs(a - b) <= 1e-9 * std::max(std::abs(b), 1e-12);
+    };
+    log_warn("This COMAKTool has no setup_version: it was written for an "
+             "older version, so it is upgraded to version 1 (the default "
+             "solver, convergence criterion, settle settings and free "
+             "max_change). To use the settings exactly as given, call "
+             "set_setup_version(1) in the script or set "
+             "upgrade_old_setup to false.");
+    // the settle threshold of an old setup is replaced by the current default
+    if (!same(get_settle_threshold(), 5e-4)) {
+        _upgrade_changes.push_back("settle_threshold: " +
+                std::to_string(get_settle_threshold()) + " -> 5e-4");
+        set_settle_threshold(5e-4);
+    }
+    if (get_settle_plateau_tolerance() == 0.0) {
+        _upgrade_changes.push_back("settle_plateau_tolerance: 0 -> 0.1");
+        set_settle_plateau_tolerance(0.1);
+    }
+    if (!get_use_central_difference_jacobian()) {
+        _upgrade_changes.push_back("use_central_difference_jacobian: false -> true");
+        set_use_central_difference_jacobian(true);
+    }
+    for (int i = 0; i < get_COMAKSecondaryCoordinateSet().getSize(); ++i) {
+        COMAKSecondaryCoordinate& coord =
+                upd_COMAKSecondaryCoordinateSet().get(i);
+        // the free default gives the smoothest solutions, so every limit of
+        // an old setup is removed, whatever its value
+        if (coord.get_max_change() > 0.0) {
+            _upgrade_changes.push_back("max_change of " + coord.getName() +
+                    ": " + std::to_string(coord.get_max_change()) +
+                    " -> 0 (free)");
+            coord.set_max_change(0.0);
+        }
+    }
+}
+
+std::string COMAKTool::saveUpgradedSetup(const std::string& where) {
+    upgradeOldSetup();
+    const std::string file = upgradedSetupFile(getDocumentFileName(), where,
+            get_setup_version(), "comak_settings");
+    print(file);
+    log_info("Saved the setup (version {}) to {}", get_setup_version(), file);
+    return file;
+}
+
 bool COMAKTool::run() {
     bool completed = false;
+    upgradeOldSetup();
 
     auto cwd = IO::CwdChanger::changeToParentOf(getDocumentFileName());
 
     try {
-        // Amir
-        //  if (get_use_muscle_physiology()) {
-        //      OPENSIM_THROW(Exception,
-        //          "ERROR: COMAKTool use_muscle_physiology = true "
-        //          "is not implemented")
-        //  };
 
         const Stopwatch stopwatch;
         log_critical("");
@@ -178,6 +266,9 @@ bool COMAKTool::run() {
         log_critical("");
 
         printCOMAKascii();
+        if (_old_setup_notice) {
+            logOldSetupNotice("COMAKTool", _upgrade_changes, _setup_upgraded);
+        }
 
         performCOMAK();
 
@@ -205,6 +296,36 @@ bool COMAKTool::run() {
 }
 
 SimTK::State COMAKTool::initialize() {
+    if (get_use_muscle_physiology()) {
+        log_warn("use_muscle_physiology is deprecated: use "
+                 "use_force_length_velocity.");
+    }
+    // initialize() fills lists that live in the tool. Clear them, so that a
+    // tool that is run again, or a clone of a tool that has been run (as in
+    // the muscle coordination example), starts from empty lists instead of
+    // appending to the old ones.
+    _muscle_path.setSize(0);
+    _non_muscle_actuator_path.setSize(0);
+    _optim_constraint_names.setSize(0);
+    _cost_muscle_weights.clearAndDestroy();
+    _cost_muscle_desired_act.clearAndDestroy();
+    _cost_muscle_act_lower_bound.clearAndDestroy();
+    _cost_muscle_act_upper_bound.clearAndDestroy();
+    _desired_act_clamp_warned.clear();
+    _emg_earliest_start = -1.0e300;
+    _seconds_frames = _seconds_linearization = _seconds_optimizer = 0.0;
+    _emg_latest_stop = 1.0e300;
+    _bad_frames.clear();
+    _bad_times.clear();
+    _bad_udot_errors.clear();
+    _bad_udot_coord.clear();
+    _result_states = StatesTrajectory();
+    _result_activations = TimeSeriesTable();
+    _result_forces = TimeSeriesTable();
+    _result_kinematics = TimeSeriesTable();
+    _result_values = TimeSeriesTable();
+    _convergence = TimeSeriesTable();
+
     // Make results directory
     int makeDir_out = IO::makeDir(get_results_directory());
     if (errno == ENOENT && makeDir_out == -1) {
@@ -224,9 +345,26 @@ SimTK::State COMAKTool::initialize() {
             OPENSIM_THROW(Exception, "No model was set in the COMAKTool.");
         }
         _model = Model(get_model_file());
+        _forces_added = false;
     }
 
     updateModelForces();
+
+    if (get_use_tendon_compliance() || forceLengthVelocity() ||
+            get_use_passive_muscle_force()) {
+        // The muscle forces below are computed from the muscle length. With a
+        // compliant tendon the fiber length is a state that has to be
+        // equilibrated, so the model gets a rigid tendon unless the tendon
+        // compliance is used (equilibrateMuscles then solves it). The
+        // activation is the control (no activation dynamics).
+        // The forces appended above are not in the component tree yet.
+        _model.finalizeFromProperties();
+        for (Muscle& msl : _model.updComponentList<Muscle>()) {
+            msl.set_ignore_tendon_compliance(!get_use_tendon_compliance());
+            msl.set_ignore_activation_dynamics(true);
+        }
+        _model.finalizeFromProperties();
+    }
 
     SimTK::State state = _model.initSystem();
 
@@ -516,6 +654,8 @@ SimTK::State COMAKTool::initialize() {
         if (actuator.appliesForce(state)) { _n_actuators++; }
     }
     _optimal_force.resize(_n_actuators);
+    _passive_force.resize(_n_actuators);
+    _passive_force = 0.0;
 
     int i = 0;
     for (const Muscle& msl : _model.updComponentList<Muscle>()) {
@@ -624,12 +764,27 @@ SimTK::State COMAKTool::initialize() {
     // Organize COMAKCostFunctionParameters
     int msl_cnt = 0;
     SimTK::Vector _gamma(_n_muscles);
+    _passive_scale.resize(_n_muscles);
+    _passive_scale = 1.0;
+    std::unique_ptr<TimeSeriesTable> emg_table;
+    bool warned_negative_emg = false;
+    int n_without_cost_parameter = 0;
     for (Muscle& msl : _model.updComponentList<Muscle>()) {
         if (_muscle_path.findIndex(msl.getAbsolutePathString()) < 0) { continue; }
         bool found_msl = false;
 
         int size_cost_fcn_param_set =
                 get_COMAKCostFunctionParameterSet().getSize();
+        int n_matches = 0;
+        for (int j = 0; j < size_cost_fcn_param_set; ++j) {
+            if (get_COMAKCostFunctionParameterSet().get(j).get_actuator() ==
+                    msl.getAbsolutePathString()) { ++n_matches; }
+        }
+        if (n_matches > 1) {
+            OPENSIM_THROW(Exception, "COMAKTool: the COMAKCostFunctionParameterSet "
+                    "has " + std::to_string(n_matches) + " entries for the "
+                    "muscle " + msl.getAbsolutePathString() + ". Use one.");
+        }
 
         for (int j = 0; j < size_cost_fcn_param_set; ++j) {
             COMAKCostFunctionParameter parameter =
@@ -640,8 +795,23 @@ SimTK::State COMAKTool::initialize() {
 
                 _cost_muscle_weights.cloneAndAppend(parameter.get_weight());
 
-                _cost_muscle_desired_act.cloneAndAppend(
-                        parameter.get_desired_activation());
+                if (!parameter.get_emg_mapping().empty() &&
+                        isDefaultDesiredActivation(parameter)) {
+                    if (get_emg_file().empty()) {
+                        OPENSIM_THROW(Exception, "COMAKTool: " +
+                                msl.getName() + " has an emg_mapping but "
+                                "emg_file is empty.");
+                    }
+                    if (!emg_table) {
+                        emg_table.reset(new TimeSeriesTable(get_emg_file()));
+                    }
+                    _cost_muscle_desired_act.adoptAndAppend(
+                            makeEmgFunction(*emg_table, parameter,
+                                    warned_negative_emg));
+                } else {
+                    _cost_muscle_desired_act.cloneAndAppend(
+                            parameter.get_desired_activation());
+                }
 
                 _cost_muscle_act_lower_bound.cloneAndAppend(
                         parameter.get_activation_lower_bound());
@@ -650,18 +820,60 @@ SimTK::State COMAKTool::initialize() {
                         parameter.get_activation_upper_bound());
 
                 _gamma[msl_cnt] = parameter.get_emg_gamma_weight(); // Amir
+                if (parameter.get_passive_force_scale() < 0) {
+                    OPENSIM_THROW(Exception, "COMAKTool: passive_force_scale of " +
+                            msl.getName() + " must not be negative.");
+                }
+                _passive_scale[msl_cnt] = parameter.get_passive_force_scale();
             }
         }
         if (found_msl == false) {
+            ++n_without_cost_parameter;
+            log_debug("No COMAKCostFunctionParameter for the muscle {}: using "
+                      "weight 1, desired activation 0 and bounds 0.01 to 1.",
+                    msl.getAbsolutePathString());
             _cost_muscle_weights.cloneAndAppend(Constant(1.0));
             _cost_muscle_desired_act.cloneAndAppend(Constant(0.0));
             _cost_muscle_act_lower_bound.cloneAndAppend(Constant(0.01));
             _cost_muscle_act_upper_bound.cloneAndAppend(Constant(1.0));
             _gamma[msl_cnt] = 0.0; // Amir
+            _passive_scale[msl_cnt] = 1.0;
         }
         msl_cnt++; // Amir
     }
     _emg_gamma_weight = _gamma; // Amir
+    if (get_use_tendon_compliance()) {
+        for (int m = 0; m < _n_muscles; ++m) {
+            if (_passive_scale[m] != 1.0) {
+                log_warn("passive_force_scale is not used with "
+                         "use_tendon_compliance.");
+                break;
+            }
+        }
+    }
+    if (n_without_cost_parameter > 0) {
+        log_warn("{} of {} muscles have no COMAKCostFunctionParameter: they use "
+                 "weight 1, desired activation 0 and activation bounds 0.01 to 1.",
+                n_without_cost_parameter, _n_muscles);
+    }
+    // EMG-assisted needs EMG: from the emg_file through an emg_mapping, or a
+    // desired_activation function. Without any, it is the same as off.
+    _emg_active = false;
+    if (get_is_emg_assisted()) {
+        for (int j = 0; j < get_COMAKCostFunctionParameterSet().getSize(); ++j) {
+            const auto& cost = get_COMAKCostFunctionParameterSet().get(j);
+            if (!isDefaultDesiredActivation(cost) ||
+                    (!cost.get_emg_mapping().empty() &&
+                            !get_emg_file().empty())) {
+                _emg_active = true;
+            }
+        }
+        if (!_emg_active) {
+            log_warn("is_emg_assisted is true but there is no EMG (no emg_file "
+                     "mapping and no desired_activation): COMAK runs as if "
+                     "is_emg_assisted were false.");
+        }
+    }
 
     // Check Settle Simulation Parameters
     if (get_settle_constant_muscle_control() < 0 ||
@@ -823,6 +1035,7 @@ void COMAKTool::performCOMAK() {
     SimTK::Vector secondary_reference(_n_secondary_coord, 0.0);
     int frames_done = 0;
     bool warned_no_casadi = false;
+    bool warned_exponent = false;
     if (get_activation_change_penalty_weight() < 0) {
         OPENSIM_THROW(Exception, "COMAKTool: the activation change penalty "
                 "weight cannot be negative.");
@@ -841,7 +1054,7 @@ void COMAKTool::performCOMAK() {
         log_info("Frame: {} / {}", ++frame_num, _n_out_frames);
         log_info("Time: {}", _time[i]);
         // Print EMGs
-        if (get_is_emg_assisted() && get_verbose()>0) {
+        if (_emg_active && get_verbose()>0) {
             // Check Cost Function Parameters
             log_debug("{:<20} {:<20} {:<20} {:<20} {:<20} {:<20}", "Muscles",
                     "muscle_weight", "muscle_emg_gamma", "desired_act",
@@ -967,7 +1180,8 @@ void COMAKTool::performCOMAK() {
                 m++;
             }
             // Amir ->
-            if (get_use_muscle_physiology()) {
+            if (forceLengthVelocity() || get_use_passive_muscle_force() ||
+                    get_use_tendon_compliance()) {
                 SimTK::State& sWorkingCopy = _model.updWorkingState();
                 sWorkingCopy.setTime(state.getTime());
                 _model.initStateWithoutRecreatingSystem(sWorkingCopy);
@@ -987,6 +1201,7 @@ void COMAKTool::performCOMAK() {
                     _non_muscle_actuator_path, _secondary_coord_max_change);
 
             target.setOptimalForces(_optimal_force);
+            target.setPassiveForces(_passive_force);
             target.setMuscleVolumes(_normalized_muscle_volumes);
             target.setContactEnergyWeight(get_contact_energy_weight());
             target.setNonMuscleActuatorWeight(get_non_muscle_actuator_weight());
@@ -1026,7 +1241,7 @@ void COMAKTool::performCOMAK() {
             target.setParameterNames(_optim_parameter_names);
             // Amir ->
             target.setVerbose(get_verbose());
-            target._is_emg_assisted = get_is_emg_assisted();
+            target._is_emg_assisted = _emg_active;
             target.setEmgGammaWeight(_emg_gamma_weight);
             // -> Amir
             // Set Muscle Weight Factors
@@ -1039,9 +1254,24 @@ void COMAKTool::performCOMAK() {
 
             // Set Desired Activations
             
+            if ((int)_desired_act_clamp_warned.size() != _n_muscles) {
+                _desired_act_clamp_warned.assign(_n_muscles, false);
+            }
             for (int m = 0; m < _n_muscles; ++m) {
                 desired_act(m) = _cost_muscle_desired_act.get(m).calcValue(
                         SimTK::Vector(1, _time[i]));
+                // The activation cannot exceed 1: an EMG value above 1 (not
+                // normalised to the maximum) is set to 1.
+                if (desired_act(m) > 1.0) {
+                    if (!_desired_act_clamp_warned[m]) {
+                        log_warn("The desired activation of {} is {} at time "
+                                 "{}: above 1 (EMG not normalised?). Values "
+                                 "above 1 are set to 1.",
+                                _muscle_path[m], desired_act(m), _time[i]);
+                        _desired_act_clamp_warned[m] = true;
+                    }
+                    desired_act(m) = 1.0;
+                }
             }
             target.setDesiredActivation(desired_act);
 
@@ -1067,6 +1297,13 @@ void COMAKTool::performCOMAK() {
             seconds_jacobian += std::chrono::duration<double>(
                     std::chrono::steady_clock::now() - iteration_start).count();
 
+            if (get_udot_tolerance() <= 0 || get_udot_worse_case_tolerance() <= 0 ||
+                    get_force_tolerance_rotation() <= 0 ||
+                    get_force_tolerance_translation() <= 0) {
+                OPENSIM_THROW(Exception, "COMAKTool: udot_tolerance, "
+                        "udot_worse_case_tolerance, force_tolerance_rotation "
+                        "and force_tolerance_translation must be positive.");
+            }
             if (get_convergence_criterion() != "acceleration" &&
                     get_convergence_criterion() != "force") {
                 OPENSIM_THROW(Exception, "COMAKTool: unknown "
@@ -1084,17 +1321,24 @@ void COMAKTool::performCOMAK() {
                 }
                 solver_name = "ipopt";
             }
-            const bool use_qp = (solver_name != "ipopt");
-            if (use_qp && solver_name != "casadi_qrqp" &&
+            if (solver_name != "ipopt" && solver_name != "casadi_qrqp" &&
                     solver_name != "casadi_ipopt") {
                 OPENSIM_THROW(Exception, "COMAKTool: unknown solver '" +
                         solver_name + "'. Use 'ipopt', 'casadi_ipopt' or "
                         "'casadi_qrqp'.");
             }
-            if (use_qp && get_activation_exponent() != 2) {
-                OPENSIM_THROW(Exception, "COMAKTool: the solver '" +
-                        solver_name + "' needs activation_exponent = 2.");
+            // The CasADi solvers need a quadratic cost. Setups written for
+            // another exponent keep working with ipopt.
+            if (solver_name != "ipopt" && get_activation_exponent() != 2) {
+                if (!warned_exponent) {
+                    log_warn("The solver '{}' needs activation_exponent = 2 "
+                             "but it is {}. Using 'ipopt'.", solver_name,
+                            get_activation_exponent());
+                    warned_exponent = true;
+                }
+                solver_name = "ipopt";
             }
+            const bool use_qp = (solver_name != "ipopt");
 
             const auto optimizer_start = std::chrono::steady_clock::now();
             const SimTK::Vector parameters_before_optimization = _optim_parameters;
@@ -1158,7 +1402,7 @@ void COMAKTool::performCOMAK() {
                     log_error("COMAK QP solver failed: {}. Using IPOPT for "
                               "this iteration.", qp_status);
                 }
-                if (max_slack > 1e-6) {
+                if (max_slack > 1e-3) {
                     log_info("The QP relaxed an acceleration constraint by "
                              "up to {}", max_slack);
                 }
@@ -1229,7 +1473,7 @@ void COMAKTool::performCOMAK() {
                     for (int i = _n_parameters; i < variables.size(); ++i) {
                         max_slack = std::max(max_slack, std::abs(variables[i]));
                     }
-                    if (max_slack > 1e-6) {
+                    if (max_slack > 1e-3) {
                         log_info("The optimization relaxed an acceleration "
                                  "constraint by up to {} (scaled)", max_slack);
                     }
@@ -1357,6 +1601,11 @@ void COMAKTool::performCOMAK() {
                     max_udot_coord = coord.getName();
                     max_udot_error = udot_error;
                 }
+                if (!std::isfinite(udot_error)) {
+                    // NaN fails every comparison, so it would count as converged
+                    max_udot_coord = coord.getName();
+                    max_udot_error = SimTK::Infinity;
+                }
                 if (get_verbose() == 0) {
                     if (udot_error > get_udot_tolerance())
                         log_info("{:<20} {:<20} {:<20} {:<20}", coord.getName(),
@@ -1393,6 +1642,13 @@ void COMAKTool::performCOMAK() {
                 const double tolerance = residual_rotational[r]
                         ? get_force_tolerance_rotation()
                         : get_force_tolerance_translation();
+                if (!std::isfinite(force)) {
+                    // NaN fails every comparison, so it would count as converged
+                    max_force_ratio = SimTK::Infinity;
+                    max_force = force;
+                    max_force_coord = residual_name[r];
+                    break;
+                }
                 if (force / tolerance > max_force_ratio) {
                     max_force_ratio = force / tolerance;
                     max_force = force;
@@ -1407,7 +1663,7 @@ void COMAKTool::performCOMAK() {
                          "for convergence", max_udot_error, max_udot_coord);
                 // the rest of the iteration uses max_udot_error, in units of
                 // udot_tolerance: 1 is the tolerance
-                max_udot_error = max_force_ratio * get_udot_tolerance();
+                max_udot_error = max_force_ratio;
                 max_udot_coord = max_force_coord;
             }
 
@@ -1440,6 +1696,9 @@ void COMAKTool::performCOMAK() {
 
         const double seconds_frame = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - frame_start).count();
+        _seconds_frames += seconds_frame;
+        _seconds_linearization += seconds_jacobian;
+        _seconds_optimizer += seconds_optimizer;
         log_info("Timing of this time step (s): total {:.2f}, linearization "
                  "(model evaluations) {:.2f}, optimizer {:.2f}, other {:.2f}",
                 seconds_frame, seconds_jacobian, seconds_optimizer,
@@ -1448,7 +1707,7 @@ void COMAKTool::performCOMAK() {
         int frame_converged = 0;
         double min_max_udot_error = max_udot_error;
         // print muscle activations
-        if (get_is_emg_assisted() == 1) {
+        if (_emg_active) {
             log_info("");
             log_info("Optimized Muscles:");
             log_info("{:<20} {:<20} {:<20}", "name", "activation", "EMG");
@@ -1578,6 +1837,15 @@ void COMAKTool::performCOMAK() {
     }
 
     // Print Results
+    if (_seconds_frames > 0) {
+        log_info("Timing of all {} time steps (s): total {:.1f}, linearization "
+                 "(model evaluations) {:.1f} ({:.0f}%), optimizer {:.1f} "
+                 "({:.0f}%), other {:.1f}", _n_out_frames, _seconds_frames,
+                _seconds_linearization,
+                100 * _seconds_linearization / _seconds_frames,
+                _seconds_optimizer, 100 * _seconds_optimizer / _seconds_frames,
+                _seconds_frames - _seconds_linearization - _seconds_optimizer);
+    }
     printResultsFiles();
 }
 
@@ -1589,7 +1857,7 @@ void COMAKTool::setStateFromComakParameters(
     for (int m = 0; m < _n_muscles; ++m) {
         Muscle& msl = _model.updComponent<Muscle>(_muscle_path[m]);
         msl.overrideActuation(state, true);
-        double force = _optimal_force[j] * parameters[j];
+        double force = _optimal_force[j] * parameters[j] + _passive_force[j];
         msl.setOverrideActuation(state, force);
         j++;
     }
@@ -1667,7 +1935,7 @@ void COMAKTool::recordResultsStorage(const SimTK::State& state, int frame) {
 
     for (int m = 0; m < _n_actuators; ++m) {
         activations(m) = _optim_parameters(m);
-        forces(m) = _optim_parameters(m) * _optimal_force(m);
+        forces(m) = _optim_parameters(m) * _optimal_force(m) + _passive_force(m);
     }
 
     _result_activations.appendRow(_time[frame], activations);
@@ -1967,21 +2235,85 @@ void COMAKTool::extractKinematicsFromFile() {
     Array<double> in_time;
     store.getTimeColumn(in_time);
 
-    if (get_start_time() == -1) { set_start_time(in_time.get(0)); }
-    if (get_stop_time() == -1) { set_stop_time(in_time.getLast()); }
+    // COMAK runs from start_time to stop_time (-1: the whole input), but only
+    // where every file it needs has data: the coordinates, the ground reaction
+    // loads, and the EMG (which is needed from start_time - delay on). Where one
+    // of them has no data, the run starts later or stops earlier.
+    {
+        double avail_start = in_time.get(0);
+        double avail_stop = in_time.getLast();
+        std::string start_limit = get_coordinates_file();
+        std::string stop_limit = get_coordinates_file();
 
-    // get_time_step() is -1 if the time step of the file is used
-    const double time_tol = std::max(get_time_step(), 0.0) + 1e-9;
+        // no external loads file: no loads are applied and nothing is checked
+        if (!get_external_loads_file().empty() &&
+                get_external_loads_file() != "Unassigned") {
+            try {
+                const std::string loads_file = SimTK::Pathname::getAbsolutePathname(
+                        get_external_loads_file());
+                ExternalLoads loads(loads_file, true);
+                // the data file is relative to the external loads file
+                std::string data_file = loads.getDataFileName();
+                if (!SimTK::Pathname::fileExists(data_file)) {
+                    const std::string in_loads_folder =
+                            IO::getParentDirectory(loads_file) + "/" + data_file;
+                    if (SimTK::Pathname::fileExists(in_loads_folder)) {
+                        data_file = in_loads_folder;
+                    }
+                }
+                Storage grf(data_file);
+                if (grf.getSize() == 0) {
+                    OPENSIM_THROW(Exception, "the data file " + data_file +
+                            " has no rows");
+                }
+                if (grf.getFirstTime() > avail_start) {
+                    avail_start = grf.getFirstTime();
+                    start_limit = data_file;
+                }
+                if (grf.getLastTime() < avail_stop) {
+                    avail_stop = grf.getLastTime();
+                    stop_limit = data_file;
+                }
+            } catch (const std::exception& ex) {
+                OPENSIM_THROW(Exception, std::string("COMAKTool: the ground "
+                        "reaction data of the external loads file ") +
+                        get_external_loads_file() + " could not be read: " +
+                        ex.what());
+            }
+        }
+        if (_emg_earliest_start > avail_start) {
+            avail_start = _emg_earliest_start;
+            start_limit = get_emg_file() + " (with the electromechanical delay)";
+        }
+        if (_emg_latest_stop < avail_stop) {
+            avail_stop = _emg_latest_stop;
+            stop_limit = get_emg_file() + " (with the electromechanical delay)";
+        }
 
-    if (get_start_time() < in_time.get(0) - time_tol) {
-        OPENSIM_THROW(Exception, "ERROR: start_time in COMAKTool preceeds "
-                                 "the times listed in the input file.");
+        const double tol = 1e-6;
+        if (get_start_time() == -1) {
+            set_start_time(avail_start);
+        } else if (get_start_time() < avail_start - tol) {
+            log_warn("start_time {} s is before the data of {} (from {} s): "
+                     "COMAK starts at {} s.", get_start_time(), start_limit,
+                    avail_start, avail_start);
+            set_start_time(avail_start);
+        }
+        if (get_stop_time() == -1) {
+            set_stop_time(avail_stop);
+        } else if (get_stop_time() > avail_stop + tol) {
+            log_warn("stop_time {} s is after the data of {} (to {} s): COMAK "
+                     "stops at {} s.", get_stop_time(), stop_limit, avail_stop,
+                    avail_stop);
+            set_stop_time(avail_stop);
+        }
+        if (get_stop_time() <= get_start_time()) {
+            OPENSIM_THROW(Exception, "COMAKTool: no time is left to run: the "
+                    "coordinates, external loads and EMG share no data between "
+                    "start_time and stop_time.");
+        }
     }
 
-    if (get_stop_time() > in_time.getLast() + time_tol) {
-        OPENSIM_THROW(Exception, "ERROR: stop_time in COMAKTool exceeds "
-                                 "the times listed in the input file.");
-    }
 
     if (store.isInDegrees()) {
         _model.getSimbodyEngine().convertDegreesToRadians(store);
@@ -2201,6 +2533,146 @@ void COMAKTool::applyExternalLoads() {
     return;
 }
 
+namespace {
+// Label for matching: trimmed, repeated spaces collapsed, '_' as ' ', lower case.
+std::string normalizeEmgLabel(const std::string& label) {
+    std::string out;
+    bool space = true;   // drops leading spaces
+    for (char c : label) {
+        if (c == '_' || std::isspace((unsigned char)c)) {
+            if (!space) { out += ' '; }
+            space = true;
+        } else {
+            out += (char)std::tolower((unsigned char)c);
+            space = false;
+        }
+    }
+    if (!out.empty() && out.back() == ' ') { out.pop_back(); }
+    return out;
+}
+
+// True if the desired activation of the parameter was not set (Constant(0)).
+bool isDefaultDesiredActivation(const COMAKCostFunctionParameter& p) {
+    const auto* c = dynamic_cast<const OpenSim::Constant*>(
+            &p.get_desired_activation());
+    return c && c->getValue() == 0.0;
+}
+
+std::string trimEmgText(const std::string& s) {
+    const size_t a = s.find_first_not_of(" \t\r\n");
+    if (a == std::string::npos) { return ""; }
+    const size_t b = s.find_last_not_of(" \t\r\n");
+    return s.substr(a, b - a + 1);
+}
+
+// "0.5*vasmed; 0.5*vaslat" -> {(0.5, "vasmed"), (0.5, "vaslat")}
+std::vector<std::pair<double, std::string>> parseEmgMapping(
+        const std::string& mapping, const std::string& muscle) {
+    std::vector<std::pair<double, std::string>> terms;
+    size_t start = 0;
+    while (start <= mapping.size()) {
+        size_t end = mapping.find(';', start);
+        if (end == std::string::npos) { end = mapping.size(); }
+        std::string term = trimEmgText(mapping.substr(start, end - start));
+        start = end + 1;
+        if (term.empty()) { continue; }
+        double weight = 1.0;
+        std::string label = term;
+        const size_t star = term.find('*');
+        if (star != std::string::npos) {
+            const std::string w = trimEmgText(term.substr(0, star));
+            char* rest = nullptr;
+            const double v = std::strtod(w.c_str(), &rest);
+            if (!w.empty() && rest && *rest == '\0') {
+                weight = v;
+                label = trimEmgText(term.substr(star + 1));
+            }   // otherwise the '*' is part of the label
+        }
+        if (label.empty()) {
+            OPENSIM_THROW(OpenSim::Exception, "COMAKTool: the emg_mapping of " + muscle +
+                    " has a term without a channel label: '" + term + "'.");
+        }
+        terms.emplace_back(weight, label);
+    }
+    return terms;
+}
+} // namespace
+
+OpenSim::Function* COMAKTool::makeEmgFunction(const TimeSeriesTable& table,
+        const COMAKCostFunctionParameter& parameter, bool& warned_negative) {
+    const std::string& muscle = parameter.get_actuator();
+    const auto terms = parseEmgMapping(parameter.get_emg_mapping(), muscle);
+    if (terms.empty()) {
+        OPENSIM_THROW(Exception, "COMAKTool: the emg_mapping of " + muscle +
+                " is empty.");
+    }
+    // a missing or negative delay uses the tool delay, which itself falls
+    // back to the default
+    double delay = parameter.get_emg_delay();
+    if (delay < 0) { delay = get_emg_electromechanical_delay(); }
+    if (delay < 0) { delay = 0.04; }
+
+    const std::vector<std::string>& labels = table.getColumnLabels();
+    const auto& times = table.getIndependentColumn();
+    const int n = (int)times.size();
+    if (n < 2) {
+        OPENSIM_THROW(Exception, "COMAKTool: the emg_file needs at least two "
+                "rows.");
+    }
+    std::vector<double> value(n, 0.0);
+    for (const auto& term : terms) {
+        const double w = term.first;
+        const std::string& label = term.second;
+        // the column with this label (see normalizeEmgLabel)
+        int found = -1;
+        for (size_t k = 0; k < labels.size(); ++k) {
+            if (normalizeEmgLabel(labels[k]) == normalizeEmgLabel(label)) {
+                if (found >= 0) {
+                    OPENSIM_THROW(Exception, "COMAKTool: the EMG channel '" +
+                            label + "' of " + muscle + " matches more than "
+                            "one column of " + get_emg_file() + ": '" +
+                            labels[found] + "' and '" + labels[k] + "'.");
+                }
+                found = (int)k;
+            }
+        }
+        if (found < 0) {
+            std::string all;
+            for (const auto& l : labels) { all += " '" + l + "'"; }
+            OPENSIM_THROW(Exception, "COMAKTool: the EMG channel '" + label +
+                    "' of " + muscle + " is not in " + get_emg_file() +
+                    ". Channels:" + all);
+        }
+        const auto column = table.getDependentColumn(labels[found]);
+        for (int i = 0; i < n; ++i) {
+            if (!std::isfinite(column[i])) {
+                OPENSIM_THROW(Exception, "COMAKTool: the EMG channel '" +
+                        label + "' has a value that is not a number at time " +
+                        std::to_string(times[i]) + ".");
+            }
+            if (column[i] < 0 && !warned_negative) {
+                log_warn("The EMG channel '{}' has a negative value ({}) at "
+                         "time {}. EMG should be an enveloped signal "
+                         "normalised to 0 to 1.", label, column[i], times[i]);
+                warned_negative = true;
+            }
+            value[i] += w * column[i];
+        }
+    }
+
+    // The activation at t follows the EMG at t - delay.
+    SimmSpline* spline = new SimmSpline();
+    spline->setName(muscle + "_emg");
+    const double t_first = times.front() + delay;
+    const double t_last = times.back() + delay;
+    // COMAK runs only where the EMG is available: the time range is cut to
+    // [first + delay, last + delay] in extractKinematicsFromFile.
+    _emg_earliest_start = std::max(_emg_earliest_start, t_first);
+    _emg_latest_stop = std::min(_emg_latest_stop, t_last);
+    for (int i = 0; i < n; ++i) { spline->addPoint(times[i] + delay, value[i]); }
+    return spline;
+}
+
 void COMAKTool::updateModelForces() {
     // If replacing force set read in from model file, clear it here
     if (get_replace_force_set()) {
@@ -2211,12 +2683,15 @@ void COMAKTool::updateModelForces() {
         _model.updForceSet().setSize(0);
     }
 
-    // Load force set(s)
+    // Load force set(s). A model that was set with setModel() and is used
+    // again keeps the forces added the first time.
+    if (_forces_added && !get_replace_force_set()) { return; }
     if (!get_force_set_file().empty()) {
         log_info("Adding force object set from {}", get_force_set_file());
 
         ForceSet* forceSet = new ForceSet(get_force_set_file(), true);
         _model.updForceSet().append(*forceSet);
+        _forces_added = true;
     }
 }
 
@@ -2383,18 +2858,123 @@ void COMAKTool::printOptimizationResultsToConsole(
     }
 }
 
+void COMAKTool::updateTendonComplianceForces(SimTK::State& s) {
+    const int n_controls = _model.getNumControls();
+    const double a_min = 0.02;       // lowest activation of the linearization
+    const double a_max = 0.9;
+    const double step = 0.1;         // second activation: a + step
+
+    // activation of the previous iteration, kept in a range where the muscle
+    // produces force
+    SimTK::Vector a1(_n_muscles), a2(_n_muscles);
+    for (int m = 0; m < _n_muscles; ++m) {
+        a1[m] = std::min(std::max(_optim_parameters[m], a_min), a_max);
+        a2[m] = a1[m] + step;
+    }
+
+    // tendon force of every muscle at the activations a
+    auto tendon_forces = [&](const SimTK::Vector& a) {
+        SimTK::Vector controls(n_controls, 0.0);
+        int m = 0;
+        for (const Muscle& msl : _model.getComponentList<Muscle>()) {
+            if (msl.appliesForce(s)) {
+                msl.addInControls(SimTK::Vector(1, a[m]), controls);
+                ++m;
+            }
+        }
+        _model.setControls(s, controls);
+        _model.getMultibodySystem().realize(s, SimTK::Stage::Velocity);
+        _model.equilibrateMuscles(s);
+        _model.getMultibodySystem().realize(s, SimTK::Stage::Dynamics);
+        SimTK::Vector force(_n_muscles, 0.0);
+        m = 0;
+        for (const Muscle& msl : _model.getComponentList<Muscle>()) {
+            if (msl.appliesForce(s)) {
+                force[m] = msl.getTendonForce(s);
+                ++m;
+            }
+        }
+        return force;
+    };
+
+    SimTK::Vector f1, f2;
+    try {
+        f1 = tendon_forces(a1);
+        f2 = tendon_forces(a2);
+    } catch (const std::exception& ex) {
+        log_warn("The tendon equilibrium could not be solved ({}): the rigid "
+                 "tendon force is used in this iteration.", ex.what());
+        int mm = 0;
+        for (const Muscle& msl : _model.getComponentList<Muscle>()) {
+            if (msl.appliesForce(s)) {
+                _optimal_force[mm] = msl.getMaxIsometricForce();
+                _passive_force[mm] = 0.0;
+                ++mm;
+            }
+        }
+        return;
+    }
+
+    int n_rigid = 0;
+    int m = 0;
+    for (const Muscle& msl : _model.getComponentList<Muscle>()) {
+        if (!msl.appliesForce(s)) { continue; }
+        const double slope = (f2[m] - f1[m]) / (a2[m] - a1[m]);
+        if (!std::isfinite(slope) ||
+                slope < 0.05 * msl.getMaxIsometricForce()) {
+            // slack tendon or no solution: rigid tendon force
+            _optimal_force[m] = msl.getMaxIsometricForce();
+            _passive_force[m] = 0.0;
+            ++n_rigid;
+        } else {
+            _optimal_force[m] = slope;
+            _passive_force[m] = f1[m] - slope * a1[m];
+        }
+        ++m;
+    }
+    if (n_rigid > 0 && get_verbose() > 0) {
+        log_debug("{} muscles keep the rigid tendon force (slack tendon).",
+                n_rigid);
+    }
+}
+
 void COMAKTool::updatemusclemaxforce(SimTK::State& s) {
+    if (get_use_tendon_compliance()) {
+        updateTendonComplianceForces(s);
+        return;
+    }
+    if (get_use_passive_muscle_force()) {
+        // the passive fiber force is a dynamics quantity
+        _model.getMultibodySystem().realize(s, SimTK::Stage::Dynamics);
+    }
+    // Read what needs the realized state first: calcInextensibleTendon...
+    // below changes the state it is given.
+    std::vector<double> cos_pennation;
+    std::vector<double> passive;
+    for (const Muscle& msl : _model.getComponentList<Muscle>()) {
+        if (msl.appliesForce(s)) {
+            cos_pennation.push_back(forceLengthVelocity()
+                    ? msl.getCosPennationAngle(s) : 1.0);
+            passive.push_back(get_use_passive_muscle_force()
+                    ? _passive_scale[passive.size()] *
+                              msl.getPassiveFiberForceAlongTendon(s)
+                    : 0.0);
+        }
+    }
+
     int i = 0;
     for (const Muscle& msl : _model.updComponentList<Muscle>()) {
         if (msl.appliesForce(s)) {
-            if (get_use_muscle_physiology())
+            // calcInextensibleTendonActiveFiberForce is the force along the
+            // fiber, so it is multiplied by cos(pennation) to get the force
+            // along the tendon.
+            if (forceLengthVelocity())
                 _optimal_force[i] =
-                        msl.calcInextensibleTendonActiveFiberForce(s, 1.0);
+                        msl.calcInextensibleTendonActiveFiberForce(s, 1.0) *
+                        cos_pennation[i];
             else
                 _optimal_force[i] = msl.getMaxIsometricForce();
-            /* std::cout << msl.getAbsolutePathString() << "\t"
-                      << _optimal_force[i] << std::endl;
-                      */
+            _passive_force[i] = passive[i];
             i++;
         }
     }

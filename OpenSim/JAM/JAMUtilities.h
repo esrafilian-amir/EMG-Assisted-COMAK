@@ -21,7 +21,10 @@
 // INCLUDES
 //=============================================================================
 //#include <OpenSim/Simulation/Model/Analysis.h>
+#include <OpenSim/Common/Logger.h>
 #include <algorithm>
+#include <cmath>
+#include <stdexcept>
 #include <limits>
 #include <string>
 #include <vector>
@@ -118,6 +121,64 @@ private:
     bool _hitSafetyLimit = false;
     std::string _reason;
 };
+
+/** Print a prominent notice that a tool is running a setup (script or file)
+that was written for an older version, with the changes made to it. */
+inline void logOldSetupNotice(const std::string& tool,
+        const std::vector<std::string>& changes, bool upgraded) {
+    OpenSim::log_critical("");
+    OpenSim::log_critical("********************************************************");
+    OpenSim::log_critical("  YOU ARE USING AN OLD VERSION OF THE {} SETUP", tool);
+    OpenSim::log_critical("  (no setup_version): a script, or an XML file saved by");
+    OpenSim::log_critical("  an older OpenSim JAM.");
+    if (upgraded) {
+        OpenSim::log_critical("  It was upgraded to the current defaults:");
+        for (const auto& c : changes) {
+            OpenSim::log_critical("    {}", c);
+        }
+    } else {
+        OpenSim::log_critical("  upgrade_old_setup is false: the old values are kept.");
+    }
+    OpenSim::log_critical("  Please update your script or XML: review the settings,");
+    OpenSim::log_critical("  add set_setup_version(1), and save the setup again.");
+    OpenSim::log_critical("  Updated examples are in the Resources/Code/Matlab/JAM");
+    OpenSim::log_critical("  and Resources/Code/Python/JAM folders of your OpenSim");
+    OpenSim::log_critical("  installation.");
+    OpenSim::log_critical("********************************************************");
+    OpenSim::log_critical("");
+}
+
+/** File to which an upgraded setup is saved. documentFile is the setup file
+that was loaded (empty if the setup was made in a script). where is empty (the
+file name with _v<version> before the extension, next to the setup file or in
+the working directory), "inplace" (the setup file itself), a folder (ends with
+a slash) or a file name. */
+inline std::string upgradedSetupFile(const std::string& documentFile,
+        const std::string& where, int version, const std::string& defaultName) {
+    if (where == "inplace") {
+        if (documentFile.empty()) {
+            throw std::runtime_error("saveUpgradedSetup('inplace'): the setup "
+                    "was not loaded from a file.");
+        }
+        return documentFile;
+    }
+    if (!where.empty() && where.back() != '/' && where.back() != '\\') {
+        return where;
+    }
+    std::string dir = where;
+    std::string name = defaultName;
+    if (!documentFile.empty()) {
+        const size_t slash = documentFile.find_last_of("/\\");
+        const std::string base = (slash == std::string::npos)
+                ? documentFile : documentFile.substr(slash + 1);
+        if (dir.empty() && slash != std::string::npos) {
+            dir = documentFile.substr(0, slash + 1);
+        }
+        const size_t dot = base.find_last_of('.');
+        name = (dot == std::string::npos) ? base : base.substr(0, dot);
+    }
+    return dir + name + "_v" + std::to_string(version) + ".xml";
+}
 
  //namespace
 #endif // #ifndef OPENSIM_JAM_UTILITIES_H_

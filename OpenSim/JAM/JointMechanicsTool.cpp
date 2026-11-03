@@ -16,6 +16,7 @@
 
 #include <OpenSim/Simulation/Model/Model.h>
 #include "JointMechanicsTool.h"
+#include "COMAKTool.h"
 #include "VTPFileAdapter.h"
 #include "H5FileAdapter.h"
 //#include "H5Cpp.h"
@@ -96,6 +97,7 @@ void JointMechanicsTool::constructProperties()
     constructProperty_transform_assembly_iterations_to_full(100);
     constructProperty_input_forces_file("");
     constructProperty_input_activations_file("");
+    constructProperty_comak_setup_file("");
     constructProperty_input_comak_convergence_file("");
     constructProperty_input_inverse_dynamics_file("");
     
@@ -261,10 +263,37 @@ void JointMechanicsTool::initialize() {
     //_model.finalizeConnections();
     _model.setUseVisualizer(false); // Prevent extra visualizer windows
     _model.initSystem();
-    
+
+    // Muscle force model of COMAK
+    _use_comak_force_model = false;
+    if (!get_comak_setup_file().empty() && get_input_forces_file().empty()) {
+        COMAKTool comak(get_comak_setup_file());
+        _comak_flv = comak.get_use_force_length_velocity() ||
+                comak.get_use_muscle_physiology();
+        _comak_passive = comak.get_use_passive_muscle_force();
+        _comak_tendon = comak.get_use_tendon_compliance();
+        _use_comak_force_model = true;
+        _comak_passive_scale.clear();
+        for (int p = 0; p < comak.get_COMAKCostFunctionParameterSet().getSize(); ++p) {
+            const auto& cost = comak.get_COMAKCostFunctionParameterSet().get(p);
+            _comak_passive_scale[cost.get_actuator()] =
+                    cost.get_passive_force_scale();
+        }
+        log_info("Muscle force model of the COMAK setup {}: "
+                 "force-length-velocity {}, passive muscle force {}, tendon "
+                 "compliance {}.", get_comak_setup_file(), _comak_flv,
+                _comak_passive, _comak_tendon);
+    }
+
     // Initialize Muscle Properties
     for (Muscle& msl : _model.updComponentList<Muscle>()) {
-        if (msl.getConcreteClassName() == "Millard2012EquilibriumMuscle") {
+        if (_use_comak_force_model) {
+            // the tendon is rigid unless COMAK used the tendon compliance, whose
+            // equilibrium takes the activation as the control
+            if (_comak_tendon) { msl.set_ignore_activation_dynamics(true); }
+            msl.set_ignore_tendon_compliance(!_comak_tendon);
+        }
+        else if (msl.getConcreteClassName() == "Millard2012EquilibriumMuscle") {
             msl.set_ignore_activation_dynamics(!get_use_activation_dynamics());
             msl.set_ignore_tendon_compliance(!get_use_tendon_compliance());
         } 
@@ -312,7 +341,7 @@ void JointMechanicsTool::initialize() {
     }
 
     for (Muscle& msl : _model.updComponentList<Muscle>()) {
-        if (!get_use_muscle_physiology()) {
+        if (_use_comak_force_model || !get_use_muscle_physiology()) {
             msl.overrideActuation(state, true);
         }
     }
@@ -657,7 +686,23 @@ void JointMechanicsTool::assembleStatesTrajectoryFromStatesData(
     // Overide forces in states if settings dictate
     int i = 0;
     for (SimTK::State final_state : states_from_file) {
-        if (!get_use_muscle_physiology()) {
+        if (_use_comak_force_model) {
+            std::vector<double> act(_model.getMuscles().getSize());
+            for (int jj = 0; jj < (int)act.size(); ++jj) {
+                act[jj] = msl_activations(i, jj);
+            }
+            const std::vector<double> forces =
+                    comakMuscleForces(final_state, act);
+            int j = 0;
+            for (auto& msl : _model.updComponentList<Muscle>()) {
+                if (act[j] != -1) {
+                    msl.overrideActuation(final_state, true);
+                    msl.setOverrideActuation(final_state, forces[j]);
+                }
+                ++j;
+            }
+        }
+        else if (!get_use_muscle_physiology()) {
             int j = 0;
             for (auto& msl : _model.updComponentList<Muscle>()) {
                 double force =
@@ -1073,13 +1118,25 @@ void JointMechanicsTool::assembleStatesTrajectoryFromActivationsData(
     int i = 0;
     for (SimTK::State& final_state : _states) {
         _model.realizeVelocity(final_state);
+        std::vector<double> comak_forces;
+        if (_use_comak_force_model) {
+            std::vector<double> act(_model.getMuscles().getSize());
+            for (int jj = 0; jj < (int)act.size(); ++jj) {
+                act[jj] = msl_activations(i, jj);
+            }
+            comak_forces = comakMuscleForces(final_state, act);
+        }
         j = 0;
         for (auto& msl : _model.updComponentList<Muscle>()) {
 
             if (!(msl_activations(i, j) == -1)) {
                 msl.setActivation(final_state, msl_activations(i, j));
 
-                if (!get_use_muscle_physiology()) {
+                if (_use_comak_force_model) {
+                    msl.overrideActuation(final_state, true);
+                    msl.setOverrideActuation(final_state, comak_forces[j]);
+                }
+                else if (!get_use_muscle_physiology()) {
                     double force = msl_activations(i, j) *
                                     msl.getMaxIsometricForce();
                     msl.setOverrideActuation(final_state, force);
@@ -1089,6 +1146,76 @@ void JointMechanicsTool::assembleStatesTrajectoryFromActivationsData(
         }
         ++i;
     }
+}
+
+std::vector<double> JointMechanicsTool::comakMuscleForces(
+        const SimTK::State& state, const std::vector<double>& activation) {
+    // the muscle model without any override
+    SimTK::State s = state;
+    for (const Muscle& msl : _model.getComponentList<Muscle>()) {
+        msl.overrideActuation(s, false);
+    }
+    const int n = (int)activation.size();
+    std::vector<double> force(n, 0.0);
+
+    if (_comak_tendon) {
+        // quasi-static equilibrium of the fiber and the compliant tendon at the
+        // activations: the force is the tendon force
+        // setting the controls needs the Position stage of the state
+        _model.getMultibodySystem().realize(s, SimTK::Stage::Position);
+        SimTK::Vector controls(_model.getNumControls(), 0.0);
+        int j = 0;
+        for (const Muscle& msl : _model.getComponentList<Muscle>()) {
+            if (activation[j] != -1) {
+                msl.addInControls(SimTK::Vector(1, activation[j]), controls);
+            }
+            ++j;
+        }
+        _model.setControls(s, controls);
+        _model.getMultibodySystem().realize(s, SimTK::Stage::Velocity);
+        _model.equilibrateMuscles(s);
+        _model.getMultibodySystem().realize(s, SimTK::Stage::Dynamics);
+        j = 0;
+        for (const Muscle& msl : _model.getComponentList<Muscle>()) {
+            if (activation[j] != -1) { force[j] = msl.getTendonForce(s); }
+            ++j;
+        }
+        return force;
+    }
+
+    // rigid tendon: activation times the maximum force, which is constant or
+    // follows the force-length-velocity relationship (and pennation), plus the
+    // passive fiber force
+    if (_comak_passive) {
+        _model.getMultibodySystem().realize(s, SimTK::Stage::Dynamics);
+    } else {
+        _model.getMultibodySystem().realize(s, SimTK::Stage::Velocity);
+    }
+    std::vector<double> cos_pennation(n, 1.0), passive(n, 0.0);
+    int j = 0;
+    for (const Muscle& msl : _model.getComponentList<Muscle>()) {
+        if (_comak_flv) { cos_pennation[j] = msl.getCosPennationAngle(s); }
+        if (_comak_passive) {
+            const auto it = _comak_passive_scale.find(msl.getAbsolutePathString());
+            const double scale = (it == _comak_passive_scale.end()) ? 1.0
+                                                                     : it->second;
+            passive[j] = scale * msl.getPassiveFiberForceAlongTendon(s);
+        }
+        ++j;
+    }
+    j = 0;
+    for (const Muscle& msl : _model.getComponentList<Muscle>()) {
+        if (activation[j] != -1) {
+            double max_force = msl.getMaxIsometricForce();
+            if (_comak_flv) {
+                max_force = msl.calcInextensibleTendonActiveFiberForce(s, 1.0) *
+                        cos_pennation[j];
+            }
+            force[j] = activation[j] * max_force + passive[j];
+        }
+        ++j;
+    }
+    return force;
 }
 
 void JointMechanicsTool::assembleStatesTrajectoryFromForcesData(

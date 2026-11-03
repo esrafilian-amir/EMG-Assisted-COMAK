@@ -6,11 +6,10 @@ Run from any folder with the OpenSim Python bindings available, e.g.
     python exampleWalking_EMG_Assisted.py
 All paths are relative to the folder of this script (the same layout as the
 MATLAB example: ../models/... holds the shared models and experimental data).
-Requires numpy and scipy (scipy.io.loadmat reads the EMG .mat file).
+Requires numpy.
 """
 import os
 import numpy as np
-from scipy.io import loadmat
 import opensim as osim
 
 # All relative paths below refer to the folder of this script
@@ -30,6 +29,7 @@ os.makedirs('./results', exist_ok=True)
 
 # Perform COMAK Simulation
 comak = osim.COMAKTool()
+comak.set_setup_version(1)
 comak.set_model_file(model_file)
 comak.set_coordinates_file('../models/GCD/experimental_data/motion_analysis/DM_bouncy1_1_ik.mot')
 comak.set_external_loads_file('../models/GCD/experimental_data/motion_analysis/DM_bouncy1_1_grf_Setup.xml')
@@ -37,7 +37,7 @@ comak.set_results_directory(comak_result_dir)
 comak.set_results_prefix(results_basename)
 comak.set_replace_force_set(False)
 comak.set_force_set_file('../models/GCD/lenhart2015/lenhart2015_reserve_actuators.xml')
-comak.set_start_time(0.0)
+comak.set_start_time(0.04)  # the EMG starts at 0 s and drives the muscles after the 0.04 s electromechanical delay
 comak.set_stop_time(0.8)
 comak.set_time_step(0.01)
 comak.set_lowpass_filter_frequency(6)
@@ -153,7 +153,7 @@ secondary_coord_set.cloneAndAppend(secondary_coord)
 comak.set_COMAKSecondaryCoordinateSet(secondary_coord_set)
 
 comak.set_settle_secondary_coordinates_at_start(True)
-comak.set_settle_threshold(1e-3)
+comak.set_settle_threshold(5e-4)
 comak.set_settle_accuracy(1e-2)
 comak.set_settle_internal_step_limit(10000)
 comak.set_print_settle_sim_results(True)
@@ -162,6 +162,17 @@ comak.set_settle_sim_results_prefix('walking_settle_sim')
 comak.set_max_iterations(25)
 comak.set_udot_tolerance(1)
 comak.set_udot_worse_case_tolerance(50)
+# Muscle force model of COMAK. All three are off by default: the muscle force is
+# activation * max_isometric_force with a rigid tendon.
+#  use_force_length_velocity: the maximum force follows the force-length-velocity relationship
+#    and the pennation angle of the muscle (rigid tendon: it distorts long-tendon muscles such as the
+#    soleus, so use_tendon_compliance is the better choice if this effect is wanted)
+#  use_passive_muscle_force: adds the passive fiber force (experimental)
+#  use_tendon_compliance: elastic tendon, solved as a quasi-static equilibrium; it includes the
+#    force-length relationship and the passive force (experimental)
+comak.set_use_force_length_velocity(False)
+comak.set_use_passive_muscle_force(False)
+comak.set_use_tendon_compliance(False)
 # A time step has converged when the unbalanced generalized force of the
 # primary and secondary coordinates is below these tolerances
 # (convergence_criterion 'force', the default; udot_tolerance and
@@ -192,15 +203,15 @@ comak.set_use_visualizer(True)
 comak.set_verbose(0)
 
 # Here we set EMGs
-comak.set_use_muscle_physiology(True)
-# comak.set_emg_file('../models/GCD/experimental_data/motion_analysis/DM_bouncy1_1_emg.mot')  # this won't be used currently.
+# The EMG file: a .mot with the enveloped EMG normalised to the maximum (0 to 1), one column per
+# channel. DM_bouncy1_1_emg.mot.
+comak.set_emg_file('../models/GCD/experimental_data/motion_analysis/DM_bouncy1_1_emg.mot')
+# Electromechanical delay (s): the activation at time t follows the EMG at t - delay.
+# The default is 0.04 s; a muscle can have its own value with cost_fun_param.set_emg_delay().
+comak.set_emg_electromechanical_delay(0.04)
 comak.set_is_emg_assisted(True)
 
-# write EMGs to setup file
-# we read EMGs from here (MATLAB .mat file with lbls_emg and data_emg)
-emg_data = loadmat('../models/GCD/experimental_data/motion_analysis/DM_bouncy1_1_emg.mat')
-lbls_emg = [str(lbl[0]) for lbl in emg_data['lbls_emg'].ravel()]
-data_emg = emg_data['data_emg']
+# map the EMG channels to muscles
 # define muscle mappings and gamma weight (to follow EMGs)
 # (label in EMG data, muscle in the model, gamma)
 muscle_mapper = [('semimem', 'semimem_r', 1),
@@ -233,12 +244,9 @@ for emg_label, muscle_name, emg_msl_weight in muscle_mapper:
         cost_fun_param.setName(muscle_name)
         cost_fun_param.set_actuator('/forceset/' + muscle_name)
         cost_fun_param.set_emg_gamma_weight(emg_msl_weight)
-        emg_spline = osim.SimmSpline()
-        # MATLAB: find(contains(lbls_emg, label)) -> first column whose label contains the EMG label
-        emg_indx = [k for k, lbl in enumerate(lbls_emg) if emg_label in lbl][0]
-        for jj in range(data_emg.shape[0]):
-            emg_spline.addPoint(float(data_emg[jj, 0]), float(data_emg[jj, emg_indx]))
-        cost_fun_param.set_desired_activation(emg_spline)
+        # The desired activation is the sum of weight*channel over the channels. A muscle can use
+        # several channels, e.g. cost_fun_param.set_emg_mapping('0.5*vasmed; 0.5*vaslat').
+        cost_fun_param.set_emg_mapping(emg_label)
         cost_fun_param.set_activation_lower_bound(osim.Constant(0.01))
         cost_fun_param.set_activation_upper_bound(osim.Constant(1.0))
         cost_fun_param_set.cloneAndAppend(cost_fun_param)
@@ -253,10 +261,13 @@ comak.run()
 jnt_mech = osim.JointMechanicsTool()
 jnt_mech.set_model_file(model_file)
 jnt_mech.set_input_states_file(comak_result_dir + '/' + results_basename + '_states.sto')
+# the muscle force model of COMAK (force-length-velocity, passive force, tendon compliance) is read from
+# the COMAK setup, so the muscle forces are those COMAK used (activation * maximum force by default)
+jnt_mech.set_comak_setup_file('./inputs/comak_settings.xml')
 jnt_mech.set_use_muscle_physiology(False)
 jnt_mech.set_results_file_basename(results_basename)
 jnt_mech.set_results_directory(jnt_mech_result_dir)
-jnt_mech.set_start_time(0)
+jnt_mech.set_start_time(0.04)
 jnt_mech.set_stop_time(0.8)
 jnt_mech.set_resample_step_size(-1)
 jnt_mech.set_normalize_to_cycle(True)

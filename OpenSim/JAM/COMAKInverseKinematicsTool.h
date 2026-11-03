@@ -40,6 +40,22 @@ class OSIMJAM_API COMAKInverseKinematicsTool : public Object {
     OpenSim_DECLARE_CONCRETE_OBJECT(COMAKInverseKinematicsTool, Object)
 
 public:
+    OpenSim_DECLARE_PROPERTY(setup_version, int,
+        "Version of the settings this setup was written for. 0 means it was "
+        "not declared (a setup file or script from before this property "
+        "existed): when the tool is loaded from such a file, or run, the "
+        "setup is upgraded to version 1 with a warning (see "
+        "upgrade_old_setup). New scripts set it to 1. The current version "
+        "is 1. The default value is 0.")
+
+    OpenSim_DECLARE_PROPERTY(upgrade_old_setup, bool,
+        "If true, a setup file older than the current setup_version is "
+        "upgraded when it is run: the settle threshold is set to the "
+        "current default, a missing plateau check is switched on, and each "
+        "change is logged. Other settings "
+        "are never changed. Set to false to keep the old values. The "
+        "default value is true.")
+
     OpenSim_DECLARE_PROPERTY(model_file, std::string, 
         "Path to .osim model file.")
 
@@ -80,7 +96,7 @@ public:
         "settle_threshold, the settling simulation is finished. The final "
         "secondary coordinate values are used to initialize the sweep "
         "simulation."
-        "The default value is 1e-3.")
+        "The default value is 5e-4.")
 
     OpenSim_DECLARE_PROPERTY(secondary_constraint_sim_settle_plateau_tolerance,
         double,
@@ -89,7 +105,7 @@ public:
         "this fraction (e.g. 0.1 for 10%) over the last "
         "secondary_constraint_sim_settle_plateau_window steps, after having "
         "dropped below 10% of its first value. 0 disables the plateau check. "
-        "The default value is 0.")
+        "The default value is 0.1.")
 
     OpenSim_DECLARE_PROPERTY(secondary_constraint_sim_settle_plateau_window,
         int,
@@ -130,10 +146,10 @@ public:
         "The default value is 0.0.")
 
     OpenSim_DECLARE_PROPERTY(secondary_coupled_coordinate_stop_value, double, 
-        "Initial Coordinate value for the secondary_coupled_coordinate in the "
+        "Final Coordinate value for the secondary_coupled_coordinate in the "
         "secondary_constraint_sim. The units are in meters for translational "
         "coordinates and degrees for rotational coordinates. "
-        "The default value is 0.0.")
+        "The default value is 100.0.")
 
     OpenSim_DECLARE_PROPERTY(
         settling_sim_integrator_accuracy, double, 
@@ -250,11 +266,23 @@ public:
 
 private:
     void constructProperties();
+    void upgradeOldSetup();
+    bool _old_setup_notice = false;
+    bool _setup_upgraded = false;
+    std::vector<std::string> _upgrade_changes;
 
 public:
     bool initialize();
     bool run();
     void setModel(Model& model);
+    /** Upgrade the setup to the current version if it is older (see
+    setup_version) and save it as an XML file. where is empty (save next to the
+    loaded setup file, with _v1 added to its name), "inplace" (overwrite the
+    loaded file), a folder ending with a slash, or a file name. Returns the
+    path of the file. */
+    std::string saveUpgradedSetup(const std::string& where = "");
+    void updateFromXMLNode(SimTK::Xml::Element& node, int versionNumber)
+            override;
     void performIKSecondaryConstraintSimulation();
     void performIK();
     void runInverseKinematics(Model& model);

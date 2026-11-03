@@ -127,6 +127,11 @@ public:
         _dt = dt;
     };
 
+    /** Passive muscle forces (N) that are added to activation * optimal force:
+    force = activation * optimal_force + passive_force. Zero by default. */
+    void setPassiveForces(SimTK::Vector passive_force) {
+         _passive_force = passive_force;
+    }
     void setOptimalForces(SimTK::Vector optimal_force) {
          _optimal_force = optimal_force;
     }
@@ -254,6 +259,7 @@ private:
     Model *_model;
     SimTK::State _state;
     SimTK::Vector _optimal_force;
+    SimTK::Vector _passive_force;
     const SimTK::Vector _init_parameters;
     double _activation_exponent;
     SimTK::Vector _observed_udot;

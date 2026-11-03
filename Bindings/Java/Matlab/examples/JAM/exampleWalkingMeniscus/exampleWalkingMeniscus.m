@@ -21,6 +21,7 @@ end
 
 %% Perform Inverse Kinematics
 comak_ik = COMAKInverseKinematicsTool();
+comak_ik.set_setup_version(1);
 comak_ik.set_model_file(model_file);
 comak_ik.set_results_directory(ik_result_dir);
 comak_ik.set_results_prefix(results_basename);
@@ -49,7 +50,7 @@ comak_ik.set_secondary_coordinates(20,'/jointset/meniscus_lateral_r/meniscus_lat
 comak_ik.set_secondary_coordinates(21,'/jointset/meniscus_lateral_r/meniscus_lateral_ty_r');
 comak_ik.set_secondary_coordinates(22,'/jointset/meniscus_lateral_r/meniscus_lateral_tz_r');
 comak_ik.set_secondary_coupled_coordinate('/jointset/knee_r/knee_flex_r');
-comak_ik.set_secondary_constraint_sim_settle_threshold(1e-3);
+comak_ik.set_secondary_constraint_sim_settle_threshold(5e-4);
 comak_ik.set_secondary_constraint_sim_sweep_time(3.0);
 comak_ik.set_secondary_coupled_coordinate_start_value(0);
 comak_ik.set_secondary_coupled_coordinate_stop_value(100);
@@ -241,6 +242,7 @@ disp('Running COMAKInverseKinematicsTool...')
 %% Perform COMAK Simulation
 
 comak = COMAKTool();
+comak.set_setup_version(1);
 comak.set_model_file(model_file);
 comak.set_coordinates_file('./results/comak-inverse-kinematics/overground_17_ik.mot');
 comak.set_external_loads_file('../models/healthy/experimental_data/motion_analysis/overground_17_ext_loads.xml'),
@@ -424,6 +426,8 @@ secondary_coord_set.cloneAndAppend(secondary_coord);
 comak.set_COMAKSecondaryCoordinateSet(secondary_coord_set);
 
 comak.set_settle_secondary_coordinates_at_start(true);
+% The meniscus coordinates settle slowly. 1e-3 stops the settling after about 10 steps instead of about 50 and
+% leaves the settled pose within about 1 degree and 0.3 mm of the fully settled one (use 1e-4 for the exact one).
 comak.set_settle_threshold(1e-3);
 comak.set_settle_accuracy(1e-3);
 comak.set_settle_internal_step_limit(10000);
@@ -433,6 +437,17 @@ comak.set_settle_sim_results_prefix('walking_meniscus_settle_sim');
 comak.set_max_iterations(25);
 comak.set_udot_tolerance(1);
 comak.set_udot_worse_case_tolerance(50);
+% Muscle force model of COMAK. All three are off by default: the muscle force is
+% activation * max_isometric_force with a rigid tendon.
+%  use_force_length_velocity: the maximum force follows the force-length-velocity relationship
+%    and the pennation angle of the muscle (rigid tendon: it distorts long-tendon muscles such as the
+%    soleus, so use_tendon_compliance is the better choice if this effect is wanted)
+%  use_passive_muscle_force: adds the passive fiber force (experimental)
+%  use_tendon_compliance: elastic tendon, solved as a quasi-static equilibrium; it includes the
+%    force-length relationship and the passive force (experimental)
+comak.set_use_force_length_velocity(false);
+comak.set_use_passive_muscle_force(false);
+comak.set_use_tendon_compliance(false);
 % A time step has converged when the unbalanced generalized force of the
 % primary and secondary coordinates is below these tolerances
 % (convergence_criterion 'force', the default; udot_tolerance and
@@ -471,6 +486,9 @@ disp('Running COMAK Tool...')
 jnt_mech = JointMechanicsTool();
 jnt_mech.set_model_file(model_file);
 jnt_mech.set_input_states_file([comak_result_dir '/' results_basename '_states.sto']);
+% the muscle force model of COMAK (force-length-velocity, passive force, tendon compliance) is read from
+% the COMAK setup, so the muscle forces are those COMAK used (activation * maximum force by default)
+jnt_mech.set_comak_setup_file('./inputs/comak_settings.xml');
 jnt_mech.set_input_activations_file([comak_result_dir '/' results_basename '_activations.sto']);
 jnt_mech.set_input_comak_convergence_file([comak_result_dir '/' results_basename '_convergence.sto']);
 jnt_mech.set_use_muscle_physiology(false);

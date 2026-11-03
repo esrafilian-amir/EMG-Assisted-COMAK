@@ -72,3 +72,24 @@ contact-mesh code. Regression scripts live in `scripts/regression/`.
   wanted for a new task, set it from a free run (`scripts/regression/free_steps.py`).
 - [ ] Apply the numerical options only to light coordinates (selected by inertia).
 - [ ] `max_proximity` cliff, Position-stage cache and culling in the contact model.
+
+## Done after step 7 (see CHANGELOG_JAM.md)
+
+- Setup versions and upgrade of old setups, saving the upgraded setup, settle threshold and plateau defaults.
+- EMG from a file with a mapping per muscle and the electromechanical delay; time range limited to the data.
+- Force-length-velocity (pennation fixed), passive muscle force, tendon compliance (all off by default),
+  and the joint mechanics reading the muscle force model from the COMAK setup.
+- COMAKTool can be run twice / cloned; duplicate and missing cost function parameters.
+
+## Open
+
+- Embedded joint mechanics in the COMAK setup (`run_joint_mechanics`, `joint_mechanics` section with
+  defaults from COMAK, output in `<results>/../joint_mechanics/<trial>`, vtp and sto by default), then
+  remove the separate joint mechanics step from the examples (keep it as commented code).
+- Contact regions with anatomical names and fixed rules per bone (tibia, femur, patella, menisci): see the
+  review of Smith2018ContactMesh (the case-sensitive file name tests do not match the shipped models).
+- Speed: the linearization is 92-94% of the time. Optional threads for the model evaluations, reuse of the
+  cheap columns between iterations; under-relaxation of the force-length-velocity iterations.
+- Unit tests for the new code (mapping parser, upgrade of a version 0 XML, SettleMonitor, passive and
+  tendon consistency); `testJAMComak.cpp` only builds the IK setup.
+- Meniscus: settle zig-zag of the vertical translation (about 10 um), not fixed.

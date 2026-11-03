@@ -59,5 +59,8 @@ void COMAKCostFunctionParameter::constructProperties()
     constructProperty_activation_lower_bound(Constant(0.01));
     constructProperty_activation_upper_bound(Constant(1.0));
     constructProperty_emg_gamma_weight(0.0);
+    constructProperty_emg_mapping("");
+    constructProperty_emg_delay(-1.0);
+    constructProperty_passive_force_scale(1.0);
 }
 

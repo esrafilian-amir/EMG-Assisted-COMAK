@@ -87,6 +87,24 @@ class OSIMJAM_API COMAKTool : public Object{
     OpenSim_DECLARE_CONCRETE_OBJECT(COMAKTool, Object)
 
 public:
+    OpenSim_DECLARE_PROPERTY(setup_version, int,
+        "Version of the settings this setup was written for. 0 means it was "
+        "not declared (a setup file or script from before this property "
+        "existed): when the tool is loaded from such a file, or run, the "
+        "setup is upgraded to version 1 with a warning (see "
+        "upgrade_old_setup). New scripts set it to 1. The current version "
+        "is 1. The default value is 0.")
+
+    OpenSim_DECLARE_PROPERTY(upgrade_old_setup, bool,
+        "If true, a setup file older than the current setup_version is "
+        "upgraded when it is run: the max_change limit of every secondary "
+        "coordinate is removed (set to 0, free), the settle threshold is "
+        "set to the current default, and the settings that have the value "
+        "of an old default (no plateau check, forward difference Jacobian) "
+        "are changed to the current default. "
+        "Each change is logged. Other settings are never changed. Set to "
+        "false to keep the old values. The default value is true.")
+
     OpenSim_DECLARE_PROPERTY(model_file, std::string, 
         "Path to .osim model to use in COMAK simulation.")
 
@@ -163,16 +181,16 @@ public:
         "that defines equilibrium. Once the change in all "
         "COMAKSecondaryCoordinate values is smaller than the "
         "settle_threshold, the settling simulation is stopped. "
-        "The default value is 1e-3: the settled state then differs by "
-        "less than about 1 degree or 0.3 mm from one settled to 1e-4, and "
-        "the settling takes a few steps instead of tens.")
+        "The default value is 5e-4: the settled state then differs by "
+        "about 0.5 degree or 0.15 mm from one settled to 1e-4, and the "
+        "settling takes tens of steps instead of about a hundred.")
 
     OpenSim_DECLARE_PROPERTY(settle_plateau_tolerance, double,
         "Also stop the settling simulation when the largest change in the "
         "secondary coordinates per step has plateaued: it varied by less than "
         "this fraction (e.g. 0.1 for 10%) over the last settle_plateau_window "
         "steps, after having dropped below 10% of its first value. "
-        "0 disables the plateau check. The default value is 0.")
+        "0 disables the plateau check. The default value is 0.1.")
 
     OpenSim_DECLARE_PROPERTY(settle_plateau_window, int,
         "Number of steps used to detect a plateau in the settling simulation. "
@@ -212,7 +230,7 @@ public:
     OpenSim_DECLARE_PROPERTY(max_iterations, int, 
         "Maximum number of COMAK iterations per time step allowed for the "
         "the simulated model accelerations to converge to the input observed "
-        "acceleration values. The default value is 25.")
+        "acceleration values. The default value is 50.")
 
     OpenSim_DECLARE_PROPERTY(udot_tolerance, double, 
         "Acceptable difference between the simulated accelerations (udots) "
@@ -445,16 +463,52 @@ public:
         "override the settings in the .osim file. Try making this value "
         "smaller if there are constraints in the model and the COMAK "
         "iterations are not converging."
-        "The default value is 1e-10.")
+        "The default value is 1e-12.")
+
+    OpenSim_DECLARE_PROPERTY(use_tendon_compliance, bool,
+        "EXPERIMENTAL. Use the elasticity of the tendon in the muscle force. "
+        "At every COMAK iteration the quasi-static equilibrium of the fiber "
+        "and the compliant tendon (zero fiber velocity) is solved at the "
+        "current muscle-tendon length for the activation of the previous "
+        "iteration and for a slightly larger one, and the muscle force is "
+        "linearized in the activation: force = slope * activation + offset. "
+        "This includes the force-length relationship, the pennation and the "
+        "passive fiber force, so use_force_length_velocity and "
+        "use_passive_muscle_force are not used when it is true. A muscle "
+        "whose tendon is slack (slope close to zero) keeps the rigid tendon "
+        "force. The default value is false.")
+
+    OpenSim_DECLARE_PROPERTY(use_passive_muscle_force, bool,
+        "EXPERIMENTAL. Add the passive fiber force along the tendon to the "
+        "muscle force: force = activation * maximum force + passive force. "
+        "The passive force is computed at every COMAK iteration from the "
+        "current muscle length and kept constant while the accelerations are "
+        "linearized, so it does not follow the change of a muscle with the "
+        "secondary coordinates. A large passive force can make the "
+        "acceleration constraints hard to satisfy. The default value is "
+        "false.")
+
+    OpenSim_DECLARE_PROPERTY(use_force_length_velocity, bool,
+        "Include the muscle force-length-velocity relationship and the "
+        "pennation angle in the force a muscle can produce. If true, at every "
+        "COMAK iteration the maximum force of each muscle is its active force "
+        "along the tendon at full activation for the current fiber length and "
+        "velocity (f_L * f_V * max_isometric_force * cos(pennation), tendon "
+        "treated as inextensible), and the muscle force is activation times "
+        "this value. If false, the maximum force is the constant "
+        "max_isometric_force: Force = activation * max_isometric_force. The "
+        "passive fiber force is not included (see use_passive_muscle_force). "
+        "This assumes a rigid tendon, which distorts muscles with a long "
+        "tendon (e.g. the soleus and the gastrocnemius): the fiber length is "
+        "unrealistic, so their force-length limit is wrong and other muscles "
+        "compensate (in the walking example the soleus peak force rose by "
+        "50%). Use use_tendon_compliance if the force-length-velocity effect "
+        "is wanted. The default value is false.")
 
     OpenSim_DECLARE_PROPERTY(use_muscle_physiology, bool,
-        "PLACEHOLDER PROPERTY."
-        "Set whether activation dynamics, muscle force-length-velocity "
-        "and pennation properties should be used. "
-        "If false, use_activation_dynamics and use_tendon_compliance "
-        "are ignored and muscle-tendon force is calculated using: "
-        "Force = activation * max_isometric_force(). "            
-        "The default value is false.")
+        "Deprecated name of use_force_length_velocity. If true it has the "
+        "same effect as use_force_length_velocity. The default value is "
+        "false.")
 
     OpenSim_DECLARE_PROPERTY(geometry_folder, std::string,
         "Optional. "
@@ -468,7 +522,21 @@ public:
         "throughout the COMAK simulation.")
     // Amir
     OpenSim_DECLARE_PROPERTY(emg_file, std::string, 
-        "Path to enveloped EMG file.")
+        "Path to a .sto or .mot file with the enveloped EMG: a time column "
+        "and one column per channel, normalised to the maximum (0 to 1). "
+        "The channels are mapped to muscles by emg_channels and "
+        "emg_channel_weights of the COMAKCostFunctionParameter of each "
+        "muscle. Empty by default (the desired activations are then the "
+        "functions of the COMAKCostFunctionParameters).")
+
+    OpenSim_DECLARE_PROPERTY(emg_electromechanical_delay, double,
+        "Electromechanical delay (s) between the EMG and the muscle "
+        "activation it drives: the activation at time t follows the EMG at "
+        "t - delay. Reported values are 30 to 100 ms, and 35 to 70 ms gave "
+        "similar joint contact forces in EMG-informed models. A value "
+        "below 0 uses the default. Muscles can have their own value "
+        "(emg_delay). Only the EMG read from emg_file is shifted. The "
+        "default value is 0.04.")
    OpenSim_DECLARE_PROPERTY(is_emg_assisted,
                                      bool,
                                      "If true, the analysis will be EMG-assisted.")
@@ -476,10 +544,10 @@ public:
                             "Controling output detail. 0: print essential info, 1: more details, 2: print all details (huge log file)")
     OpenSim_DECLARE_PROPERTY(ignore_tendon_compliance,
                                      bool,
-                                     "If true, it ignores tendon compliance.")
+                                     "Only used for the settling simulation at the start: if true, the muscles of the settle model have a rigid tendon. The muscle forces of COMAK are set by use_tendon_compliance. The default value is true.")
     OpenSim_DECLARE_PROPERTY(ignore_activation_dynamics,
                                      bool,
-                                     "If true, it ignores activation dynamics.")
+                                     "Only used for the settling simulation at the start: if true, the muscles of the settle model have no activation dynamics. The default value is true.")
 //=============================================================================
 // METHODS
 //=============================================================================
@@ -514,14 +582,41 @@ private:
 public:
     bool run();
     void setModel(Model& model);
+    /** Upgrade the setup to the current version if it is older (see
+    setup_version) and save it as an XML file. where is empty (save next to the
+    loaded setup file, with _v1 added to its name), "inplace" (overwrite the
+    loaded file), a folder ending with a slash, or a file name. Returns the
+    path of the file. */
+    std::string saveUpgradedSetup(const std::string& where = "");
+    void updateFromXMLNode(SimTK::Xml::Element& node, int versionNumber)
+            override;
 
 
 //-----------------------------------------------------------------------------
 // Members
 //-----------------------------------------------------------------------------
 private:
+    void upgradeOldSetup();
+    void updateTendonComplianceForces(SimTK::State& s);
+    bool forceLengthVelocity() const {
+        return get_use_force_length_velocity() || get_use_muscle_physiology();
+    }
+    Function* makeEmgFunction(const TimeSeriesTable& table,
+            const COMAKCostFunctionParameter& parameter, bool& warned_negative);
+    bool _old_setup_notice = false;
+    bool _setup_upgraded = false;
+    std::vector<std::string> _upgrade_changes;
     Model _model;
     bool _model_exists;
+    bool _forces_added = false;
+    bool _emg_active = false;
+    double _seconds_frames = 0.0, _seconds_linearization = 0.0, _seconds_optimizer = 0.0;
+    SimTK::Vector _passive_force;
+    SimTK::Vector _passive_scale;   // per muscle, from the cost function parameters
+    // time range in which the EMG of every muscle is available (with its delay)
+    double _emg_earliest_start = -1.0e300;
+    double _emg_latest_stop = 1.0e300;
+    std::vector<bool> _desired_act_clamp_warned;
 
     int _n_prescribed_coord;
     int _n_primary_coord;
