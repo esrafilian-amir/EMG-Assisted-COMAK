@@ -319,65 +319,66 @@ comak.set_primary_coordinates(4,'/jointset/ankle_r/ankle_flex_r')
 
 # max_change of each secondary coordinate (rad or m): limit on the total change of
 # the coordinate in one time step, summed over the COMAK iterations.
-# A value of 0 or less removes the limit for that coordinate, so it moves freely.
-# To see how far the coordinates really move (for example in a new activity such as
-# running or jumping), set all of them to 0, run COMAK, and set max_change to about
-# twice the largest change per time step in the results.
+# 0 (or less) leaves the coordinate free. This is the default and gave the smoothest
+# and fastest solutions in the walking, meniscus and EMG examples.
+# Set a positive value to limit how far a coordinate can move in one time step.
+# To choose it for a new activity, run once with 0 and set it to about twice the
+# largest change per time step of the coordinate in the results.
 secondary_coord_set = osim.COMAKSecondaryCoordinateSet()
 secondary_coord = osim.COMAKSecondaryCoordinate()
 
 secondary_coord.setName('knee_add_r')
-secondary_coord.set_max_change(0.01)
+secondary_coord.set_max_change(0)
 secondary_coord.set_coordinate('/jointset/knee_r/knee_add_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('knee_rot_r')
-secondary_coord.set_max_change(0.01)
+secondary_coord.set_max_change(0)
 secondary_coord.set_coordinate('/jointset/knee_r/knee_rot_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('knee_tx_r')
-secondary_coord.set_max_change(0.05)
+secondary_coord.set_max_change(0)
 secondary_coord.set_coordinate('/jointset/knee_r/knee_tx_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('knee_ty_r')
-secondary_coord.set_max_change(0.05)
+secondary_coord.set_max_change(0)
 secondary_coord.set_coordinate('/jointset/knee_r/knee_ty_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('knee_tz_r')
-secondary_coord.set_max_change(0.05)
+secondary_coord.set_max_change(0)
 secondary_coord.set_coordinate('/jointset/knee_r/knee_tz_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('pf_flex_r')
-secondary_coord.set_max_change(0.01)
+secondary_coord.set_max_change(0)
 secondary_coord.set_coordinate('/jointset/pf_r/pf_flex_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('pf_rot_r')
-secondary_coord.set_max_change(0.01)
+secondary_coord.set_max_change(0)
 secondary_coord.set_coordinate('/jointset/pf_r/pf_rot_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('pf_tilt_r')
-secondary_coord.set_max_change(0.01)
+secondary_coord.set_max_change(0)
 secondary_coord.set_coordinate('/jointset/pf_r/pf_tilt_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('pf_tx_r')
-secondary_coord.set_max_change(0.005)
+secondary_coord.set_max_change(0)
 secondary_coord.set_coordinate('/jointset/pf_r/pf_tx_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('pf_ty_r')
-secondary_coord.set_max_change(0.005)
+secondary_coord.set_max_change(0)
 secondary_coord.set_coordinate('/jointset/pf_r/pf_ty_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('pf_tz_r')
-secondary_coord.set_max_change(0.005)
+secondary_coord.set_max_change(0)
 secondary_coord.set_coordinate('/jointset/pf_r/pf_tz_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
