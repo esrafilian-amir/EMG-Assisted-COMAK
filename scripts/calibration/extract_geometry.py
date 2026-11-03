@@ -12,6 +12,7 @@ Nothing here depends on the muscle parameters, so it is done once.
 """
 import argparse
 import os
+import re
 import sys
 
 import numpy as np
@@ -19,6 +20,13 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 PRIMARY = ['hip_flex_r', 'hip_add_r', 'hip_rot_r', 'knee_flex_r', 'ankle_flex_r']
+# Secondary coordinates that move with a primary one (the sweep found how). OpenSim gives a
+# muscle a zero moment arm about a coordinate it does not cross, so the quadriceps, which end
+# on the patella, have none about knee_flex_r. Their effective arm follows from the chain rule
+# along the motion, arm_eff = arm_direct + sum_s arm_s * dq_s/dtheta (virtual work).
+FOLLOW = 'knee_flex_r'
+SECONDARY = ['knee_add_r', 'knee_rot_r', 'knee_tx_r', 'knee_ty_r', 'knee_tz_r',
+             'pf_flex_r', 'pf_rot_r', 'pf_tilt_r', 'pf_tx_r', 'pf_ty_r', 'pf_tz_r']
 
 
 def parse():
@@ -57,18 +65,44 @@ def main(a=None):
     coords = [model.getCoordinateSet().get(c) for c in PRIMARY]
     n_t, n_m, n_d = len(time), len(muscles), len(coords)
 
+    cset = model.getCoordinateSet()
+    sec_names = [c for c in SECONDARY if cset.contains(c)]
+    sec = [cset.get(c) for c in sec_names]
+    follow = cset.get(FOLLOW)
+    n_s = len(sec)
+
     length = np.zeros((n_t, n_m))
     speed = np.zeros((n_t, n_m))
     arm = np.zeros((n_t, n_m, n_d))
+    arm_sec = np.zeros((n_t, n_m, n_s))
+    q_sec = np.zeros((n_t, n_s))
+    theta = np.zeros(n_t)
     for k in range(n_t):
         for i, l in use_cols:
             model.setStateVariableValue(state, l, data[k, i])
         model.realizeVelocity(state)
+        theta[k] = follow.getValue(state)
+        for s, c in enumerate(sec):
+            q_sec[k, s] = c.getValue(state)
         for j, m in enumerate(muscles):
             length[k, j] = m.getLength(state)
             speed[k, j] = m.getLengtheningSpeed(state)
             for d, c in enumerate(coords):
                 arm[k, j, d] = m.computeMomentArm(state, c)
+            for s, c in enumerate(sec):
+                arm_sec[k, j, s] = m.computeMomentArm(state, c)
+
+    # How the secondary coordinates follow the knee flexion in this motion: a smooth fit of
+    # each one against the flexion angle, and its slope at every frame.
+    arm_direct = arm.copy()
+    dq = np.zeros((n_t, n_s))
+    for s in range(n_s):
+        coef = np.polyfit(theta, q_sec[:, s], min(4, n_t - 1))
+        dq[:, s] = np.polyval(np.polyder(coef), theta)
+        res = q_sec[:, s] - np.polyval(coef, theta)
+        r2 = 1.0 - res.var() / max(q_sec[:, s].var(), 1e-30)
+        print('  %-10s follows %s: fit R2 %.3f, slope %.4f' % (sec_names[s], FOLLOW, r2, dq[:, s].mean()))
+    arm[:, :, PRIMARY.index(FOLLOW)] += np.einsum('tms,ts->tm', arm_sec, dq)
 
     # parameters of the muscles in the model (the starting point of the calibration)
     par = {key: np.array([getattr(m, f'get_{key}')() for m in muscles]) for key in
@@ -118,6 +152,23 @@ def main(a=None):
     # supply. Excluding everything wrongly gives the knee flexion moment a large
     # error (the contact and ligaments act on it in the 6-DOF knee).
     ex.append(a.exclude)
+    # The patellar ligament is also left out: the quadriceps force reaches the tibia through
+    # it, and the effective knee arm above credits that to the quadriceps. With the ligament
+    # in the target, its force (set by the pose) would count twice.
+    # The JAM ligaments ignore the appliesForce flag the tool uses to exclude a force (the ID
+    # was identical with and without them), so they are removed from a copy of the model.
+    fset = model.getForceSet()
+    ligaments = [fset.get(i).getName() for i in range(fset.getSize())
+                 if re.fullmatch(r'PT\d+', fset.get(i).getName())
+                 or 'patellar' in fset.get(i).getName().lower()]
+    if ligaments and not getattr(a, 'keep_patellar_ligament', False):
+        id_model = osim.Model(a.model)
+        for n in ligaments:
+            id_model.updForceSet().remove(id_model.getForceSet().getIndex(n))
+        id_model.finalizeConnections()
+        id_model.initSystem()
+        tool.setModel(id_model)
+        print('  inverse dynamics without:', a.exclude, 'and', ligaments, '(removed from the model)')
     tool.setExcludedForces(ex)
     tool.setResultsDir(work)
     tool.setOutputGenForceFileName('id_moments.sto')
@@ -132,7 +183,7 @@ def main(a=None):
         moments[:, d] = np.interp(time, id_time, id_mat[:, col])
 
     np.savez(a.out, time=time, names=np.array(names), primary=np.array(PRIMARY),
-             length=length, speed=speed, arm=arm, id_moments=moments,
+             length=length, speed=speed, arm=arm, arm_direct=arm_direct, id_moments=moments,
              **curves, **{k: v for k, v in par.items()})
     print('muscles', n_m, 'frames', n_t, 'wrote', a.out)
 
