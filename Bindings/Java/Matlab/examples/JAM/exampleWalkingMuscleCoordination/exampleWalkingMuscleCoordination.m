@@ -40,7 +40,7 @@ comak_ik.set_secondary_coordinates(8,'/jointset/pf_r/pf_tx_r');
 comak_ik.set_secondary_coordinates(9,'/jointset/pf_r/pf_ty_r');
 comak_ik.set_secondary_coordinates(10,'/jointset/pf_r/pf_tz_r');
 comak_ik.set_secondary_coupled_coordinate('/jointset/knee_r/knee_flex_r');
-comak_ik.set_secondary_constraint_sim_settle_threshold(1e-4);
+comak_ik.set_secondary_constraint_sim_settle_threshold(1e-3);
 comak_ik.set_secondary_constraint_sim_sweep_time(3.0);
 comak_ik.set_secondary_coupled_coordinate_start_value(0);
 comak_ik.set_secondary_coupled_coordinate_stop_value(100);
@@ -353,7 +353,7 @@ secondary_coord_set.cloneAndAppend(secondary_coord);
 comak.set_COMAKSecondaryCoordinateSet(secondary_coord_set);
 
 comak.set_settle_secondary_coordinates_at_start(true);
-comak.set_settle_threshold(1e-4);
+comak.set_settle_threshold(1e-3);
 comak.set_settle_accuracy(1e-2);
 comak.set_settle_internal_step_limit(10000);
 comak.set_print_settle_sim_results(true);

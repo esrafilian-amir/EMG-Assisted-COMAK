@@ -76,7 +76,7 @@ void COMAKTool::constructProperties() {
             COMAKSecondaryCoordinateSet());
 
     constructProperty_settle_secondary_coordinates_at_start(true);
-    constructProperty_settle_threshold(1e-5);
+    constructProperty_settle_threshold(1e-3);
     constructProperty_settle_accuracy(1e-6);
     constructProperty_settle_internal_step_limit(-1);
     constructProperty_settle_plateau_tolerance(0.0);

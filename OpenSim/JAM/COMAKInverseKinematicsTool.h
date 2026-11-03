@@ -80,7 +80,7 @@ public:
         "settle_threshold, the settling simulation is finished. The final "
         "secondary coordinate values are used to initialize the sweep "
         "simulation."
-        "The default value is 1e-5.")
+        "The default value is 1e-3.")
 
     OpenSim_DECLARE_PROPERTY(secondary_constraint_sim_settle_plateau_tolerance,
         double,

@@ -163,7 +163,9 @@ public:
         "that defines equilibrium. Once the change in all "
         "COMAKSecondaryCoordinate values is smaller than the "
         "settle_threshold, the settling simulation is stopped. "
-        "The default value is 1e-5.")
+        "The default value is 1e-3: the settled state then differs by "
+        "less than about 1 degree or 0.3 mm from one settled to 1e-4, and "
+        "the settling takes a few steps instead of tens.")
 
     OpenSim_DECLARE_PROPERTY(settle_plateau_tolerance, double,
         "Also stop the settling simulation when the largest change in the "

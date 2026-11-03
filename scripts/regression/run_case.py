@@ -70,7 +70,7 @@ def make_link(link, target):
         shutil.copytree(target, link)
 
 
-def disable_muscle_in_model(text, folder, root, muscle, inertia_scales=()):
+def disable_muscle_in_model(text, folder, root, muscle, inertia_scales=(), model_subs=()):
     """Copy the model folder (Geometry linked, files copied) with `muscle` set
     to appliesForce=false and/or body inertias scaled, and point the script at
     the copy."""
@@ -106,6 +106,11 @@ def disable_muscle_in_model(text, folder, root, muscle, inertia_scales=()):
                     scale, osim, count=1, flags=re.S)
                 if n != 1:
                     sys.exit(f"body {body} not found in {item.name}")
+            for spec in model_subs:
+                pat, rep = spec.split("::", 1)
+                osim, n = re.subn(pat, rep, osim, flags=re.S)
+                if n == 0:
+                    sys.exit(f"--model-sub pattern not found: {pat}")
             (dest / item.name).write_text(osim)
         else:
             shutil.copy2(item, dest / item.name)
@@ -126,6 +131,9 @@ def main():
                     metavar="BODY=FACTOR",
                     help="multiply the diagonal inertia of this body by FACTOR in a "
                          "modified copy of the model (Geometry is linked)")
+    ap.add_argument("--model-sub", action="append", default=[], metavar="REGEX::REPL",
+                    help="regex substitution applied to the text of the model file "
+                         "(a modified copy is used; Geometry is linked)")
     ap.add_argument("--scale-max-change", type=float, metavar="FACTOR",
                     help="multiply every set_max_change(value) of the script by FACTOR")
     ap.add_argument("--insert-after", action="append", default=[],
@@ -157,9 +165,9 @@ def main():
         text = re.sub(r"set_max_change\(([0-9.eE+-]+)\)",
                       lambda m: "set_max_change(%g)" % (float(m.group(1)) * a.scale_max_change),
                       text)
-    if a.disable_muscle or a.scale_inertia:
+    if a.disable_muscle or a.scale_inertia or a.model_sub:
         text = disable_muscle_in_model(text, folder, root, a.disable_muscle,
-                                       a.scale_inertia)
+                                       a.scale_inertia, a.model_sub)
     if a.reuse_ik:
         src = Path(a.reuse_ik) / "JAM" / folder / "results" / "comak-inverse-kinematics"
         shutil.copytree(src, work / "results" / "comak-inverse-kinematics")

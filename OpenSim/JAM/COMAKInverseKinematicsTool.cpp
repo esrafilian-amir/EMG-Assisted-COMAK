@@ -84,7 +84,7 @@ void COMAKInverseKinematicsTool::constructProperties()
     constructProperty_secondary_coordinates();
     constructProperty_constrained_coordinates();
     constructProperty_secondary_coupled_coordinate("");
-    constructProperty_secondary_constraint_sim_settle_threshold(1e-4);
+    constructProperty_secondary_constraint_sim_settle_threshold(1e-3);
     constructProperty_secondary_constraint_sim_settle_plateau_tolerance(0.0);
     constructProperty_secondary_constraint_sim_settle_plateau_window(10);
     constructProperty_secondary_constraint_sim_muscle_activation(0.02);
