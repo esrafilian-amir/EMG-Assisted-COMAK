@@ -41,20 +41,34 @@ contact-mesh code. Regression scripts live in `scripts/regression/`.
 - [x] Step 4: COMAK optimization (reserve bound and gradient fixes, finite-result check,
   corrected fallback; optional numerical options; trust region, soft constraints and
   smoothing penalties tried and removed, see scripts/regression/RESULTS.md)
-- [ ] Step 5: COMAK speed (cached lookups, allocations, `flip_meshes`, parallel
-  Jacobian columns)
-- [ ] Step 6: contact and mesh (OBB triangle-index bug, leaf closest-hit,
-  parallel tolerance, `max_proximity` cliff, force aggregation, Position-stage
-  cache, culling)
-- [ ] Step 7: stability on non-walking tasks, patella and meniscus handling,
-  final regression, docs/CHANGELOG
+- [x] Step 5: COMAK speed (timing log, `flip_meshes` switched off for COMAK runs; the
+  linearization is 80-97% of the run time; parallel Jacobian columns were dropped on
+  purpose, Jacobian reuse across iterations diverges)
+- [x] Step 6: contact and mesh (OBB triangle-index bug, leaf closest-hit, parallel
+  tolerance, force aggregation; `max_proximity` cliff, Position-stage cache and culling
+  not done)
+- [x] Step 6b: optimization (see `scripts/regression/RESULTS.md`): force based
+  convergence criterion (default), `max_change` as a limit on the total change in a time
+  step and free (0) by default, exact-Hessian `casadi_ipopt` solver (default) with
+  relaxed acceleration constraints, optional `casadi_qrqp`, activation change penalty
+  (0.1), central difference Jacobian (default), range limits for the secondary
+  coordinates (optional), per-group timing of the linearization
+- [x] Step 7: stability on a non-walking task (the EMG example is a bouncing task), final
+  regression (full-length runs of all three examples converge on every frame), docs and
+  `CHANGELOG_JAM.md`
 
-## Open after Step 4
+## Open
 
-- [ ] Full-length confirmation runs (EMG-assisted, walking, meniscus) with the final defaults.
-- [ ] Decide which numerical options to turn on by default (extrapolation factor 0 and central
-  differences looked useful on the meniscus window; evidence is from 12 to 31 frames).
-- [ ] Meniscus model still converges only about 2/3 of the frames in the test window.
-- [ ] Reconsider a penalty on the activation change between frames (it helped walking and the
-  meniscus model but distorted EMG tracking when applied to EMG-driven muscles).
+- [x] Full-length confirmation runs: see the last section of `scripts/regression/RESULTS.md`.
+- [ ] Meniscus run time: the constraint sweep (440 s) and the COMAK settle (about 200 s) now dominate;
+  see RESULTS.md for options (reuse the sweep, stop the settle earlier, per-pair contact cache).
+- [ ] Meniscus vertical translation zig-zag in the settle (about 10 um): damping in the settle only,
+  smoother contact, or output smoothing.
+- [ ] `exampleWalking_Patella_Constrained` and `exampleWalkingMuscleCoordination` were
+  changed to the new defaults but not run.
+- [ ] Calibrate `force_tolerance_translation`: the logs only show the worst coordinate,
+  which was always rotational for accepted frames.
+- [ ] Tight `max_change` values (twice the IK step) make walking fail; if a limit is
+  wanted for a new task, set it from a free run (`scripts/regression/free_steps.py`).
 - [ ] Apply the numerical options only to light coordinates (selected by inertia).
+- [ ] `max_proximity` cliff, Position-stage cache and culling in the contact model.

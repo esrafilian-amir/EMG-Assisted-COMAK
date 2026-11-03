@@ -94,7 +94,7 @@ void COMAKTool::constructProperties() {
     constructProperty_force_tolerance_rotation(0.1);
     constructProperty_force_tolerance_translation(1.0);
     constructProperty_unit_udot_epsilon(1e-8);
-    constructProperty_use_central_difference_jacobian(false);
+    constructProperty_use_central_difference_jacobian(true);
     constructProperty_ignore_secondary_speed_term(false);
     constructProperty_normalize_constraint_rows(false);
     constructProperty_secondary_step_penalty_weight(0.0);

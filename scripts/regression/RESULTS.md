@@ -141,3 +141,43 @@ Findings
   reserves 14%, secondary coordinates 39%, secondary speeds 10%. Reusing the Jacobian across iterations
   (jacobian_recompute_interval > 1) diverges: the contact model is too nonlinear after the first step.
   Forward difference needs 42% more iterations than central and is slower overall.
+
+## Full-length confirmation (final defaults, examples run end to end)
+
+`run_case.py` with nothing patched except the visualizer and the logging, install `central1`.
+"Original" is the unmodified code (runs `base2`). Times are wall times of the whole MATLAB script
+(inverse kinematics, COMAK, joint mechanics).
+
+| Example | Version | Converged frames | COMAK iterations | Solver failures | Wall time |
+|---|---|---|---|---|---|
+| Walking, 63 frames | original | 46 / 63 | 748 | 713 | 1774 s |
+| | final defaults | 63 / 63 | 179 | 0 | 596 s |
+| Meniscus, 63 frames | original | 13 / 63 | 1398 | 1233 | 4391 s |
+| | final defaults | 63 / 63 | 194 | 0 | 983 s |
+| EMG-assisted (bouncing task), 81 frames | original | 81 / 81 | 411 | 399 | 1142 s |
+| | final defaults | 81 / 81 | 187 | 0 | 389 s |
+
+Smoothness of the full-length results (RMS second difference over time; activations are all muscle and
+reserve activations, secondary coordinates in deg or m):
+
+| Example | Activation roughness, original -> final | Largest activation step | Secondary roughness |
+|---|---|---|---|
+| Walking | 0.0073 -> 0.0056 | 0.196 -> 0.221 | 0.0140 -> 0.0135 |
+| Meniscus | 0.0062 -> 0.0041 | 0.157 -> 0.149 | 0.0188 -> 0.0189 |
+| EMG | 0.0153 -> 0.0091 | 0.272 -> 0.275 | 0.0137 -> 0.0144 |
+
+The activations differ from the original by at most 0.045 (walking, meniscus) and 0.13 (EMG);
+the secondary coordinates by at most 0.34 / 0.38 / 0.15 (deg or mm).
+
+Meniscus chattering: the 12 meniscus coordinates of the COMAK results are smooth (3-15% direction
+changes between frames, noise about 1% of the range) and identical before and after. The settle
+simulation shows a broadband zig-zag of the vertical translations (`meniscus_*_ty_r`, about 10 um RMS on a
+slow drift of 50-100 um) in the original and in the final code. It is probably the light meniscus (0.1 kg) in
+a stiff undamped contact. Not fixed; options: damping in the settle only, smoother contact (triangle
+switching, `max_proximity`), smoothing of the output.
+
+Where the time goes (meniscus): inverse kinematics 453 s of which 440 s is the constraint sweep
+(depends on the model, not the trial: `perform_secondary_constraint_sim = false` reuses it); COMAK
+settle at the first frame about 200 s (91 steps, the change per step is below 1e-3 after 9 steps and
+below 3e-4 after 48); COMAK frames about 3 s each, of which 67% is the 23 secondary coordinate columns
+(about 18 ms per evaluation, the contact).
