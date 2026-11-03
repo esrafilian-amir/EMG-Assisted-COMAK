@@ -42,7 +42,7 @@ GROUPS = {
 }
 PER_GROUP = ['strength', 'fiber_length', 'tendon_slack', 'emg_shape']
 A0 = -1e-3          # nearly linear EMG to activation
-BOUNDS = {'strength': (0.5, 1.8), 'fiber_length': (0.95, 1.05),
+BOUNDS = {'strength': (0.5, 2.0), 'fiber_length': (0.95, 1.05),
           'tendon_slack': (0.95, 1.05), 'emg_shape': (-3.0, A0)}
 START = {'strength': 1.0, 'fiber_length': 1.0, 'tendon_slack': 1.0, 'emg_shape': A0}
 
@@ -174,7 +174,7 @@ def main():
     p.add_argument('--install', required=True)
     p.add_argument('--out', required=True)
     p.add_argument('--delay', type=float, default=0.04)
-    p.add_argument('--dofs', default='hip_flex_r,hip_add_r,knee_flex_r,ankle_flex_r')
+    p.add_argument('--dofs', default='hip_flex_r,knee_flex_r,ankle_flex_r')
     a = p.parse_args()
 
     pr = Problem(a.geometry, a.emg, a.comak_force, a.install, a.delay, a.dofs.split(','))
