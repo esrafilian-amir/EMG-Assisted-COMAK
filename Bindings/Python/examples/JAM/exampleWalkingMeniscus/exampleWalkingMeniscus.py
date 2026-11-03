@@ -304,121 +304,129 @@ comak.set_primary_coordinates(2,'/jointset/hip_r/hip_rot_r')
 comak.set_primary_coordinates(3,'/jointset/knee_r/knee_flex_r')
 comak.set_primary_coordinates(4,'/jointset/ankle_r/ankle_flex_r')
 
+# max_change of each secondary coordinate (rad or m): limit on the total change of
+# the coordinate in one time step, summed over the COMAK iterations.
+# A value of 0 or less removes the limit for that coordinate, so it moves freely.
+# To see how far the coordinates really move (for example in a new activity such as
+# running or jumping), set all of them to 0, run COMAK, and set max_change to about
+# twice the largest change per time step in the results.
+# The values below are 2 times the largest change per time step of the coordinate in
+# the inverse kinematics of this trial (rounded up).
 secondary_coord_set = osim.COMAKSecondaryCoordinateSet()
 secondary_coord = osim.COMAKSecondaryCoordinate()
 
 secondary_coord.setName('knee_add_r')
-secondary_coord.set_max_change(0.005)
+secondary_coord.set_max_change(0.017)
 secondary_coord.set_coordinate('/jointset/knee_r/knee_add_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('knee_rot_r')
-secondary_coord.set_max_change(0.005)
+secondary_coord.set_max_change(0.022)
 secondary_coord.set_coordinate('/jointset/knee_r/knee_rot_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('knee_tx_r')
-secondary_coord.set_max_change(0.001)
+secondary_coord.set_max_change(0.0013)
 secondary_coord.set_coordinate('/jointset/knee_r/knee_tx_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('knee_ty_r')
-secondary_coord.set_max_change(0.001)
+secondary_coord.set_max_change(0.00047)
 secondary_coord.set_coordinate('/jointset/knee_r/knee_ty_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('knee_tz_r')
-secondary_coord.set_max_change(0.001)
+secondary_coord.set_max_change(0.00041)
 secondary_coord.set_coordinate('/jointset/knee_r/knee_tz_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('pf_flex_r')
-secondary_coord.set_max_change(0.005)
+secondary_coord.set_max_change(0.15)
 secondary_coord.set_coordinate('/jointset/pf_r/pf_flex_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('pf_rot_r')
-secondary_coord.set_max_change(0.005)
+secondary_coord.set_max_change(0.014)
 secondary_coord.set_coordinate('/jointset/pf_r/pf_rot_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('pf_tilt_r')
-secondary_coord.set_max_change(0.005)
+secondary_coord.set_max_change(0.04)
 secondary_coord.set_coordinate('/jointset/pf_r/pf_tilt_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('pf_tx_r')
-secondary_coord.set_max_change(0.001)
+secondary_coord.set_max_change(0.0045)
 secondary_coord.set_coordinate('/jointset/pf_r/pf_tx_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('pf_ty_r')
-secondary_coord.set_max_change(0.001)
+secondary_coord.set_max_change(0.0087)
 secondary_coord.set_coordinate('/jointset/pf_r/pf_ty_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('pf_tz_r')
-secondary_coord.set_max_change(0.001)
+secondary_coord.set_max_change(0.00056)
 secondary_coord.set_coordinate('/jointset/pf_r/pf_tz_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('meniscus_medial_flex_r')
-secondary_coord.set_max_change(0.005)
+secondary_coord.set_max_change(0.019)
 secondary_coord.set_coordinate('/jointset/meniscus_medial_r/meniscus_medial_flex_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('meniscus_medial_add_r')
-secondary_coord.set_max_change(0.005)
+secondary_coord.set_max_change(0.012)
 secondary_coord.set_coordinate('/jointset/meniscus_medial_r/meniscus_medial_add_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('meniscus_medial_rot_r')
-secondary_coord.set_max_change(0.005)
+secondary_coord.set_max_change(0.0034)
 secondary_coord.set_coordinate('/jointset/meniscus_medial_r/meniscus_medial_rot_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('meniscus_medial_tx_r')
-secondary_coord.set_max_change(0.001)
+secondary_coord.set_max_change(0.0015)
 secondary_coord.set_coordinate('/jointset/meniscus_medial_r/meniscus_medial_tx_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('meniscus_medial_ty_r')
-secondary_coord.set_max_change(0.001)
+secondary_coord.set_max_change(0.00032)
 secondary_coord.set_coordinate('/jointset/meniscus_medial_r/meniscus_medial_ty_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('meniscus_medial_tz_r')
-secondary_coord.set_max_change(0.001)
+secondary_coord.set_max_change(0.00031)
 secondary_coord.set_coordinate('/jointset/meniscus_medial_r/meniscus_medial_tz_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('meniscus_lateral_flex_r')
-secondary_coord.set_max_change(0.005)
+secondary_coord.set_max_change(0.048)
 secondary_coord.set_coordinate('/jointset/meniscus_lateral_r/meniscus_lateral_flex_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('meniscus_lateral_add_r')
-secondary_coord.set_max_change(0.005)
+secondary_coord.set_max_change(0.015)
 secondary_coord.set_coordinate('/jointset/meniscus_lateral_r/meniscus_lateral_add_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('meniscus_lateral_rot_r')
-secondary_coord.set_max_change(0.005)
+secondary_coord.set_max_change(0.031)
 secondary_coord.set_coordinate('/jointset/meniscus_lateral_r/meniscus_lateral_rot_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('meniscus_lateral_tx_r')
-secondary_coord.set_max_change(0.001)
+secondary_coord.set_max_change(0.0015)
 secondary_coord.set_coordinate('/jointset/meniscus_lateral_r/meniscus_lateral_tx_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('meniscus_lateral_ty_r')
-secondary_coord.set_max_change(0.001)
+secondary_coord.set_max_change(0.00036)
 secondary_coord.set_coordinate('/jointset/meniscus_lateral_r/meniscus_lateral_ty_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 
 secondary_coord.setName('meniscus_lateral_tz_r')
-secondary_coord.set_max_change(0.001)
+secondary_coord.set_max_change(0.00084)
 secondary_coord.set_coordinate('/jointset/meniscus_lateral_r/meniscus_lateral_tz_r')
 secondary_coord_set.cloneAndAppend(secondary_coord)
 

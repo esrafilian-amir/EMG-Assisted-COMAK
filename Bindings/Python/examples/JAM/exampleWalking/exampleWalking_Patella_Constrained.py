@@ -291,6 +291,12 @@ comak.set_primary_coordinates(2,'/jointset/hip_r/hip_rot_r')
 comak.set_primary_coordinates(3,'/jointset/knee_r/knee_flex_r')
 comak.set_primary_coordinates(4,'/jointset/ankle_r/ankle_flex_r')
 
+# max_change of each secondary coordinate (rad or m): limit on the total change of
+# the coordinate in one time step, summed over the COMAK iterations.
+# A value of 0 or less removes the limit for that coordinate, so it moves freely.
+# To see how far the coordinates really move (for example in a new activity such as
+# running or jumping), set all of them to 0, run COMAK, and set max_change to about
+# twice the largest change per time step in the results.
 secondary_coord_set = osim.COMAKSecondaryCoordinateSet()
 secondary_coord = osim.COMAKSecondaryCoordinate()
 
