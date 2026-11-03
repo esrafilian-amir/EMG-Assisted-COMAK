@@ -32,8 +32,8 @@ def parse():
     return p.parse_args()
 
 
-def main():
-    a = parse()
+def main(a=None):
+    a = a or parse()
     sys.path.insert(0, os.path.join(a.install, 'sdk', 'python'))
     os.environ['PATH'] = os.path.join(a.install, 'bin') + os.pathsep + os.environ['PATH']
     import opensim as osim

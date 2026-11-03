@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<OpenSimDocument Version="40500">
+	<MuscleCalibrationTool name="walking_muscle_calibration">
+		<!--Setup of a finished EMG-assisted COMAK run (or a COMAK run with the same model,
+		    EMG file and mapping). It gives the model, the external loads, the EMG file, its
+		    mapping to the muscles and the electromechanical delay, and, through its results,
+		    the secondary coordinates and the forces of the muscles without EMG.-->
+		<comak_setup_file>../exampleWalking_EMG_Assisted/inputs/comak_settings.xml</comak_setup_file>
+		<!--Folder the relative paths of the COMAK setup refer to (the folder COMAK was run from).
+		    Default: the parent folder of the COMAK setup file.-->
+		<comak_working_directory>../exampleWalking_EMG_Assisted</comak_working_directory>
+		<!--Folder of the outputs. Relative paths here refer to the folder of this file.-->
+		<results_directory>./results/muscle-calibration</results_directory>
+		<!--New model with the calibrated max_isometric_force, optimal_fiber_length and
+		    tendon_slack_length of the calibrated muscles. A relative path refers to the folder
+		    of the original model, because the contact meshes and the geometry are found next
+		    to the model file.-->
+		<output_model_file>P1_lenhart2015_calibrated.osim</output_model_file>
+		<!--EMG with the calibrated shape: use it as emg_file of COMAK with the new model.-->
+		<output_emg_file>calibrated_emg.sto</output_emg_file>
+		<!--Coordinates whose moments are fitted (sagittal plane).-->
+		<coordinates>hip_flex_r knee_flex_r ankle_flex_r</coordinates>
+		<muscle_side_suffix>_r</muscle_side_suffix>
+		<!--Bounds as factors of the model values (the EMG shape A is not a factor).-->
+		<strength_bounds>0.5 2</strength_bounds>
+		<fiber_length_bounds>0.95 1.05</fiber_length_bounds>
+		<tendon_slack_bounds>0.95 1.05</tendon_slack_bounds>
+		<emg_shape_bounds>-3 -0.001</emg_shape_bounds>
+		<MuscleCalibrationGroups>
+			<!--One set of parameters per group. calibrate: any of strength fiber_length
+			    tendon_slack emg_shape; an empty list leaves the group as in the model.-->
+			<MuscleCalibrationGroup name="quadriceps">
+				<muscles>vasmed_r vaslat_r recfem_r</muscles>
+				<calibrate>strength fiber_length tendon_slack emg_shape</calibrate>
+			</MuscleCalibrationGroup>
+			<MuscleCalibrationGroup name="hamstrings">
+				<muscles>semimem_r bfsh_r bflh_r</muscles>
+				<calibrate>strength fiber_length tendon_slack emg_shape</calibrate>
+			</MuscleCalibrationGroup>
+			<MuscleCalibrationGroup name="plantarflexors">
+				<muscles>gasmed_r gaslat_r soleus_r</muscles>
+				<calibrate>strength fiber_length tendon_slack emg_shape</calibrate>
+				<!--Optional: bounds of this group (strength_bounds, fiber_length_bounds,
+				    tendon_slack_bounds, emg_shape_bounds) replace the global ones above.-->
+				<tendon_slack_bounds>0.97 1.03</tendon_slack_bounds>
+			</MuscleCalibrationGroup>
+			<MuscleCalibrationGroup name="dorsiflexors_peroneals">
+				<muscles>tibant_r perlong_r</muscles>
+				<calibrate>strength fiber_length tendon_slack emg_shape</calibrate>
+			</MuscleCalibrationGroup>
+			<MuscleCalibrationGroup name="hip_extensors">
+				<muscles>glmax1_r glmax2_r glmax3_r addmagProx_r addmagMid_r addmagDist_r addmagIsch_r</muscles>
+				<calibrate>strength fiber_length tendon_slack emg_shape</calibrate>
+			</MuscleCalibrationGroup>
+			<!--Mainly frontal plane muscles: not constrained by sagittal moments, so not calibrated.-->
+			<MuscleCalibrationGroup name="hip_abductors_flexors">
+				<muscles>glmed1_r glmed2_r glmed3_r tfl_r sart_r</muscles>
+				<calibrate></calibrate>
+			</MuscleCalibrationGroup>
+		</MuscleCalibrationGroups>
+	</MuscleCalibrationTool>
+</OpenSimDocument>
