@@ -165,11 +165,50 @@ public:
         _normalize_rows = normalize_rows;
     }
 
+    /** Values of the secondary coordinates at the start of the time step: the
+    total change of a secondary coordinate stays within its maximum change
+    from this value. Call before initialize(). */
+    void setReferenceValues(const SimTK::Vector& reference_values) {
+        _reference_values = reference_values;
+    }
+
+    /** Keep the secondary coordinates within their range [range min, range
+    max] in the optimization. Call before initialize(). */
+    void setEnforceCoordinateRange(bool enforce) {
+        _enforce_coordinate_range = enforce;
+    }
+
     /** Penalty weight * sum((unit_scale * change of secondary coordinate)^2) on
     the change of the secondary coordinates in the optimization. */
     void setSecondaryStepPenalty(double weight, const SimTK::Vector& unit_scale) {
         _step_penalty_weight = weight;
         _step_unit_scale = unit_scale;
+    }
+
+    /** Reuse the columns of the constraint Jacobian from an earlier
+    linearization instead of evaluating the model for them (only the
+    accelerations at the current state are evaluated). Call before
+    initialize(). */
+    void setReusedJacobian(const SimTK::Matrix& msl,
+            const SimTK::Matrix& non_muscle, const SimTK::Matrix& coord,
+            const SimTK::Matrix& speed, const SimTK::Vector& energy) {
+        _reuse_jacobian = true;
+        _reused_msl_unit_udot = msl;
+        _reused_non_muscle_actuator_unit_udot = non_muscle;
+        _reused_secondary_coord_unit_udot = coord;
+        _reused_secondary_speed_unit_udot = speed;
+        _reused_secondary_coord_unit_energy = energy;
+    }
+
+    /** The columns computed by initialize(), to reuse later. */
+    void getJacobianColumns(SimTK::Matrix& msl, SimTK::Matrix& non_muscle,
+            SimTK::Matrix& coord, SimTK::Matrix& speed,
+            SimTK::Vector& energy) const {
+        msl = _msl_unit_udot;
+        non_muscle = _non_muscle_actuator_unit_udot;
+        coord = _secondary_coord_unit_udot;
+        speed = _secondary_speed_unit_udot;
+        energy = _secondary_coord_unit_energy;
     }
 
     //Amir
@@ -206,6 +245,8 @@ private:
     bool _central_difference = false;
     bool _ignore_secondary_speed_term = false;
     bool _normalize_rows = false;
+    bool _enforce_coordinate_range = false;
+    SimTK::Vector _reference_values;
     double _step_penalty_weight = 0.0;
     SimTK::Vector _step_unit_scale;
     Array<std::string> _parameter_names;
@@ -224,6 +265,13 @@ private:
     SimTK::Matrix _secondary_coord_unit_udot;
     SimTK::Matrix _secondary_speed_unit_udot;
     SimTK::Vector _secondary_coord_unit_energy;
+
+    bool _reuse_jacobian = false;
+    SimTK::Matrix _reused_msl_unit_udot;
+    SimTK::Matrix _reused_non_muscle_actuator_unit_udot;
+    SimTK::Matrix _reused_secondary_coord_unit_udot;
+    SimTK::Matrix _reused_secondary_speed_unit_udot;
+    SimTK::Vector _reused_secondary_coord_unit_energy;
 
     Array<std::string> _primary_coords;
     Array<std::string> _secondary_coords;

@@ -20,6 +20,7 @@
 //=============================================================================
 #include <OpenSim/Simulation/Model/Model.h>
 #include "COMAKTarget.h"
+#include <chrono>
 #include "OpenSim/Simulation/Model/Smith2018ArticularContactForce.h"
 //#include <OpenSim.h>
 
@@ -193,6 +194,20 @@ void ComakTarget::precomputeConstraintMatrix() {
             cnt_frc.getOutputValue<double>(_state,"potential_energy");
     }
 
+    // Reused columns skip the model evaluations of the next sections
+    auto t_muscle = std::chrono::steady_clock::now();
+    auto t_reserve = t_muscle, t_secondary = t_muscle, t_speed = t_muscle,
+         t_end = t_muscle;
+    if (_reuse_jacobian && _reused_msl_unit_udot.nrow() == _nConstraints &&
+            _reused_msl_unit_udot.ncol() == _nMuscles &&
+            _reused_secondary_coord_unit_udot.ncol() == _nSecondaryCoord) {
+        _msl_unit_udot = _reused_msl_unit_udot;
+        _non_muscle_actuator_unit_udot = _reused_non_muscle_actuator_unit_udot;
+        _secondary_coord_unit_udot = _reused_secondary_coord_unit_udot;
+        _secondary_speed_unit_udot = _reused_secondary_speed_unit_udot;
+        _secondary_coord_unit_energy = _reused_secondary_coord_unit_energy;
+    } else {
+    t_muscle = std::chrono::steady_clock::now();
     //Compute Muscle Unit Udot
     j = 0;
     for (int i = 0; i < _nMuscles; ++i) {
@@ -222,6 +237,7 @@ void ComakTarget::precomputeConstraintMatrix() {
         j++;
     }
 
+    t_reserve = std::chrono::steady_clock::now();
     //Compute Non Muscle Actuator Unit Udot
     j = 0;
     for (int i = 0; i < _nNonMuscleActuators; ++i) {
@@ -255,6 +271,7 @@ void ComakTarget::precomputeConstraintMatrix() {
         j++;
     }
 
+    t_secondary = std::chrono::steady_clock::now();
     //Compute Secondary Coordinate Unit Udot
     //(forward differences, or central differences if requested)
     for (int j = 0; j < _nSecondaryCoord; ++j) {
@@ -319,6 +336,7 @@ void ComakTarget::precomputeConstraintMatrix() {
     }
     _model->realizeAcceleration(_state);
 
+    t_speed = std::chrono::steady_clock::now();
     //Compute COMAK damping unit udot
     //Force in each damping actuator is zeroed in initialize()
 
@@ -351,6 +369,22 @@ void ComakTarget::precomputeConstraintMatrix() {
         }
 
         optim_coord.setSpeedValue(_state, init_speed);
+    }
+
+    t_end = std::chrono::steady_clock::now();
+    } // END computing columns
+    {
+        auto sec = [](std::chrono::steady_clock::time_point a,
+                           std::chrono::steady_clock::time_point b) {
+            return std::chrono::duration<double>(b - a).count();
+        };
+        if (!_reuse_jacobian) log_info("Linearization columns (s): muscles {:.2f} ({}), reserves "
+                 "{:.2f} ({}), secondary coordinates {:.2f} ({}), secondary "
+                 "speeds {:.2f} ({})",
+                sec(t_muscle, t_reserve), _nMuscles,
+                sec(t_reserve, t_secondary), _nNonMuscleActuators,
+                sec(t_secondary, t_speed), _nSecondaryCoord,
+                sec(t_speed, t_end), _nSecondaryCoord);
     }
 
     //Assemble Constraint Matrix 
@@ -673,8 +707,38 @@ void ComakTarget::setParameterBounds(double scale) {
 
     //Secondary Coordinates
     for (int j = 0; j < _nSecondaryCoord; j++) {
-        lower_bounds(p) = - _max_change[j] * scale / _scale_delta_coord;
-        upper_bounds(p) = _max_change[j] * scale / _scale_delta_coord;
+        // change of the coordinate value allowed in this optimization
+        double change_lower = -_max_change[j] * scale;
+        double change_upper = _max_change[j] * scale;
+
+        const Coordinate& coord =
+                _model->getComponent<Coordinate>(_secondary_coords[j]);
+        const double value = coord.getValue(_state);
+
+        // The change since the previous time step, summed over the COMAK
+        // iterations, also stays within the maximum change
+        if (_reference_values.size() == _nSecondaryCoord) {
+            change_lower = std::max(change_lower,
+                    _reference_values[j] - _max_change[j] * scale - value);
+            change_upper = std::min(change_upper,
+                    _reference_values[j] + _max_change[j] * scale - value);
+        }
+
+        // Keep the coordinate value within its range
+        if (_enforce_coordinate_range) {
+            change_lower = std::max(change_lower, coord.getRangeMin() - value);
+            change_upper = std::min(change_upper, coord.getRangeMax() - value);
+        }
+
+        // Limits that exclude each other (the value is already outside of
+        // them): take the smaller step
+        if (change_lower > change_upper) {
+            change_lower = change_upper =
+                    (std::abs(change_lower) < std::abs(change_upper))
+                            ? change_lower : change_upper;
+        }
+        lower_bounds(p) = change_lower / _scale_delta_coord;
+        upper_bounds(p) = change_upper / _scale_delta_coord;
         p++;
     }
     setParameterLimits(lower_bounds, upper_bounds);

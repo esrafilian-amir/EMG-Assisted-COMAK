@@ -89,6 +89,7 @@ void COMAKInverseKinematicsTool::constructProperties()
     constructProperty_secondary_constraint_sim_settle_plateau_window(10);
     constructProperty_secondary_constraint_sim_muscle_activation(0.02);
     constructProperty_settling_sim_dt(0.005);
+    constructProperty_enforce_secondary_coordinate_range(false);
     constructProperty_secondary_constraint_sim_sweep_time(3.0);
     constructProperty_sweep_dt(0.005);
     constructProperty_secondary_coupled_coordinate_start_value(0.0);
@@ -369,7 +370,7 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
     for (auto& coord : model.updComponentList<Coordinate>()) {
         if (getProperty_secondary_coordinates().findIndex(coord.getAbsolutePathString()) > -1) {
             coord.set_locked(false);
-            coord.set_clamped(false);
+            coord.set_clamped(get_enforce_secondary_coordinate_range());
         }
         else if (coord.getAbsolutePathString() == get_secondary_coupled_coordinate()){
             coord.set_locked(false);

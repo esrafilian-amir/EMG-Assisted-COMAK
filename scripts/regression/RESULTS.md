@@ -107,3 +107,37 @@ determined marker fit; the code and the solver tolerance are not the cause.
 (patched for batch use, optional window, muscle disabling and `--reuse-ik`); `compare.py`,
 `stats.py`, `sec_jumps.py`, `penalty_diagnosis.py` and `check_constraint_functions.py` compare
 and summarize the results.
+
+## Solver, convergence criterion and bounds (windows: walking 1.36-1.48 s, meniscus 1.28-1.40 s, EMG 0-0.3 s)
+
+All runs: reference IK, central-difference Jacobian. One run per setting, other runs shared the CPU, so times are
+indicative; iteration counts and convergence are reliable.
+
+| Window | Solver / criterion | Converged | Iterations (per frame) | Notes |
+|---|---|---|---|---|
+| walking | IPOPT / acceleration | 13/13 | 83 (6.4) | max_change limited per time step |
+| walking | IPOPT / force | 13/13 | 30 (2.3) | |
+| walking | casadi_qrqp / force | 13/13 | 33 (2.5) | 12 of 33 iterations fell back to IPOPT |
+| EMG | IPOPT / force | 29/31 | 141 (4.5) | 53 IPOPT failures (infeasible with the new bounds) |
+| EMG | casadi_qrqp / force | 28/31 | 149 (4.8) | 66 fallbacks |
+| meniscus | IPOPT / acceleration (old) | 7/12 | 183 (15.2) | before max_change limit |
+| meniscus | IPOPT / force | 12/12 | 54 (4.5) | |
+| meniscus | casadi_qrqp / force | 12/12 | 45 (3.8) | 31 fallbacks |
+
+Findings
+- `convergence_criterion = force` (unbalanced generalized force M*(udot - observed), tolerances 0.1 N*m / 1 N) cuts
+  iterations by 60-70% and converges all meniscus frames; solutions differ from the acceleration criterion by at most
+  0.4 deg (knee rotation) and 0.005 (activation) on walking. Default stays `acceleration` until the tolerances are
+  calibrated on more data.
+- `max_change` is now an accumulated limit per time step (it was per COMAK iteration, so a frame could move a
+  coordinate several times max_change). It changes the walking solution (knee_add step is capped at 0.01 rad;
+  activations differ by up to 0.23 from the old runs). IPOPT fails more often because some subproblems become infeasible.
+- `enforce_secondary_coordinate_range` (COMAK and COMAKInverseKinematicsTool) changes nothing on walking (the model
+  ranges are wide); results are identical with it on.
+- casadi_qrqp: with a free quadratic slack and row scaling it never fails, but the active-set solver can return a point
+  outside the bounds and still report success (mostly when the allowed window does not contain zero). Each answer is
+  therefore checked and IPOPT is used for that iteration when it is violated. casadi_ipqp never converged and was removed.
+- Linearization (model evaluations) is 80-97% of the time. Per walking linearization (0.85 s): muscles 37%,
+  reserves 14%, secondary coordinates 39%, secondary speeds 10%. Reusing the Jacobian across iterations
+  (jacobian_recompute_interval > 1) diverges: the contact model is too nonlinear after the first step.
+  Forward difference needs 42% more iterations than central and is slower overall.

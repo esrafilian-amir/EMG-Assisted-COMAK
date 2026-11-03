@@ -255,6 +255,22 @@ public:
         "secondary coordinates (rad) to the unit of the translations (m) "
         "in secondary_step_penalty_weight. The default value is 0.05.")
 
+    OpenSim_DECLARE_PROPERTY(enforce_secondary_coordinate_range, bool,
+        "Keep the secondary coordinates within the range of the coordinate "
+        "(range min to range max in the model file) in the optimization. "
+        "Besides the maximum change per time step of the secondary "
+        "coordinates, this is an absolute bound. The default value is "
+        "false.")
+
+    OpenSim_DECLARE_PROPERTY(jacobian_recompute_interval, int,
+        "Number of COMAK iterations that share one linearization of the "
+        "accelerations: the columns of the constraint Jacobian are "
+        "recomputed in every n-th iteration (counted across time steps) and "
+        "reused in between, which saves model evaluations but converges more "
+        "slowly. They are also recomputed when the acceleration error "
+        "decreases by less than half in an iteration. The default value of "
+        "1 recomputes them in every iteration.")
+
     OpenSim_DECLARE_PROPERTY(secondary_velocity_carryover_to_next_step, double,
         "Fraction of the velocity of each secondary coordinate in the previous "
         "time step that is carried over to the next time step: each time "
@@ -265,6 +281,28 @@ public:
         "needed fewer iterations in the example models, because the "
         "secondary coordinates follow the force equilibrium and not their "
         "own momentum. The default value is 0.")
+
+    OpenSim_DECLARE_PROPERTY(convergence_criterion, std::string,
+        "How the COMAK iterations decide that a time step has converged. "
+        "'acceleration' (default): the largest error between the simulated "
+        "and the observed accelerations of the primary and secondary "
+        "coordinates is below udot_tolerance (in rad/s^2 or m/s^2). 'force': "
+        "the unbalanced generalized force M * (simulated - observed "
+        "acceleration), with M the mass matrix of the model, of every primary "
+        "and secondary coordinate is below force_tolerance_rotation (N*m) or "
+        "force_tolerance_translation (N). The force criterion does not depend "
+        "on the inertia of the coordinate, which makes it comparable for "
+        "light coordinates (patella, menisci) and heavy ones (hip).")
+
+    OpenSim_DECLARE_PROPERTY(force_tolerance_rotation, double,
+        "For convergence_criterion 'force': tolerance on the unbalanced "
+        "generalized force of rotational coordinates, in N*m. The default "
+        "value is 0.1.")
+
+    OpenSim_DECLARE_PROPERTY(force_tolerance_translation, double,
+        "For convergence_criterion 'force': tolerance on the unbalanced "
+        "generalized force of translational coordinates, in N. The default "
+        "value is 1.0.")
 
     OpenSim_DECLARE_PROPERTY(unit_udot_epsilon, double, 
         "The size of the perturbation applied to COMAKSecondaryCoordinates "

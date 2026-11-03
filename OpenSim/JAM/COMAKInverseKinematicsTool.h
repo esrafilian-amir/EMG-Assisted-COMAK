@@ -101,6 +101,12 @@ public:
         "applied in the settling and sweep simulations. "
         "The default value is 0.02.")
 
+    OpenSim_DECLARE_PROPERTY(enforce_secondary_coordinate_range, bool,
+        "Keep the secondary coordinates within the range of the coordinate "
+        "(range min to range max in the model file) in the inverse "
+        "kinematics solution. The default value is false, which leaves "
+        "the secondary coordinates unbounded.")
+
     OpenSim_DECLARE_PROPERTY(settling_sim_dt, double,
         "Time step between convergence checks in the settling simulation. "
         "The default value is 0.005.")

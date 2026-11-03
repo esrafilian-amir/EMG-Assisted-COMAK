@@ -90,6 +90,9 @@ void COMAKTool::constructProperties() {
     constructProperty_max_iterations(50);
     constructProperty_udot_tolerance(1.0);
     constructProperty_udot_worse_case_tolerance(50.0);
+    constructProperty_convergence_criterion("acceleration");
+    constructProperty_force_tolerance_rotation(0.1);
+    constructProperty_force_tolerance_translation(1.0);
     constructProperty_unit_udot_epsilon(1e-8);
     constructProperty_use_central_difference_jacobian(false);
     constructProperty_ignore_secondary_speed_term(false);
@@ -97,6 +100,8 @@ void COMAKTool::constructProperties() {
     constructProperty_secondary_step_penalty_weight(0.0);
     constructProperty_step_penalty_rotation_length(0.05);
     constructProperty_secondary_velocity_carryover_to_next_step(0.0);
+    constructProperty_jacobian_recompute_interval(1);
+    constructProperty_enforce_secondary_coordinate_range(false);
     constructProperty_optimization_scale_delta_coord(1e-3);
 
     constructProperty_solver("ipopt");
@@ -808,6 +813,12 @@ void COMAKTool::performCOMAK() {
 
     _consecutive_bad_frame = 0;
     int frame_num = 0;
+    // columns of the linearization, kept for jacobian_recompute_interval > 1
+    SimTK::Matrix jac_msl, jac_non_muscle, jac_coord, jac_speed;
+    SimTK::Vector jac_energy;
+    int jac_age = 0;
+    // secondary coordinate values at the start of the time step
+    SimTK::Vector secondary_reference(_n_secondary_coord, 0.0);
     for (int i = 0; i < _n_frames; ++i) {
         if (_time[i] < get_start_time()) { continue; }
         if (_time[i] > get_stop_time()) { break; };
@@ -865,6 +876,9 @@ void COMAKTool::performCOMAK() {
 
             double new_value = prev_value +
                     get_secondary_velocity_carryover_to_next_step() * prev_speed * _dt;
+            new_value = std::min(std::max(new_value,
+                    prev_value - _secondary_coord_max_change[j]),
+                    prev_value + _secondary_coord_max_change[j]);
             coord.setValue(state, new_value);
         }
 
@@ -877,6 +891,13 @@ void COMAKTool::performCOMAK() {
 
         _model.assemble(state);
         _model.realizeVelocity(state);
+
+        // The changes of the secondary coordinates in this time step are
+        // limited relative to where the optimization starts
+        for (int j = 0; j < _n_secondary_coord; ++j) {
+            secondary_reference[j] = _model.getComponent<Coordinate>(
+                    _secondary_coord_path[j]).getValue(state);
+        }
 
         // Print initial optimization
         if (frame_num == 1 && get_verbose() > 1) {
@@ -968,6 +989,9 @@ void COMAKTool::performCOMAK() {
                     secondary_unit_scale[m] = get_step_penalty_rotation_length();
                 }
             }
+            target.setReferenceValues(secondary_reference);
+            target.setEnforceCoordinateRange(
+                    get_enforce_secondary_coordinate_range());
             target.setSecondaryStepPenalty(
                     get_secondary_step_penalty_weight(), secondary_unit_scale);
             target.setJacobianOptions(get_use_central_difference_jacobian(),
@@ -996,9 +1020,34 @@ void COMAKTool::performCOMAK() {
             }
             target.setDesiredActivation(desired_act);
 
+            // Reuse the columns of an earlier linearization (a chord method)
+            // unless they are due, or the iterations are not converging fast
+            const int interval = std::max(1, get_jacobian_recompute_interval());
+            const bool stalled = iter >= 2 && iter_max_udot_error(iter - 1) >
+                    0.5 * iter_max_udot_error(iter - 2);
+            const bool reuse_jacobian = interval > 1 && jac_msl.nrow() > 0 &&
+                    jac_age < interval - 1 && !stalled;
+            if (reuse_jacobian) {
+                target.setReusedJacobian(jac_msl, jac_non_muscle, jac_coord,
+                        jac_speed, jac_energy);
+                jac_age++;
+            }
+
             target.initialize();
+            if (!reuse_jacobian) {
+                target.getJacobianColumns(jac_msl, jac_non_muscle, jac_coord,
+                        jac_speed, jac_energy);
+                jac_age = 0;
+            }
             seconds_jacobian += std::chrono::duration<double>(
                     std::chrono::steady_clock::now() - iteration_start).count();
+
+            if (get_convergence_criterion() != "acceleration" &&
+                    get_convergence_criterion() != "force") {
+                OPENSIM_THROW(Exception, "COMAKTool: unknown "
+                        "convergence_criterion '" + get_convergence_criterion()
+                        + "'. Use 'acceleration' or 'force'.");
+            }
 
             const std::string solver_name = get_solver();
             const bool use_qp = (solver_name != "ipopt");
@@ -1014,6 +1063,7 @@ void COMAKTool::performCOMAK() {
             const auto optimizer_start = std::chrono::steady_clock::now();
             const SimTK::Vector parameters_before_optimization = _optim_parameters;
 
+            bool qp_done = false;
             if (use_qp) {
                 // The cost is separable and quadratic for exponent 2, so its
                 // diagonal Hessian follows from the gradient at 0 and at 1.
@@ -1048,15 +1098,36 @@ void COMAKTool::performCOMAK() {
                         rhs, lower, upper, _optim_parameters,
                         get_qp_slack_penalty(), x_qp, max_slack, qp_status);
                 if (qp_ok) {
-                    _optim_parameters = x_qp;
+                    // report solutions outside the bounds
+                    double max_violation = 0.0;
+                    int worst = 0;
+                    for (int p = 0; p < n; ++p) {
+                        const double v = std::max(lower[p] - x_qp[p],
+                                x_qp[p] - upper[p]);
+                        if (v > max_violation) { max_violation = v; worst = p; }
+                    }
+                    if (max_violation > 1e-6) {
+                        // the active-set solver can return such a point and
+                        // still report success
+                        log_info("The QP solution is outside the bounds by "
+                                 "{} for {} (value {}, bounds {} to {}); "
+                                 "using IPOPT for this iteration",
+                                max_violation, _optim_parameter_names[worst],
+                                x_qp[worst], lower[worst], upper[worst]);
+                    } else {
+                        _optim_parameters = x_qp;
+                        qp_done = true;
+                    }
                 } else {
-                    log_error("COMAK QP solver failed: {}", qp_status);
+                    log_error("COMAK QP solver failed: {}. Using IPOPT for "
+                              "this iteration.", qp_status);
                 }
                 if (max_slack > 1e-6) {
                     log_info("The QP relaxed an acceleration constraint by "
                              "up to {}", max_slack);
                 }
-            } else {
+            }
+            if (!qp_done) {
             SimTK::OptimizerAlgorithm algorithm = SimTK::InteriorPoint;
             SimTK::Optimizer optimizer(target, algorithm);
 
@@ -1121,7 +1192,27 @@ void COMAKTool::performCOMAK() {
                         get_optimization_scale_delta_coord();
             }
 
+            SimTK::Vector secondary_before(_n_secondary_coord);
+            for (int j = 0; j < _n_secondary_coord; ++j) {
+                secondary_before[j] = _model.getComponent<Coordinate>(
+                        _secondary_coord_path[j]).getValue(state);
+            }
+
             setStateFromComakParameters(state, _optim_parameters);
+
+            // The model assembly in setStateFromComakParameters can move the
+            // coordinates away from the optimized values
+            for (int j = 0; j < _n_secondary_coord; ++j) {
+                const double applied = _model.getComponent<Coordinate>(
+                        _secondary_coord_path[j]).getValue(state) -
+                        secondary_before[j];
+                const double optimized = _optim_parameters[_n_actuators + j];
+                if (std::abs(applied - optimized) > 1e-5) {
+                    log_info("{}: optimized change {}, change after the "
+                             "model assembly {}", _secondary_coord_name[j],
+                            optimized, applied);
+                }
+            }
 
             // Save iteration in case of no convergence
             iter_states[iter] = state;
@@ -1141,6 +1232,12 @@ void COMAKTool::performCOMAK() {
             std::string max_udot_coord = "";
             int k = 0;
             max_udot_error = 0;
+
+            // Acceleration errors by mobility, for the unbalanced force
+            SimTK::Vector udot_error_by_u(state.getNU(), 0.0);
+            std::vector<int> residual_u;
+            std::vector<bool> residual_rotational;
+            std::vector<std::string> residual_name;
 
             for (const auto& coord : _model.getComponentList<Coordinate>()) {
                 std::string path = coord.getAbsolutePathString();
@@ -1175,6 +1272,16 @@ void COMAKTool::performCOMAK() {
 
                 if (!is_secondary && !is_primary) { continue; }
 
+                const int u_index = _model.getMatterSubsystem()
+                        .getMobilizedBody(coord.getJoint().getChildFrame()
+                                .getMobilizedBodyIndex())
+                        .getFirstUIndex(state) + coord.getMobilizerQIndex();
+                udot_error_by_u[u_index] = coord_udot - observed_udot;
+                residual_u.push_back(u_index);
+                residual_rotational.push_back(coord.getMotionType() ==
+                        Coordinate::MotionType::Rotational);
+                residual_name.push_back(coord.getName());
+
                 if (udot_error > max_udot_error) {
                     max_udot_coord = coord.getName();
                     max_udot_error = udot_error;
@@ -1201,6 +1308,48 @@ void COMAKTool::performCOMAK() {
                     }
                 }
                 */
+            }
+
+            // Unbalanced generalized force: M * (simulated - observed udot)
+            SimTK::Vector force_residual;
+            _model.getMatterSubsystem().multiplyByM(
+                    state, udot_error_by_u, force_residual);
+            double max_force_ratio = 0.0;
+            double max_force = 0.0;
+            std::string max_force_coord = "";
+            for (size_t r = 0; r < residual_u.size(); ++r) {
+                const double force = std::abs(force_residual[residual_u[r]]);
+                const double tolerance = residual_rotational[r]
+                        ? get_force_tolerance_rotation()
+                        : get_force_tolerance_translation();
+                if (force / tolerance > max_force_ratio) {
+                    max_force_ratio = force / tolerance;
+                    max_force = force;
+                    max_force_coord = residual_name[r];
+                }
+            }
+            log_info("Max force residual: {} (N or N*m)      Coord: {}      "
+                     "Times its tolerance: {}",
+                    max_force, max_force_coord, max_force_ratio);
+            if (get_convergence_criterion() == "force") {
+                log_info("Max acceleration error: {} (Coord: {}), not used "
+                         "for convergence", max_udot_error, max_udot_coord);
+                // the rest of the iteration uses max_udot_error, in units of
+                // udot_tolerance: 1 is the tolerance
+                max_udot_error = max_force_ratio * get_udot_tolerance();
+                max_udot_coord = max_force_coord;
+            }
+
+            for (int j = 0; j < _n_secondary_coord; ++j) {
+                const double change = std::abs(
+                        _model.getComponent<Coordinate>(_secondary_coord_path[j])
+                                .getValue(state) - secondary_reference[j]);
+                if (change > _secondary_coord_max_change[j] * (1 + 1e-6) + 1e-12) {
+                    log_warn("{} changed by {} in this time step, "
+                             "more than its max_change {}",
+                            _secondary_coord_name[j], change,
+                            _secondary_coord_max_change[j]);
+                }
             }
 
             log_info("Max udot Error: {} \t Max Error Coord: {}",
