@@ -426,7 +426,7 @@ secondary_coord_set.cloneAndAppend(secondary_coord);
 comak.set_COMAKSecondaryCoordinateSet(secondary_coord_set);
 
 comak.set_settle_secondary_coordinates_at_start(true);
-% The meniscus coordinates settle slowly. 1e-3 stops the settling after about 10 steps instead of about 50 and
+% The meniscus coordinates settle slowly. 1e-3 stops the settling after about 45 steps instead of about 80 and
 % leaves the settled pose within about 1 degree and 0.3 mm of the fully settled one (use 1e-4 for the exact one).
 comak.set_settle_threshold(1e-3);
 comak.set_settle_accuracy(1e-3);
