@@ -398,6 +398,11 @@ install(DIRECTORY ../Java/Matlab/examples/Moco/exampleSquatToStand
 install(DIRECTORY OpenSenseExample
         DESTINATION "${OPENSIM_INSTALL_PYTHONEXDIR}")
 
+# JAM examples: the Python scripts are in examples/JAM (installed above). They use
+# the shared models and experimental data of the MATLAB examples (../models).
+install(DIRECTORY ../Java/Matlab/examples/JAM/models
+        DESTINATION "${OPENSIM_INSTALL_PYTHONEXDIR}/JAM")
+
 # Install the Geometry folder to the Moco examples.
 install(DIRECTORY ../Java/Matlab/OpenSenseExample/Geometry/
         DESTINATION "${OPENSIM_INSTALL_PYTHONEXDIR}/Moco/example3DWalking/Geometry/")

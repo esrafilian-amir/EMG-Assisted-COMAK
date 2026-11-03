@@ -1,0 +1,289 @@
+"""JAM example: EMG-assisted COMAK walking simulation
+
+Python version of exampleWalking_EMG_Assisted.m.
+
+Run from any folder with the OpenSim Python bindings available, e.g.
+    python exampleWalking_EMG_Assisted.py
+All paths are relative to the folder of this script (the same layout as the
+MATLAB example: ../models/... holds the shared models and experimental data).
+Requires numpy and scipy (scipy.io.loadmat reads the EMG .mat file).
+"""
+import os
+import numpy as np
+from scipy.io import loadmat
+import opensim as osim
+
+# All relative paths below refer to the folder of this script
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+# Setup Environment and Folders
+osim.Logger.setLevelString('Debug')
+
+model_file = '../models/GCD/lenhart2015/P1_lenhart2015.osim'
+results_basename = 'walking'
+ik_result_dir = './results/comak-inverse-kinematics'
+comak_result_dir = './results/comak'
+jnt_mech_result_dir = './results/joint-mechanics'
+
+os.makedirs('./inputs', exist_ok=True)
+os.makedirs('./results', exist_ok=True)
+
+# Perform COMAK Simulation
+comak = osim.COMAKTool()
+comak.set_model_file(model_file)
+comak.set_coordinates_file('../models/GCD/experimental_data/motion_analysis/DM_bouncy1_1_ik.mot')
+comak.set_external_loads_file('../models/GCD/experimental_data/motion_analysis/DM_bouncy1_1_grf_Setup.xml')
+comak.set_results_directory(comak_result_dir)
+comak.set_results_prefix(results_basename)
+comak.set_replace_force_set(False)
+comak.set_force_set_file('../models/GCD/lenhart2015/lenhart2015_reserve_actuators.xml')
+comak.set_start_time(0.0)
+comak.set_stop_time(0.8)
+comak.set_time_step(0.01)
+comak.set_lowpass_filter_frequency(6)
+comak.set_print_processed_input_kinematics(False)
+comak.set_prescribed_coordinates(0,'/jointset/gnd_pelvis/pelvis_tx')
+comak.set_prescribed_coordinates(1,'/jointset/gnd_pelvis/pelvis_ty')
+comak.set_prescribed_coordinates(2,'/jointset/gnd_pelvis/pelvis_tz')
+comak.set_prescribed_coordinates(3,'/jointset/gnd_pelvis/pelvis_tilt')
+comak.set_prescribed_coordinates(4,'/jointset/gnd_pelvis/pelvis_list')
+comak.set_prescribed_coordinates(5,'/jointset/gnd_pelvis/pelvis_rot')
+comak.set_prescribed_coordinates(6,'/jointset/subtalar_r/subt_angle_r')
+comak.set_prescribed_coordinates(7,'/jointset/mtp_r/mtp_angle_r')
+comak.set_prescribed_coordinates(8,'/jointset/hip_l/hip_flex_l')
+comak.set_prescribed_coordinates(9,'/jointset/hip_l/hip_add_l')
+comak.set_prescribed_coordinates(10,'/jointset/hip_l/hip_rot_l')
+comak.set_prescribed_coordinates(11,'/jointset/pf_l/pf_l_r3')
+comak.set_prescribed_coordinates(12,'/jointset/pf_l/pf_l_tx')
+comak.set_prescribed_coordinates(13,'/jointset/pf_l/pf_l_ty')
+comak.set_prescribed_coordinates(14,'/jointset/knee_l/knee_flex_l')
+comak.set_prescribed_coordinates(15,'/jointset/ankle_l/ankle_flex_l')
+comak.set_prescribed_coordinates(16,'/jointset/subtalar_l/subt_angle_l')
+comak.set_prescribed_coordinates(17,'/jointset/mtp_l/mtp_angle_l')
+comak.set_prescribed_coordinates(18,'/jointset/pelvis_torso/lumbar_ext')
+comak.set_prescribed_coordinates(19,'/jointset/pelvis_torso/lumbar_latbend')
+comak.set_prescribed_coordinates(20,'/jointset/pelvis_torso/lumbar_rot')
+comak.set_prescribed_coordinates(21,'/jointset/torso_neckhead/neck_ext')
+comak.set_prescribed_coordinates(22,'/jointset/torso_neckhead/neck_latbend')
+comak.set_prescribed_coordinates(23,'/jointset/torso_neckhead/neck_rot')
+comak.set_prescribed_coordinates(24,'/jointset/acromial_r/arm_add_r')
+comak.set_prescribed_coordinates(25,'/jointset/acromial_r/arm_flex_r')
+comak.set_prescribed_coordinates(26,'/jointset/acromial_r/arm_rot_r')
+comak.set_prescribed_coordinates(27,'/jointset/elbow_r/elbow_flex_r')
+comak.set_prescribed_coordinates(28,'/jointset/radioulnar_r/pro_sup_r')
+comak.set_prescribed_coordinates(29,'/jointset/radius_hand_r/wrist_flex_r')
+comak.set_prescribed_coordinates(30,'/jointset/acromial_l/arm_add_l')
+comak.set_prescribed_coordinates(31,'/jointset/acromial_l/arm_flex_l')
+comak.set_prescribed_coordinates(32,'/jointset/acromial_l/arm_rot_l')
+comak.set_prescribed_coordinates(33,'/jointset/elbow_l/elbow_flex_l')
+comak.set_prescribed_coordinates(34,'/jointset/radioulnar_l/pro_sup_l')
+comak.set_prescribed_coordinates(35,'/jointset/radius_hand_l/wrist_flex_l')
+
+comak.set_primary_coordinates(0,'/jointset/hip_r/hip_flex_r')
+comak.set_primary_coordinates(1,'/jointset/hip_r/hip_add_r')
+comak.set_primary_coordinates(2,'/jointset/hip_r/hip_rot_r')
+comak.set_primary_coordinates(3,'/jointset/knee_r/knee_flex_r')
+comak.set_primary_coordinates(4,'/jointset/ankle_r/ankle_flex_r')
+
+secondary_coord_set = osim.COMAKSecondaryCoordinateSet()
+secondary_coord = osim.COMAKSecondaryCoordinate()
+
+secondary_coord.setName('knee_add_r')
+secondary_coord.set_max_change(0.01)
+secondary_coord.set_coordinate('/jointset/knee_r/knee_add_r')
+secondary_coord_set.cloneAndAppend(secondary_coord)
+
+secondary_coord.setName('knee_rot_r')
+secondary_coord.set_max_change(0.01)
+secondary_coord.set_coordinate('/jointset/knee_r/knee_rot_r')
+secondary_coord_set.cloneAndAppend(secondary_coord)
+
+secondary_coord.setName('knee_tx_r')
+secondary_coord.set_max_change(0.05)
+secondary_coord.set_coordinate('/jointset/knee_r/knee_tx_r')
+secondary_coord_set.cloneAndAppend(secondary_coord)
+
+secondary_coord.setName('knee_ty_r')
+secondary_coord.set_max_change(0.05)
+secondary_coord.set_coordinate('/jointset/knee_r/knee_ty_r')
+secondary_coord_set.cloneAndAppend(secondary_coord)
+
+secondary_coord.setName('knee_tz_r')
+secondary_coord.set_max_change(0.05)
+secondary_coord.set_coordinate('/jointset/knee_r/knee_tz_r')
+secondary_coord_set.cloneAndAppend(secondary_coord)
+
+secondary_coord.setName('pf_flex_r')
+secondary_coord.set_max_change(0.01)
+secondary_coord.set_coordinate('/jointset/pf_r/pf_flex_r')
+secondary_coord_set.cloneAndAppend(secondary_coord)
+
+secondary_coord.setName('pf_rot_r')
+secondary_coord.set_max_change(0.01)
+secondary_coord.set_coordinate('/jointset/pf_r/pf_rot_r')
+secondary_coord_set.cloneAndAppend(secondary_coord)
+
+secondary_coord.setName('pf_tilt_r')
+secondary_coord.set_max_change(0.01)
+secondary_coord.set_coordinate('/jointset/pf_r/pf_tilt_r')
+secondary_coord_set.cloneAndAppend(secondary_coord)
+
+secondary_coord.setName('pf_tx_r')
+secondary_coord.set_max_change(0.005)
+secondary_coord.set_coordinate('/jointset/pf_r/pf_tx_r')
+secondary_coord_set.cloneAndAppend(secondary_coord)
+
+secondary_coord.setName('pf_ty_r')
+secondary_coord.set_max_change(0.005)
+secondary_coord.set_coordinate('/jointset/pf_r/pf_ty_r')
+secondary_coord_set.cloneAndAppend(secondary_coord)
+
+secondary_coord.setName('pf_tz_r')
+secondary_coord.set_max_change(0.005)
+secondary_coord.set_coordinate('/jointset/pf_r/pf_tz_r')
+secondary_coord_set.cloneAndAppend(secondary_coord)
+
+comak.set_COMAKSecondaryCoordinateSet(secondary_coord_set)
+
+comak.set_settle_secondary_coordinates_at_start(True)
+comak.set_settle_threshold(1e-3)
+comak.set_settle_accuracy(1e-2)
+comak.set_settle_internal_step_limit(10000)
+comak.set_print_settle_sim_results(True)
+comak.set_settle_sim_results_directory(comak_result_dir)
+comak.set_settle_sim_results_prefix('walking_settle_sim')
+comak.set_max_iterations(25)
+comak.set_udot_tolerance(1)
+comak.set_udot_worse_case_tolerance(50)
+# A time step has converged when the unbalanced generalized force of the
+# primary and secondary coordinates is below these tolerances
+# (convergence_criterion 'force', the default; udot_tolerance and
+# udot_worse_case_tolerance then count multiples of them). Rough maximum from
+# the walking test: up to 30 times the defaults (3 N*m and 30 N) changed the
+# muscle activations by less than 0.012 and the secondary coordinates by less
+# than 0.03 (deg or mm) and halved the COMAK iterations; 100 times (10 N*m
+# and 100 N) changed the activations by up to 0.04 and the coordinates by up
+# to 0.08. Do not go above this. Use convergence_criterion 'acceleration' for
+# the previous acceleration based test.
+comak.set_force_tolerance_rotation(0.1)  # N*m
+comak.set_force_tolerance_translation(1.0)  # N
+comak.set_unit_udot_epsilon(1e-6)
+comak.set_optimization_scale_delta_coord(1)
+comak.set_ipopt_diagnostics_level(3)
+comak.set_ipopt_max_iterations(500)
+comak.set_ipopt_convergence_tolerance(1e-4)
+comak.set_ipopt_constraint_tolerance(1e-4)
+comak.set_ipopt_limited_memory_history(200)
+comak.set_ipopt_nlp_scaling_max_gradient(10000)
+comak.set_ipopt_nlp_scaling_min_value(1e-8)
+comak.set_ipopt_obj_scaling_factor(1)
+comak.set_activation_exponent(2)
+comak.set_contact_energy_weight(1)
+comak.set_non_muscle_actuator_weight(1000)
+comak.set_model_assembly_accuracy(1e-12)
+comak.set_use_visualizer(True)
+comak.set_verbose(0)
+
+# Here we set EMGs
+comak.set_use_muscle_physiology(True)
+# comak.set_emg_file('../models/GCD/experimental_data/motion_analysis/DM_bouncy1_1_emg.mot')  # this won't be used currently.
+comak.set_is_emg_assisted(True)
+
+# write EMGs to setup file
+# we read EMGs from here (MATLAB .mat file with lbls_emg and data_emg)
+emg_data = loadmat('../models/GCD/experimental_data/motion_analysis/DM_bouncy1_1_emg.mat')
+lbls_emg = [str(lbl[0]) for lbl in emg_data['lbls_emg'].ravel()]
+data_emg = emg_data['data_emg']
+# define muscle mappings and gamma weight (to follow EMGs)
+# (label in EMG data, muscle in the model, gamma)
+muscle_mapper = [('semimem', 'semimem_r', 1),
+                 ('bifem', 'bfsh_r', 1),
+                 ('bifem', 'bflh_r', 1),
+                 ('vasmed', 'vasmed_r', 1),
+                 ('vaslat', 'vaslat_r', 1),
+                 ('rf', 'recfem_r', 1),
+                 ('medgas', 'gasmed_r', 1),
+                 ('latgas', 'gaslat_r', 1),
+                 ('tfl', 'tfl_r', 1),
+                 ('tibant', 'tibant_r', 1),
+                 ('peronl', 'perlong_r', 1),
+                 ('soleus', 'soleus_r', 1),
+                 ('addmagnus', 'addmagProx_r', 1),
+                 ('addmagnus', 'addmagMid_r', 1),
+                 ('addmagnus', 'addmagDist_r', 1),
+                 ('addmagnus', 'addmagIsch_r', 1),
+                 ('gmax', 'glmax1_r', 1),
+                 ('gmax', 'glmax2_r', 1),
+                 ('gmax', 'glmax3_r', 1),
+                 ('gmed', 'glmed1_r', 1),
+                 ('gmed', 'glmed2_r', 1),
+                 ('gmed', 'glmed3_r', 1),
+                 ('sartorius', 'sart_r', 1)]
+cost_fun_param_set = osim.COMAKCostFunctionParameterSet()
+cost_fun_param = osim.COMAKCostFunctionParameter()
+for emg_label, muscle_name, emg_msl_weight in muscle_mapper:
+    if emg_msl_weight:
+        cost_fun_param.setName(muscle_name)
+        cost_fun_param.set_actuator('/forceset/' + muscle_name)
+        cost_fun_param.set_emg_gamma_weight(emg_msl_weight)
+        emg_spline = osim.SimmSpline()
+        # MATLAB: find(contains(lbls_emg, label)) -> first column whose label contains the EMG label
+        emg_indx = [k for k, lbl in enumerate(lbls_emg) if emg_label in lbl][0]
+        for jj in range(data_emg.shape[0]):
+            emg_spline.addPoint(float(data_emg[jj, 0]), float(data_emg[jj, emg_indx]))
+        cost_fun_param.set_desired_activation(emg_spline)
+        cost_fun_param.set_activation_lower_bound(osim.Constant(0.01))
+        cost_fun_param.set_activation_upper_bound(osim.Constant(1.0))
+        cost_fun_param_set.cloneAndAppend(cost_fun_param)
+comak.set_COMAKCostFunctionParameterSet(cost_fun_param_set)
+# end of EMG block
+comak.printToXML('./inputs/comak_settings.xml')
+
+print('Running COMAK Tool...')
+comak.run()
+
+# Perform Joint Mechanics Analysis
+jnt_mech = osim.JointMechanicsTool()
+jnt_mech.set_model_file(model_file)
+jnt_mech.set_input_states_file(comak_result_dir + '/' + results_basename + '_states.sto')
+jnt_mech.set_use_muscle_physiology(False)
+jnt_mech.set_results_file_basename(results_basename)
+jnt_mech.set_results_directory(jnt_mech_result_dir)
+jnt_mech.set_start_time(0)
+jnt_mech.set_stop_time(0.8)
+jnt_mech.set_resample_step_size(-1)
+jnt_mech.set_normalize_to_cycle(True)
+jnt_mech.set_lowpass_filter_frequency(-1)
+jnt_mech.set_print_processed_kinematics(False)
+jnt_mech.set_contacts(0,'all')
+jnt_mech.set_contact_outputs(0,'all')
+jnt_mech.set_contact_mesh_properties(0,'none')
+jnt_mech.set_ligaments(0,'none')
+jnt_mech.set_ligament_outputs(0,'none')
+jnt_mech.set_muscles(0,'none')
+jnt_mech.set_muscle_outputs(0,'none')
+
+jnt_mech.set_attached_geometry_bodies(0,'none')
+
+jnt_mech.set_output_orientation_frame('/bodyset/tibia_proximal_r')
+jnt_mech.set_output_position_frame('/bodyset/tibia_proximal_r')
+jnt_mech.set_write_vtp_files(True)
+jnt_mech.set_vtp_file_format('binary')
+jnt_mech.set_write_h5_file(False)
+jnt_mech.set_h5_kinematics_data(True)
+jnt_mech.set_h5_states_data(True)
+jnt_mech.set_write_transforms_file(False)
+jnt_mech.set_output_transforms_file_type('sto')
+jnt_mech.set_use_visualizer(False)
+
+analysis_set = osim.AnalysisSet()
+
+frc_reporter = osim.ForceReporter()
+frc_reporter.setName('ForceReporter')
+
+analysis_set.cloneAndAppend(frc_reporter)
+jnt_mech.set_AnalysisSet(analysis_set)
+jnt_mech.printToXML('./inputs/joint_mechanics_settings.xml')
+
+print('Running JointMechanicsTool...')
+jnt_mech.run()
