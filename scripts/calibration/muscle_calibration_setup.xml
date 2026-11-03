@@ -1,14 +1,23 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <OpenSimDocument Version="40500">
 	<MuscleCalibrationTool name="walking_muscle_calibration">
-		<!--Setup of a finished EMG-assisted COMAK run (or a COMAK run with the same model,
-		    EMG file and mapping). It gives the model, the external loads, the EMG file, its
-		    mapping to the muscles and the electromechanical delay, and, through its results,
-		    the secondary coordinates and the forces of the muscles without EMG.-->
-		<comak_setup_file>../exampleWalking_EMG_Assisted/inputs/comak_settings.xml</comak_setup_file>
-		<!--Folder the relative paths of the COMAK setup refer to (the folder COMAK was run from).
-		    Default: the parent folder of the COMAK setup file.-->
-		<comak_working_directory>../exampleWalking_EMG_Assisted</comak_working_directory>
+		<!--The trials. One set of muscle parameters is fitted to all of them together: it
+		    minimises the mean over the trials of the normalised moment error. Each trial is a
+		    finished COMAK run, identified by its COMAK setup, which gives the model, the
+		    external loads, the EMG file, its mapping to the muscles and the electromechanical
+		    delay, and, through its results, the secondary coordinates and the forces of the
+		    muscles without EMG. The trials should use the same model and the same EMG
+		    mapping. (A single trial can also be given with comak_setup_file and
+		    comak_working_directory directly in the tool.)-->
+		<MuscleCalibrationTrials>
+			<MuscleCalibrationTrial name="walking1">
+				<comak_setup_file>../exampleWalking_EMG_Assisted/inputs/comak_settings.xml</comak_setup_file>
+				<!--Folder the relative paths of the COMAK setup refer to (the folder COMAK was run from).
+				    Default: the parent folder of the COMAK setup file.-->
+				<comak_working_directory>../exampleWalking_EMG_Assisted</comak_working_directory>
+			</MuscleCalibrationTrial>
+			<!--Add one MuscleCalibrationTrial per trial, e.g. walking2, a faster speed, ...-->
+		</MuscleCalibrationTrials>
 		<!--Folder of the outputs. Relative paths here refer to the folder of this file.-->
 		<results_directory>./results/muscle-calibration</results_directory>
 		<!--New model with the calibrated max_isometric_force, optimal_fiber_length and

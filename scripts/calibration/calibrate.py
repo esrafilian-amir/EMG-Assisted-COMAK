@@ -110,8 +110,8 @@ class Problem:
         groups = [dict(g) for g in groups]
         used = {m for g in groups for m in g['muscles']}
         rest = [m for m in self.emg_muscles if m not in used]
-        if rest:
-            groups.append({'name': 'not_calibrated', 'muscles': rest, 'fit': []})
+        # always present, so the parameter vector has the same layout in every trial
+        groups.append({'name': 'not_calibrated', 'muscles': rest, 'fit': []})
         self.groups = groups
         self.group_of = np.zeros(len(self.emg_muscles), int)
         for gi, gr in enumerate(groups):
@@ -141,10 +141,15 @@ class Problem:
         f, _ = self.forces(x)
         return np.einsum('tm,tmd->td', f, self.arm[:, :, self.dof_idx])
 
-    def residuals(self, x, w_prior=0.05):
-        e = (self.id - self.moments(x)) / np.sqrt(self.var) / np.sqrt(len(self.t))
-        prior = (x - self.x0) / (self.ub - self.lb) * w_prior
-        return np.concatenate([e.ravel(), prior])
+    def errors(self, x):
+        """Moment errors normalised by the ID variance; sum of squares = CEINMS error."""
+        return ((self.id - self.moments(x)) / np.sqrt(self.var) / np.sqrt(len(self.t))).ravel()
+
+    def prior(self, x, w_prior=0.05):
+        return (x - self.x0) / (self.ub - self.lb) * w_prior
+
+    def residuals(self, x):
+        return np.concatenate([self.errors(x), self.prior(x)])
 
     def report(self, x):
         m = self.moments(x)
@@ -156,17 +161,61 @@ class Problem:
         return out
 
     def fit(self, max_nfev=300):
-        free = np.flatnonzero(self.free)
-
-        def full(xf):
-            x = self.x0.copy()
-            x[free] = xf
-            return x
-        sol = least_squares(lambda xf: self.residuals(full(xf)), self.x0[free],
-                            bounds=(self.lb[free], self.ub[free]), diff_step=1e-3,
-                            x_scale='jac', max_nfev=max_nfev)
-        return full(sol.x), sol
+        return fit_problem(self, max_nfev)
 
     def group_values(self, x):
         p = x.reshape(len(self.groups), len(PARAMS))
         return {gr['name']: dict(zip(PARAMS, map(float, p[gi]))) for gi, gr in enumerate(self.groups)}
+
+
+def fit_problem(pr, max_nfev=300):
+    free = np.flatnonzero(pr.free)
+
+    def full(xf):
+        x = pr.x0.copy()
+        x[free] = xf
+        return x
+    sol = least_squares(lambda xf: pr.residuals(full(xf)), pr.x0[free],
+                        bounds=(pr.lb[free], pr.ub[free]), diff_step=1e-3,
+                        x_scale='jac', max_nfev=max_nfev)
+    return full(sol.x), sol
+
+
+class MultiProblem:
+    """Several trials, one shared parameter set.
+
+    The objective is the mean over the trials of each trial's normalised moment error, so
+    every trial counts the same whatever its length or moment size, plus the prior. A
+    parameter set that is good for one trial only is penalised by the others."""
+
+    def __init__(self, problems, names):
+        self.problems, self.trial_names = problems, names
+        p0 = problems[0]
+        for p in problems[1:]:
+            if [g['name'] for g in p.groups] != [g['name'] for g in p0.groups]:
+                raise ValueError('the trials must use the same muscle groups')
+        self.groups, self.dofs = p0.groups, p0.dofs
+        self.x0, self.lb, self.ub, self.free = p0.x0, p0.lb, p0.ub, p0.free
+        # one entry per muscle that has EMG in any trial, with its group
+        self.emg_muscles = []
+        for p in problems:
+            self.emg_muscles += [m for m in p.emg_muscles if m not in self.emg_muscles]
+        self.group_of = np.zeros(len(self.emg_muscles), int)
+        for gi, gr in enumerate(self.groups):
+            for m in gr['muscles']:
+                if m in self.emg_muscles:
+                    self.group_of[self.emg_muscles.index(m)] = gi
+        self.names = p0.names
+
+    unpack = Problem.unpack
+    group_values = Problem.group_values
+
+    def residuals(self, x):
+        n = np.sqrt(len(self.problems))
+        return np.concatenate([p.errors(x) / n for p in self.problems] + [self.problems[0].prior(x)])
+
+    def report(self, x):
+        return {t: p.report(x) for t, p in zip(self.trial_names, self.problems)}
+
+    def fit(self, max_nfev=300):
+        return fit_problem(self, max_nfev)

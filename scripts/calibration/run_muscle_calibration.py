@@ -2,19 +2,24 @@
 
     python run_muscle_calibration.py <muscle_calibration_setup.xml> --install <opensim install>
 
-Inputs: the setup file (see muscle_calibration_setup.xml) and a finished COMAK run,
-whose COMAK setup gives the model, the EMG file, its mapping and delay, the external
-loads and the results (the states, which hold the secondary coordinates found by the
-COMAK sweep, and the muscle forces of the muscles without EMG).
+Inputs: the setup file (see muscle_calibration_setup.xml) and, for each trial, a finished
+COMAK run, whose COMAK setup gives the model, the EMG file, its mapping and delay, the
+external loads and the results (the states, which hold the secondary coordinates found by
+the COMAK sweep, and the muscle forces of the muscles without EMG).
 
-Outputs, in the results directory of the setup:
+One set of musculotendon parameters is fitted to all the trials together: it minimises the
+mean over the trials of the normalised moment error.
+
+Outputs:
   <output_model_file>   the model with the calibrated max_isometric_force,
                         optimal_fiber_length and tendon_slack_length; a relative path
                         is relative to the folder of the original model (the contact
                         meshes and geometry are found next to it)
-  <output_emg_file>     the EMG with the calibrated shape, to use as emg_file of COMAK
-                        (the electromechanical delay is still applied by COMAK)
-  calibration_report.json, geometry.npz (the cache, reused when it exists)
+  <trial>_<output_emg_file> (<output_emg_file> for a single trial), in the results
+                        directory: the EMG of each trial with the calibrated shape, to use
+                        as emg_file of COMAK (the electromechanical delay is still
+                        applied by COMAK)
+  calibration_report.json, and the geometry cache of each trial (reused when it exists)
 """
 import argparse
 import json
@@ -54,14 +59,24 @@ def parse_mapping(s):
     return terms
 
 
+def read_trial(node, base, name):
+    setup = resolve(text(node, 'comak_setup_file'), base)
+    # relative paths inside the COMAK setup are relative to the folder COMAK was run from
+    cwd = resolve(text(node, 'comak_working_directory',
+                       os.path.join(os.path.dirname(setup), '..')), base)
+    return {'name': name, 'comak_setup': setup, 'comak_cwd': cwd}
+
+
 def read_setup(setup_file):
     base = os.path.dirname(os.path.abspath(setup_file))
     tool = ET.parse(setup_file).getroot().find('MuscleCalibrationTool')
     cfg = {'base': base, 'name': tool.get('name', 'muscle_calibration')}
-    cfg['comak_setup'] = resolve(text(tool, 'comak_setup_file'), base)
-    # relative paths inside the COMAK setup are relative to the folder COMAK was run from
-    cfg['comak_cwd'] = resolve(text(tool, 'comak_working_directory',
-                                    os.path.join(os.path.dirname(cfg['comak_setup']), '..')), base)
+    trials = tool.find('MuscleCalibrationTrials')
+    if trials is not None:
+        cfg['trials'] = [read_trial(t, base, t.get('name', f'trial{i + 1}'))
+                         for i, t in enumerate(trials.findall('MuscleCalibrationTrial'))]
+    else:    # a single trial given directly
+        cfg['trials'] = [read_trial(tool, base, cfg['name'])]
     cfg['results'] = resolve(text(tool, 'results_directory', './muscle-calibration'), base)
     cfg['out_model'] = text(tool, 'output_model_file', 'calibrated_model.osim')
     cfg['out_emg'] = text(tool, 'output_emg_file', 'calibrated_emg.sto')
@@ -83,10 +98,9 @@ def read_setup(setup_file):
     return cfg
 
 
-def read_comak_setup(cfg):
-    root = ET.parse(cfg['comak_setup']).getroot()
-    tool = root.find('COMAKTool')
-    cwd = cfg['comak_cwd']
+def read_comak_setup(trial):
+    tool = ET.parse(trial['comak_setup']).getroot().find('COMAKTool')
+    cwd = trial['comak_cwd']
     c = {'model': resolve(text(tool, 'model_file'), cwd),
          'grf': resolve(text(tool, 'external_loads_file'), cwd),
          'emg': resolve(text(tool, 'emg_file'), cwd),
@@ -100,14 +114,15 @@ def read_comak_setup(cfg):
     return c
 
 
-def write_outputs(cfg, cm, pr, x):
+def write_outputs(cfg, cms, pr, x):
     import opensim as osim
     q = pr.unpack(x)
     new = {}
-    model = osim.Model(cm['model'])
+    if len({cm['model'] for cm in cms}) > 1:
+        print('warning: the trials use different models; the first one is calibrated')
+    model = osim.Model(cms[0]['model'])
     muscles = model.updMuscles()
     for j, m in enumerate(pr.emg_muscles):
-        k = pr.names.index(m)
         mus = muscles.get(m)
         old = (mus.get_max_isometric_force(), mus.get_optimal_fiber_length(),
                mus.get_tendon_slack_length())
@@ -121,30 +136,33 @@ def write_outputs(cfg, cm, pr, x):
     os.makedirs(cfg['results'], exist_ok=True)
     # The contact meshes and the geometry are found relative to the model file, so by
     # default the new model goes into the folder of the original one.
-    model_path = resolve(cfg['out_model'], os.path.dirname(cm['model']))
+    model_path = resolve(cfg['out_model'], os.path.dirname(cms[0]['model']))
     model.printToXML(model_path)
 
     # EMG with the calibrated shape: one A per channel (the mean over the muscles it drives)
-    table = osim.TimeSeriesTable(cm['emg'])
-    labels = [str(l) for l in table.getColumnLabels()]
-    data = table.getMatrix().to_numpy().copy()
-    shape_of = {}
-    for j, m in enumerate(pr.emg_muscles):
-        for _, ch in cm['map'][m]:
-            shape_of.setdefault(ch.lower(), []).append(q['emg_shape'][j])
-    for ch, vals in shape_of.items():
-        col = [l.lower() for l in labels].index(ch)
-        if np.ptp(vals) > 1e-6:
-            print(f'warning: channel {ch} drives muscles with different shapes, using the mean')
-        data[:, col] = calibrate.shape_emg(np.clip(data[:, col], 0, 1), float(np.mean(vals)))
-    out = osim.TimeSeriesTable()
-    times = list(table.getIndependentColumn())
-    for k, t in enumerate(times):
-        out.appendRow(float(t), osim.RowVector(data[k, :].tolist()))
-    out.setColumnLabels(labels)
-    emg_path = os.path.join(cfg['results'], cfg['out_emg'])
-    osim.STOFileAdapter.write(out, emg_path)
-    return model_path, emg_path, new
+    emg_paths = {}
+    for trial, cm in zip(cfg['trials'], cms):
+        table = osim.TimeSeriesTable(cm['emg'])
+        labels = [str(l) for l in table.getColumnLabels()]
+        data = table.getMatrix().to_numpy().copy()
+        shape_of = {}
+        for m, terms in cm['map'].items():
+            if m in pr.emg_muscles:
+                for _, ch in terms:
+                    shape_of.setdefault(ch.lower(), []).append(q['emg_shape'][pr.emg_muscles.index(m)])
+        for ch, vals in shape_of.items():
+            col = [l.lower() for l in labels].index(ch)
+            if np.ptp(vals) > 1e-6:
+                print(f'warning: channel {ch} drives muscles with different shapes, using the mean')
+            data[:, col] = calibrate.shape_emg(np.clip(data[:, col], 0, 1), float(np.mean(vals)))
+        out = osim.TimeSeriesTable()
+        for k, t in enumerate(table.getIndependentColumn()):
+            out.appendRow(float(t), osim.RowVector(data[k, :].tolist()))
+        out.setColumnLabels(labels)
+        name = cfg['out_emg'] if len(cfg['trials']) == 1 else f"{trial['name']}_{cfg['out_emg']}"
+        emg_paths[trial['name']] = os.path.join(cfg['results'], name)
+        osim.STOFileAdapter.write(out, emg_paths[trial['name']])
+    return model_path, emg_paths, new
 
 
 def main():
@@ -155,46 +173,58 @@ def main():
     a = ap.parse_args()
 
     cfg = read_setup(a.setup)
-    cm = read_comak_setup(cfg)
     os.makedirs(cfg['results'], exist_ok=True)
-    cache = os.path.join(cfg['results'], 'geometry.npz')
-    states = os.path.join(cm['results'], cm['prefix'] + '_states.sto')
-    force = os.path.join(cm['results'], cm['prefix'] + '_force.sto')
+    cms, problems = [], []
+    for trial in cfg['trials']:
+        cm = read_comak_setup(trial)
+        cms.append(cm)
+        folder = os.path.join(cfg['results'], trial['name'])
+        os.makedirs(folder, exist_ok=True)
+        cache = os.path.join(folder, 'geometry.npz')
+        states = os.path.join(cm['results'], cm['prefix'] + '_states.sto')
+        force = os.path.join(cm['results'], cm['prefix'] + '_force.sto')
+        if a.recompute_geometry or not os.path.exists(cache):
+            print(f"Stage 1 [{trial['name']}]: geometry and inverse dynamics from", states)
+            extract_geometry.main(argparse.Namespace(
+                install=a.install, model=cm['model'], states=states, grf_setup=cm['grf'],
+                out=cache, suffix=cfg['suffix'], exclude='Muscles'))
+        else:
+            print(f"Stage 1 [{trial['name']}]: using the cache", cache)
+        problems.append(calibrate.Problem(cache, cm['emg'], force, a.install, cm['delay'],
+                                          cfg['coordinates'], cm['map'], cfg['groups'],
+                                          cfg['bounds']))
 
-    if a.recompute_geometry or not os.path.exists(cache):
-        print('Stage 1: geometry and inverse dynamics from', states)
-        extract_geometry.main(argparse.Namespace(
-            install=a.install, model=cm['model'], states=states, grf_setup=cm['grf'],
-            out=cache, suffix=cfg['suffix'], exclude='Muscles'))
-    else:
-        print('Stage 1: using the cache', cache)
-
-    print('Stage 2: calibration')
-    pr = calibrate.Problem(cache, cm['emg'], force, a.install, cm['delay'], cfg['coordinates'],
-                           cm['map'], cfg['groups'], cfg['bounds'])
-    before = pr.report(pr.x0)
+    print('Stage 2: calibration on', len(problems), 'trial(s)')
+    pr = problems[0] if len(problems) == 1 else calibrate.MultiProblem(
+        problems, [t['name'] for t in cfg['trials']])
+    names = [t['name'] for t in cfg['trials']]
+    before = {names[0]: pr.report(pr.x0)} if len(problems) == 1 else pr.report(pr.x0)
     x, sol = pr.fit()
-    after = pr.report(x)
+    after = {names[0]: pr.report(x)} if len(problems) == 1 else pr.report(x)
 
-    print('%-14s %22s %22s' % ('', 'before (rmse Nm, R2)', 'after (rmse Nm, R2)'))
-    for n in pr.dofs:
-        print('%-14s %10.1f  %8.2f %12.1f  %8.2f' % (n, before[n]['rmse_Nm'], before[n]['r2'],
-                                                     after[n]['rmse_Nm'], after[n]['r2']))
+    for t in names:
+        print(f'[{t}]')
+        print('%-14s %22s %22s' % ('', 'before (rmse Nm, R2)', 'after (rmse Nm, R2)'))
+        for n in pr.dofs:
+            print('%-14s %10.1f  %8.2f %12.1f  %8.2f' % (
+                n, before[t][n]['rmse_Nm'], before[t][n]['r2'],
+                after[t][n]['rmse_Nm'], after[t][n]['r2']))
     print('%-24s %s' % ('group', ' '.join('%12s' % p for p in calibrate.PARAMS)))
     for name, v in pr.group_values(x).items():
         print('%-24s %s' % (name, ' '.join('%12.3f' % v[p] for p in calibrate.PARAMS)))
 
     print('Stage 3: writing the calibrated model and EMG')
-    model_path, emg_path, new = write_outputs(cfg, cm, pr, x)
+    model_path, emg_paths, new = write_outputs(cfg, cms, pr, x)
     print('  model:', model_path)
-    print('  EMG  :', emg_path)
-    json.dump({'setup': os.path.abspath(a.setup), 'coordinates': pr.dofs, 'before': before,
-               'after': after, 'groups': pr.group_values(x), 'muscles': new,
-               'bounds_hit': [f"{g['name']}.{p}" for gi, g in enumerate(pr.groups)
-                              for pi, p in enumerate(calibrate.PARAMS)
-                              if pr.free[gi * len(calibrate.PARAMS) + pi] and
-                              (abs(x[gi * len(calibrate.PARAMS) + pi] - pr.lb[gi * len(calibrate.PARAMS) + pi]) < 1e-3 or
-                               abs(x[gi * len(calibrate.PARAMS) + pi] - pr.ub[gi * len(calibrate.PARAMS) + pi]) < 1e-3)]},
+    for t, pth in emg_paths.items():
+        print('  EMG  :', pth, f'({t})')
+    n_p = len(calibrate.PARAMS)
+    hit = [f"{g['name']}.{p}" for gi, g in enumerate(pr.groups) for pi, p in enumerate(calibrate.PARAMS)
+           if pr.free[gi * n_p + pi] and (abs(x[gi * n_p + pi] - pr.lb[gi * n_p + pi]) < 1e-3
+                                          or abs(x[gi * n_p + pi] - pr.ub[gi * n_p + pi]) < 1e-3)]
+    json.dump({'setup': os.path.abspath(a.setup), 'trials': names, 'coordinates': pr.dofs,
+               'before': before, 'after': after, 'groups': pr.group_values(x), 'muscles': new,
+               'bounds_hit': hit},
               open(os.path.join(cfg['results'], 'calibration_report.json'), 'w'), indent=1)
 
 
