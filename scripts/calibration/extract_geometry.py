@@ -16,6 +16,8 @@ import sys
 
 import numpy as np
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 PRIMARY = ['hip_flex_r', 'hip_add_r', 'hip_rot_r', 'knee_flex_r', 'ankle_flex_r']
 
 
@@ -73,6 +75,24 @@ def main(a=None):
            ['max_isometric_force', 'optimal_fiber_length', 'tendon_slack_length',
             'pennation_angle_at_optimal', 'max_contraction_velocity']}
 
+    # The force-length curves of every muscle, sampled on the grids of calibrate.py. They
+    # depend on the normalised length only, so they do not change with the parameters.
+    from calibrate import LN_GRID, TN_GRID
+    curves = {'curve_active_force_length': [], 'curve_passive_force_length': [],
+              'curve_tendon_force_length': []}
+    for m in muscles:
+        mus = osim.Millard2012EquilibriumMuscle.safeDownCast(m)
+        if mus is None:
+            raise SystemExit(f'{m.getName()} is not a Millard2012EquilibriumMuscle: the '
+                             f'calibration reads the curves of that muscle model')
+        curves['curve_active_force_length'].append(
+            [mus.getActiveForceLengthCurve().calcValue(float(x)) for x in LN_GRID])
+        curves['curve_passive_force_length'].append(
+            [mus.getFiberForceLengthCurve().calcValue(float(x)) for x in LN_GRID])
+        curves['curve_tendon_force_length'].append(
+            [mus.getTendonForceLengthCurve().calcValue(float(x)) for x in TN_GRID])
+    curves = {k: np.array(v) for k, v in curves.items()}
+
     # inverse dynamics of all coordinates in the states file
     work = os.path.dirname(os.path.abspath(a.out))
     vcols = [l for l in labels if l.endswith('/value')]
@@ -113,7 +133,7 @@ def main(a=None):
 
     np.savez(a.out, time=time, names=np.array(names), primary=np.array(PRIMARY),
              length=length, speed=speed, arm=arm, id_moments=moments,
-             **{k: v for k, v in par.items()})
+             **curves, **{k: v for k, v in par.items()})
     print('muscles', n_m, 'frames', n_t, 'wrote', a.out)
 
 

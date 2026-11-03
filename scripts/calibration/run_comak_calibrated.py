@@ -19,6 +19,9 @@ def main():
     p.add_argument('--emg', required=True)
     p.add_argument('--results', required=True)
     p.add_argument('--cwd', default=None, help='default: the parent folder of the setup file')
+    p.add_argument('--tendon-compliance', action='store_true',
+                   help='use_tendon_compliance on: optimal fiber length and tendon slack length '
+                        'then act on the COMAK muscle force')
     a = p.parse_args()
 
     sys.path.insert(0, os.path.join(a.install, 'sdk', 'python'))
@@ -36,6 +39,8 @@ def main():
     comak.set_settle_sim_results_directory(os.path.abspath(a.results))
     comak.set_use_visualizer(False)
     comak.set_verbose(0)
+    if a.tendon_compliance:
+        comak.set_use_tendon_compliance(True)
     comak.printToXML(os.path.join(a.results, 'comak_settings_calibrated.xml'))
     print('Running COMAK with', a.model)
     comak.run()

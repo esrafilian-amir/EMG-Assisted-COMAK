@@ -24,14 +24,43 @@ DEFAULT_BOUNDS = {'strength': (0.5, 2.0), 'fiber_length': (0.95, 1.05),
                   'tendon_slack': (0.95, 1.05), 'emg_shape': (-3.0, A0)}
 
 
-# ---------------------------------------------------------------- Hill model (Thelen-like)
-def tendon_force(strain):
-    e = np.clip(strain, 0.0, 0.25)
-    return np.where(strain < 0, 0.0, (np.exp(35.0 * e) - 1.0) / (np.exp(35.0 * 0.033) - 1.0))
+# ---------------------------------------------------------------- Hill model
+# The curves are the ones of the model's Millard muscles, sampled by extract_geometry.py
+# into tables (the curves depend on the normalised length only, so the parameters do not
+# change them). The force is the one COMAK uses with use_tendon_compliance: the tendon force
+# of the equilibrium at zero fiber velocity, so there is no force-velocity term.
+LN_GRID = np.linspace(0.0, 2.5, 1251)      # fiber length / optimal fiber length
+TN_GRID = np.linspace(0.9, 1.25, 1401)     # tendon length / tendon slack length
 
 
-def hill_force(act, lmt, vmt, fmax, l0, lts, alpha0, vmax):
-    """Force along the tendon (N). All arrays are frames x muscles or muscles."""
+def table_lookup(tab, x, grid):
+    """tab: muscles x samples; x: frames x muscles (or muscles); linear interpolation."""
+    pos = np.clip((x - grid[0]) / (grid[1] - grid[0]), 0.0, len(grid) - 1.000001)
+    i = pos.astype(int)
+    f = pos - i
+    cols = np.arange(tab.shape[0])
+    return tab[cols, i] * (1.0 - f) + tab[cols, i + 1] * f
+
+
+def hill_force(act, lmt, fmax, l0, lts, alpha0, curves):
+    """Muscle force (N) as COMAK computes it with use_tendon_compliance.
+
+    The tendon force of the equilibrium at zero fiber velocity (equilibrateMuscles) is
+    linearised in the activation from two points, a and a + 0.1 (a clipped to 0.02..0.9);
+    a muscle whose slope is below 5 % of its maximum force (a slack tendon) keeps the rigid
+    tendon force, activation * maximum force (COMAKTool::updateTendonComplianceForces).
+    act, lmt: frames x muscles; the rest muscles.
+    curves = (active force-length, passive force-length, tendon force-length) tables."""
+    a1 = np.clip(act, 0.02, 0.9)
+    f1 = _equilibrium_force(a1, lmt, fmax, l0, lts, alpha0, curves)
+    f2 = _equilibrium_force(a1 + 0.1, lmt, fmax, l0, lts, alpha0, curves)
+    slope = (f2 - f1) / 0.1
+    elastic = slope >= 0.05 * fmax
+    return np.where(elastic, slope * act + (f1 - slope * a1), fmax * act)
+
+
+def _equilibrium_force(act, lmt, fmax, l0, lts, alpha0, curves):
+    fal, fpe, ftn = curves
     lo = np.full(act.shape, 0.3) * l0
     hi = np.full(act.shape, 1.8) * l0
 
@@ -40,12 +69,8 @@ def hill_force(act, lmt, vmt, fmax, l0, lts, alpha0, vmax):
         ca = np.sqrt(1.0 - sa * sa)
         lt = lmt - lm * ca
         ln = lm / l0
-        vn = np.clip(vmt * ca / (vmax * l0), -1.0, 1.0)
-        fl = np.exp(-((ln - 1.0) ** 2) / 0.45)
-        fv = np.where(vn < 0, (1.0 + vn) / (1.0 - 4.0 * vn), 1.0 + 0.4 * np.tanh(4.0 * vn))
-        fpe = np.where(ln > 1.0, (np.exp(4.0 * (ln - 1.0) / 0.6) - 1.0) / (np.exp(4.0) - 1.0), 0.0)
-        fm = (act * fl * fv + fpe) * ca
-        return tendon_force(lt / lts - 1.0) - fm, lt
+        fm = (act * table_lookup(fal, ln, LN_GRID) + table_lookup(fpe, ln, LN_GRID)) * ca
+        return table_lookup(ftn, lt / lts, TN_GRID) - fm, lt
 
     for _ in range(40):
         mid = 0.5 * (lo + hi)
@@ -53,7 +78,7 @@ def hill_force(act, lmt, vmt, fmax, l0, lts, alpha0, vmax):
         lo = np.where(r > 0, mid, lo)   # tendon pulls harder than the fiber: lengthen the fiber
         hi = np.where(r > 0, hi, mid)
     _, lt = residual(0.5 * (lo + hi))
-    return fmax * tendon_force(lt / lts - 1.0)
+    return fmax * table_lookup(ftn, lt / lts, TN_GRID)
 
 
 def shape_emg(e, a):
@@ -79,7 +104,12 @@ class Problem:
         self.lmt, self.vmt, self.arm = g['length'], g['speed'], g['arm']
         self.fmax, self.l0, self.lts = (g['max_isometric_force'], g['optimal_fiber_length'],
                                         g['tendon_slack_length'])
-        self.alpha0, self.vmax = g['pennation_angle_at_optimal'], g['max_contraction_velocity']
+        self.alpha0 = g['pennation_angle_at_optimal']
+        if 'curve_active_force_length' not in g.files:
+            raise SystemExit(f'{geo} has no muscle curves: recompute the geometry cache '
+                             f'(--recompute-geometry)')
+        self.curves = (g['curve_active_force_length'], g['curve_passive_force_length'],
+                       g['curve_tendon_force_length'])
         self.id = g['id_moments'][:, self.dof_idx]
 
         # EMG of each muscle: weighted sum of its channels, delayed
@@ -132,9 +162,9 @@ class Problem:
         s = self.m_emg
         act = shape_emg(self.emg, q['emg_shape'])
         f = self.f_bg.copy()
-        f[:, s] = hill_force(act, self.lmt[:, s], self.vmt[:, s],
-                             self.fmax[s] * q['strength'], self.l0[s] * q['fiber_length'],
-                             self.lts[s] * q['tendon_slack'], self.alpha0[s], self.vmax[s])
+        f[:, s] = hill_force(act, self.lmt[:, s], self.fmax[s] * q['strength'],
+                             self.l0[s] * q['fiber_length'], self.lts[s] * q['tendon_slack'],
+                             self.alpha0[s], tuple(c[s] for c in self.curves))
         return f, act
 
     def moments(self, x):
