@@ -76,20 +76,6 @@ void ComakTarget::initialize(){
     _nParameters = _nActuators + _nSecondaryCoord;
     setNumParameters(_nParameters);
     setParameterBounds(1);
-
-    // Start values of the secondary coordinates and the cost scale of the
-    // smoothness penalties (the mean activation cost coefficient of a muscle)
-    _secondary_start_values.resize(_nSecondaryCoord);
-    for (int j = 0; j < _nSecondaryCoord; ++j) {
-        _secondary_start_values[j] =
-                _model->getComponent<Coordinate>(_secondary_coords[j])
-                        .getValue(_state);
-    }
-    _smoothness_cost_scale = 0.0;
-    for (int i = 0; i < _nMuscles; ++i) {
-        _smoothness_cost_scale += _muscle_weight(i) * _muscle_volumes(i);
-    }
-    _smoothness_cost_scale /= std::max(1, _nMuscles);
     
     //Number of Constraints
     int nC = 0;
@@ -575,20 +561,6 @@ objectiveFunc(const SimTK::Vector &parameters, const bool new_parameters,
         + non_muscle_cost * _non_muscle_actuator_weight
         + contact_cost * _contact_energy_weight;
 
-    // Penalty on the second difference of the secondary coordinates
-    if (_sec_smooth_weight > 0 &&
-            _predicted_secondary.size() == _nSecondaryCoord) {
-        double smooth_cost = 0.0;
-        for (int j = 0; j < _nSecondaryCoord; ++j) {
-            const double d = (_secondary_start_values[j] +
-                    _scale_delta_coord * parameters(_nActuators + j) -
-                    _predicted_secondary[j]) / _max_change[j];
-            smooth_cost += d * d;
-        }
-        performance += _sec_smooth_weight * _smoothness_cost_scale *
-                smooth_cost;
-    }
-
     // Penalty on the change of the secondary coordinates
     if (_step_penalty_weight > 0 && _step_unit_scale.size() == _nSecondaryCoord) {
         double step_cost = 0.0;
@@ -660,17 +632,6 @@ gradientFunc(const SimTK::Vector &parameters, const bool new_parameters,
         gradient(p) += 
             _contact_energy_weight * _secondary_coord_unit_energy[i];
         p++;
-    }
-    if (_sec_smooth_weight > 0 &&
-            _predicted_secondary.size() == _nSecondaryCoord) {
-        for (int j = 0; j < _nSecondaryCoord; ++j) {
-            const double d = (_secondary_start_values[j] +
-                    _scale_delta_coord * parameters(_nActuators + j) -
-                    _predicted_secondary[j]) / _max_change[j];
-            gradient(_nActuators + j) += 2.0 * _sec_smooth_weight *
-                    _smoothness_cost_scale * d * _scale_delta_coord /
-                    _max_change[j];
-        }
     }
     if (_step_penalty_weight > 0 && _step_unit_scale.size() == _nSecondaryCoord) {
         for (int j = 0; j < _nSecondaryCoord; ++j) {

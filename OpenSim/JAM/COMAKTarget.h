@@ -182,16 +182,6 @@ public:
         _previous_activations = previous_activations;
     }
 
-    /** Penalty on the deviation of the secondary coordinates from the values
-    predicted by the previous time steps (their second difference):
-    weight * mean muscle cost coefficient * sum(((value - predicted) /
-    max change)^2). Call before initialize(). */
-    void setSecondarySmoothnessPenalty(double weight,
-            const SimTK::Vector& predicted_values) {
-        _sec_smooth_weight = weight;
-        _predicted_secondary = predicted_values;
-    }
-
     /** Keep the secondary coordinates within their range [range min, range
     max] in the optimization. Call before initialize(). */
     void setEnforceCoordinateRange(bool enforce) {
@@ -268,10 +258,6 @@ private:
     bool _enforce_coordinate_range = false;
     double _act_change_weight = 0.0;
     SimTK::Vector _previous_activations;
-    double _sec_smooth_weight = 0.0;
-    SimTK::Vector _predicted_secondary;
-    SimTK::Vector _secondary_start_values;
-    double _smoothness_cost_scale = 1.0;
     SimTK::Vector _reference_values;
     double _step_penalty_weight = 0.0;
     SimTK::Vector _step_unit_scale;
