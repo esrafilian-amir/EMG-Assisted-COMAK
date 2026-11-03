@@ -215,7 +215,10 @@ public:
     OpenSim_DECLARE_PROPERTY(udot_tolerance, double, 
         "Acceptable difference between the simulated accelerations (udots) "
         "and input observed accelerations to determine if the COMAK solution "
-        "at each time step has converged. The default value is 1.0.")
+        "at each time step has converged. With convergence_criterion 'force' "
+        "the errors are measured in multiples of the force tolerances and "
+        "this value is the number of times the tolerance that is accepted "
+        "(1.0: within the tolerance). The default value is 1.0.")
 
     OpenSim_DECLARE_PROPERTY(udot_worse_case_tolerance, double, 
         "Maximum acceptable difference between simulated and observed "
@@ -223,7 +226,9 @@ public:
         "converge. If the max difference between the udots for all iterations "
         "is greater than udot_worse_case_tolerance then no acceptable COMAK "
         "solution was found, and the solution from previous time step is used "
-        "for the current time step. The default value is 50.0.")
+        "for the current time step. With convergence_criterion 'force' the "
+        "value is in multiples of the force tolerances, as for "
+        "udot_tolerance. The default value is 50.0.")
 
     OpenSim_DECLARE_PROPERTY(use_central_difference_jacobian, bool,
         "Compute the secondary coordinate columns of the linearized "
@@ -262,6 +267,22 @@ public:
         "coordinates, this is an absolute bound. The default value is "
         "false.")
 
+    OpenSim_DECLARE_PROPERTY(activation_change_penalty_weight, double,
+        "Weight of a penalty on the change of each muscle activation from the "
+        "previous time step, which smooths the activations over time. It is "
+        "relative to the activation cost of the muscle: 1 makes a change of "
+        "the activation as costly as the activation itself. Keep it small "
+        "(for example 0.1), a large weight keeps muscles active. The default "
+        "value is 0, which means no penalty.")
+
+    OpenSim_DECLARE_PROPERTY(secondary_smoothness_penalty_weight, double,
+        "Weight of a penalty on the second difference of the secondary "
+        "coordinates over time (the deviation from the values extrapolated "
+        "from the two previous time steps), which smooths the secondary "
+        "kinematics. A deviation of max_change is as costly as the "
+        "activation of a typical muscle at weight 1. Keep it small (for "
+        "example 0.1). The default value is 0, which means no penalty.")
+
     OpenSim_DECLARE_PROPERTY(jacobian_recompute_interval, int,
         "Number of COMAK iterations that share one linearization of the "
         "accelerations: the columns of the constraint Jacobian are "
@@ -284,15 +305,15 @@ public:
 
     OpenSim_DECLARE_PROPERTY(convergence_criterion, std::string,
         "How the COMAK iterations decide that a time step has converged. "
-        "'acceleration' (default): the largest error between the simulated "
-        "and the observed accelerations of the primary and secondary "
-        "coordinates is below udot_tolerance (in rad/s^2 or m/s^2). 'force': "
-        "the unbalanced generalized force M * (simulated - observed "
-        "acceleration), with M the mass matrix of the model, of every primary "
-        "and secondary coordinate is below force_tolerance_rotation (N*m) or "
-        "force_tolerance_translation (N). The force criterion does not depend "
-        "on the inertia of the coordinate, which makes it comparable for "
-        "light coordinates (patella, menisci) and heavy ones (hip).")
+        "'force' (default): the unbalanced generalized force M * (simulated - "
+        "observed acceleration), with M the mass matrix of the model, of every "
+        "primary and secondary coordinate is below force_tolerance_rotation "
+        "(N*m) or force_tolerance_translation (N). It does not depend on the "
+        "inertia of the coordinate, which makes it comparable for light "
+        "coordinates (patella, menisci) and heavy ones (hip). 'acceleration': "
+        "the largest error between the simulated and the observed "
+        "accelerations of the primary and secondary coordinates is below "
+        "udot_tolerance (in rad/s^2 or m/s^2), as in earlier versions.")
 
     OpenSim_DECLARE_PROPERTY(force_tolerance_rotation, double,
         "For convergence_criterion 'force': tolerance on the unbalanced "

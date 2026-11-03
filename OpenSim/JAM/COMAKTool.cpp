@@ -90,7 +90,7 @@ void COMAKTool::constructProperties() {
     constructProperty_max_iterations(50);
     constructProperty_udot_tolerance(1.0);
     constructProperty_udot_worse_case_tolerance(50.0);
-    constructProperty_convergence_criterion("acceleration");
+    constructProperty_convergence_criterion("force");
     constructProperty_force_tolerance_rotation(0.1);
     constructProperty_force_tolerance_translation(1.0);
     constructProperty_unit_udot_epsilon(1e-8);
@@ -101,6 +101,8 @@ void COMAKTool::constructProperties() {
     constructProperty_step_penalty_rotation_length(0.05);
     constructProperty_secondary_velocity_carryover_to_next_step(0.0);
     constructProperty_jacobian_recompute_interval(1);
+    constructProperty_activation_change_penalty_weight(0.0);
+    constructProperty_secondary_smoothness_penalty_weight(0.0);
     constructProperty_enforce_secondary_coordinate_range(false);
     constructProperty_optimization_scale_delta_coord(1e-3);
 
@@ -819,6 +821,19 @@ void COMAKTool::performCOMAK() {
     int jac_age = 0;
     // secondary coordinate values at the start of the time step
     SimTK::Vector secondary_reference(_n_secondary_coord, 0.0);
+    // secondary coordinate values two time steps back, for the smoothness
+    SimTK::Vector secondary_prev2(_n_secondary_coord, 0.0);
+    int frames_done = 0;
+    if (get_activation_change_penalty_weight() < 0 ||
+            get_secondary_smoothness_penalty_weight() < 0) {
+        OPENSIM_THROW(Exception, "COMAKTool: the smoothness penalty weights "
+                "cannot be negative.");
+    }
+    if (get_activation_change_penalty_weight() > 1 ||
+            get_secondary_smoothness_penalty_weight() > 1) {
+        log_warn("A smoothness penalty weight above 1 is larger than the "
+                 "activation cost and can keep muscles active.");
+    }
     for (int i = 0; i < _n_frames; ++i) {
         if (_time[i] < get_start_time()) { continue; }
         if (_time[i] > get_stop_time()) { break; };
@@ -990,6 +1005,24 @@ void COMAKTool::performCOMAK() {
                 }
             }
             target.setReferenceValues(secondary_reference);
+            if (frames_done > 0) {
+                SimTK::Vector previous_activations(_n_muscles);
+                for (int m = 0; m < _n_muscles; ++m) {
+                    previous_activations[m] = _prev_parameters[m];
+                }
+                target.setActivationChangePenalty(
+                        get_activation_change_penalty_weight(),
+                        previous_activations);
+
+                SimTK::Vector predicted(_n_secondary_coord);
+                for (int j = 0; j < _n_secondary_coord; ++j) {
+                    predicted[j] = frames_done > 1
+                            ? 2.0 * _prev_secondary_value[j] - secondary_prev2[j]
+                            : _prev_secondary_value[j];
+                }
+                target.setSecondarySmoothnessPenalty(
+                        get_secondary_smoothness_penalty_weight(), predicted);
+            }
             target.setEnforceCoordinateRange(
                     get_enforce_secondary_coordinate_range());
             target.setSecondaryStepPenalty(
@@ -1457,11 +1490,13 @@ void COMAKTool::performCOMAK() {
         _prev_parameters = _optim_parameters;
         _prev_state = state;
 
+        secondary_prev2 = _prev_secondary_value;
         for (int m = 0; m < _n_secondary_coord; ++m) {
             Coordinate& coord =
                     _model.updComponent<Coordinate>(_secondary_coord_path[m]);
             _prev_secondary_value(m) = coord.getValue(state);
         }
+        frames_done++;
 
         // Save the results
         recordResultsStorage(state, i);
