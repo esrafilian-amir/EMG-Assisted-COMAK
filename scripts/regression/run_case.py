@@ -55,9 +55,10 @@ def make_link(link, target):
         shutil.copytree(target, link)
 
 
-def disable_muscle_in_model(text, folder, root, muscle):
+def disable_muscle_in_model(text, folder, root, muscle, inertia_scales=()):
     """Copy the model folder (Geometry linked, files copied) with `muscle` set
-    to appliesForce=false and point the script at the copy."""
+    to appliesForce=false and/or body inertias scaled, and point the script at
+    the copy."""
     m = re.search(r"model_file\s*=\s*'([^']+)'", text)
     model_path = (EXAMPLES / folder / m.group(1)).resolve()
     models_root = (EXAMPLES / "models").resolve()
@@ -69,12 +70,27 @@ def disable_muscle_in_model(text, folder, root, muscle):
             make_link(dest / item.name, item)
         elif item == model_path:
             osim = item.read_text()
-            # muscles do not list appliesForce explicitly, so add it
-            osim, n = re.subn(
-                r'(<[A-Za-z0-9]*Muscle[A-Za-z0-9]* name="' + re.escape(muscle) + r'">)',
-                "\\1\n<appliesForce>false</appliesForce>", osim, count=1)
-            if n != 1:
-                sys.exit(f"muscle {muscle} not found in {item.name}")
+            if muscle:
+                # muscles do not list appliesForce explicitly, so add it
+                osim, n = re.subn(
+                    r'(<[A-Za-z0-9]*Muscle[A-Za-z0-9]* name="' + re.escape(muscle) + r'">)',
+                    "\\1\n<appliesForce>false</appliesForce>", osim, count=1)
+                if n != 1:
+                    sys.exit(f"muscle {muscle} not found in {item.name}")
+            for spec in inertia_scales:
+                body, factor = spec.split("=")
+                factor = float(factor)
+
+                def scale(m):
+                    values = m.group(2).split()
+                    scaled = [repr(float(v) * factor) for v in values[:3]]
+                    return m.group(1) + " ".join(scaled + values[3:]) + m.group(3)
+
+                osim, n = re.subn(
+                    r'(<Body name="' + re.escape(body) + r'">.*?<inertia>)([^<]*)(</inertia>)',
+                    scale, osim, count=1, flags=re.S)
+                if n != 1:
+                    sys.exit(f"body {body} not found in {item.name}")
             (dest / item.name).write_text(osim)
         else:
             shutil.copy2(item, dest / item.name)
@@ -91,6 +107,10 @@ def main():
     ap.add_argument("--disable-muscle", metavar="NAME",
                     help="run with this muscle set to appliesForce=false, using "
                          "a modified copy of the model (Geometry is linked)")
+    ap.add_argument("--scale-inertia", action="append", default=[],
+                    metavar="BODY=FACTOR",
+                    help="multiply the diagonal inertia of this body by FACTOR in a "
+                         "modified copy of the model (Geometry is linked)")
     ap.add_argument("--insert-after", action="append", default=[],
                     metavar="REGEX::LINE",
                     help="add LINE after the first script line matching REGEX "
@@ -116,8 +136,9 @@ def main():
     text = (EXAMPLES / folder / script).read_text()
     for pat, rep in COMMON_PATCHES + extra:
         text = re.sub(pat, rep, text, flags=re.M)
-    if a.disable_muscle:
-        text = disable_muscle_in_model(text, folder, root, a.disable_muscle)
+    if a.disable_muscle or a.scale_inertia:
+        text = disable_muscle_in_model(text, folder, root, a.disable_muscle,
+                                       a.scale_inertia)
     if a.reuse_ik:
         src = Path(a.reuse_ik) / "JAM" / folder / "results" / "comak-inverse-kinematics"
         shutil.copytree(src, work / "results" / "comak-inverse-kinematics")

@@ -5,6 +5,7 @@ set(JAM_SOURCES
         About.cpp
         base64.cpp
         COMAKInverseKinematicsTool.cpp
+        COMAKQPSolver.cpp
         COMAKTarget.cpp
         COMAKTool.cpp
         COMAKSettings.cpp
@@ -23,6 +24,7 @@ set(JAM_INCLUDES
         About.h
         base64.h
         COMAKInverseKinematicsTool.h
+        COMAKQPSolver.h
         COMAKTarget.h
         COMAKTool.h
         COMAKSettings.h
@@ -51,6 +53,13 @@ OpenSimAddLibrary(
     SOURCES ${JAM_SOURCES}
     TESTDIRS Test
     )
+
+# Optional CasADi QP solvers for COMAKTool (property "solver"). CasADi is only
+# used inside COMAKQPSolver.cpp, so it stays a private dependency.
+if(OPENSIM_WITH_CASADI)
+    target_link_libraries(osimJAM PRIVATE casadi)
+    target_compile_definitions(osimJAM PRIVATE OPENSIM_JAM_WITH_CASADI)
+endif()
 
 #Need to let SWIG wrapping find included hdf5.h files in H5FileAdapter.h 
 target_include_directories(osimJAM INTERFACE ${HDF5_INCLUDE_DIR})

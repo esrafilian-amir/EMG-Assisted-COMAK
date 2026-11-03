@@ -403,7 +403,7 @@ void Smith2018ArticularContactForce::computeMeshProximity(
             }
 
             //neighboring triangles
-            std::set<int> neighborTris =
+            const std::set<int>& neighborTris =
                 target_mesh.getNeighborTris(target_tri[i]);
 
             for (int neighbor_tri : neighborTris) {
@@ -764,20 +764,36 @@ void Smith2018ArticularContactForce::computeForce(const State& state,
     Transform T_casting_to_target =
         casting_frame.findTransformBetween(state, target_frame);
 
+    // Triangles without contact carry no force. The forces of all contacting
+    // triangles are summed into one force and one couple on each body
+    // (equivalent to applying them one by one), which avoids two calls per
+    // triangle for the whole mesh.
+    const Vec3 origin_casting = T_casting_to_ground.p();
+    const Vec3 origin_target = target_frame.getTransformInGround(state).p();
+    Vec3 total_force_ground(0);
+    Vec3 moment_casting_ground(0);
+    Vec3 moment_target_ground(0);
+
     for (int i = 0; i < casting_mesh.getNumFaces(); ++i) {
-        Vec3 casting_force_ground =
+        if (casting_triangle_pressure(i) <= 0) { continue; }
+
+        const Vec3 force_ground =
             T_casting_to_ground.xformFrameVecToBase(casting_triangle_force(i));
+        const Vec3 point_ground =
+            T_casting_to_ground.shiftFrameStationToBase(triangle_center(i));
 
-        applyForceToPoint(state, casting_frame, triangle_center(i),
-            casting_force_ground, bodyForces);
-
-        Vec3 target_force_ground = -casting_force_ground;
-        Vec3 triangle_center_target =
-            T_casting_to_target.shiftFrameStationToBase(triangle_center(i));
-
-        applyForceToPoint(state, target_frame, triangle_center_target,
-            target_force_ground, bodyForces);
+        total_force_ground += force_ground;
+        moment_casting_ground += (point_ground - origin_casting) % force_ground;
+        moment_target_ground += (point_ground - origin_target) % (-force_ground);
     }
+
+    applyForceToPoint(state, casting_frame, Vec3(0), total_force_ground,
+        bodyForces);
+    applyTorque(state, casting_frame, moment_casting_ground, bodyForces);
+
+    applyForceToPoint(state, target_frame, Vec3(0), -total_force_ground,
+        bodyForces);
+    applyTorque(state, target_frame, moment_target_ground, bodyForces);
 
     //Compute Proximity and Pressure for Target mesh (optional for analysis)
     if (getModelingOption(state, "flip_meshes")) {

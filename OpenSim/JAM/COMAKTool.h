@@ -280,7 +280,21 @@ public:
         "changes in secondary coordinates."
         "The default value is 1e-3.")
 
-    OpenSim_DECLARE_PROPERTY(ipopt_diagnostics_level, int, 
+    OpenSim_DECLARE_PROPERTY(solver, std::string,
+        "The solver for the optimization of each COMAK iteration: 'ipopt' "
+        "(default), or 'casadi_qrqp', the CasADi active-set quadratic "
+        "programming solver, which needs activation_exponent = 2. The "
+        "quadratic program relaxes equality constraints that cannot be met, "
+        "instead of failing. It needs OpenSim to be built with "
+        "OPENSIM_WITH_CASADI. The ipopt_* properties only apply to 'ipopt'.")
+
+    OpenSim_DECLARE_PROPERTY(qp_slack_penalty, double,
+        "For the CasADi quadratic programming solvers: weight of the squared "
+        "violation of an acceleration constraint (rows scaled to a largest "
+        "entry of 1) that cannot be met. "
+        "The default value is 1e4.")
+
+    OpenSim_DECLARE_PROPERTY(ipopt_diagnostics_level, int,
         "Set the verbosity of the IPOPT optimizer must be within 0-12. "
         "The default value is 0.")
 

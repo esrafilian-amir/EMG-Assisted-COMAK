@@ -17,6 +17,9 @@
 #include "COMAKTool.h"
 
 #include "COMAKTarget.h"
+#include "COMAKQPSolver.h"
+#include <chrono>
+#include <cstring>
 #include <memory>
 #include "JAMUtilities.h"
 #include "OpenSim/Actuators/CoordinateActuator.h"
@@ -96,6 +99,8 @@ void COMAKTool::constructProperties() {
     constructProperty_secondary_velocity_carryover_to_next_step(0.0);
     constructProperty_optimization_scale_delta_coord(1e-3);
 
+    constructProperty_solver("ipopt");
+    constructProperty_qp_slack_penalty(1e4);
     constructProperty_ipopt_diagnostics_level(0);
     constructProperty_ipopt_max_iterations(500);
     constructProperty_ipopt_convergence_tolerance(1e-4);
@@ -124,6 +129,15 @@ void COMAKTool::constructProperties() {
     constructProperty_is_emg_assisted(false);
     constructProperty_ignore_tendon_compliance(true);
     constructProperty_ignore_activation_dynamics(true);
+}
+
+// The Smith2018ArticularContactForce outputs of the target meshes ("flip_meshes")
+// are only needed by analyses; computing them doubles the contact work.
+static void disableFlippedContactMeshes(Model& model, SimTK::State& state) {
+    for (auto& contact :
+            model.updComponentList<Smith2018ArticularContactForce>()) {
+        contact.setModelingOption(state, "flip_meshes", 0);
+    }
 }
 
 void COMAKTool::setModel(Model& model) {
@@ -743,6 +757,10 @@ void COMAKTool::performCOMAK() {
 
     state = _model.initSystem();
 
+    if (get_AnalysisSet().getSize() == 0) {
+        disableFlippedContactMeshes(_model, state);
+    }
+
     // Visualizer Settings
     SimTK::Visualizer* viz = NULL;
     if (get_use_visualizer()) {
@@ -872,9 +890,15 @@ void COMAKTool::performCOMAK() {
         SimTK::Matrix iter_parameters(get_max_iterations(), _n_parameters, 0.0);
         std::vector<SimTK::State> iter_states(get_max_iterations());
         int n_iter = 0;
+        // time spent in the model evaluations (Jacobian), the optimizer and the rest
+        double seconds_jacobian = 0.0;
+        double seconds_optimizer = 0.0;
+        const auto frame_start = std::chrono::steady_clock::now();
+        auto iteration_start = frame_start;
         SimTK::Vector desired_act(_n_muscles);
         for (int iter = 0; iter < get_max_iterations(); ++iter) {
             n_iter++;
+            iteration_start = std::chrono::steady_clock::now();
 
             log_info("---------------------------------------"
                      "---------------------------------------");
@@ -973,7 +997,66 @@ void COMAKTool::performCOMAK() {
             target.setDesiredActivation(desired_act);
 
             target.initialize();
+            seconds_jacobian += std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() - iteration_start).count();
 
+            const std::string solver_name = get_solver();
+            const bool use_qp = (solver_name != "ipopt");
+            if (use_qp && solver_name != "casadi_qrqp") {
+                OPENSIM_THROW(Exception, "COMAKTool: unknown solver '" +
+                        solver_name + "'. Use 'ipopt' or 'casadi_qrqp'.");
+            }
+            if (use_qp && get_activation_exponent() != 2) {
+                OPENSIM_THROW(Exception, "COMAKTool: the solver '" +
+                        solver_name + "' needs activation_exponent = 2.");
+            }
+
+            const auto optimizer_start = std::chrono::steady_clock::now();
+            const SimTK::Vector parameters_before_optimization = _optim_parameters;
+
+            if (use_qp) {
+                // The cost is separable and quadratic for exponent 2, so its
+                // diagonal Hessian follows from the gradient at 0 and at 1.
+                const int n = _n_parameters;
+                SimTK::Vector zeros(n, 0.0), ones(n, 1.0), g(n), g1(n);
+                bool new_params = true;
+                target.gradientFunc(zeros, new_params, g);
+                target.gradientFunc(ones, new_params, g1);
+                SimTK::Vector hdiag = g1 - g;
+
+                // constraints are c0 + A (x - x_init) = 0, i.e., A x = -c(0)
+                SimTK::Matrix A;
+                SimTK::Vector c_at_zero;
+                target.constraintJacobian(zeros, new_params, A);
+                target.constraintFunc(zeros, new_params, c_at_zero);
+                SimTK::Vector rhs = -c_at_zero;
+
+                double* lo = nullptr;
+                double* up = nullptr;
+                target.getParameterLimits(&lo, &up);
+                SimTK::Vector lower(n), upper(n);
+                for (int p = 0; p < n; ++p) {
+                    lower[p] = lo[p];
+                    upper[p] = up[p];
+                }
+
+                SimTK::Vector x_qp;
+                double max_slack = 0.0;
+                std::string qp_status;
+                const bool qp_ok = solveCasadiQP(
+                        solver_name.substr(strlen("casadi_")), hdiag, g, A,
+                        rhs, lower, upper, _optim_parameters,
+                        get_qp_slack_penalty(), x_qp, max_slack, qp_status);
+                if (qp_ok) {
+                    _optim_parameters = x_qp;
+                } else {
+                    log_error("COMAK QP solver failed: {}", qp_status);
+                }
+                if (max_slack > 1e-6) {
+                    log_info("The QP relaxed an acceleration constraint by "
+                             "up to {}", max_slack);
+                }
+            } else {
             SimTK::OptimizerAlgorithm algorithm = SimTK::InteriorPoint;
             SimTK::Optimizer optimizer(target, algorithm);
 
@@ -1007,13 +1090,16 @@ void COMAKTool::performCOMAK() {
                 "derivative_test_perturbation", 1e-6);
             */
 
-            const SimTK::Vector parameters_before_optimization = _optim_parameters;
             try {
                 optimizer.optimize(_optim_parameters);
             }
             catch (const SimTK::Exception::Base& ex) {
                 log_error("COMAK Optimization failed: {}", ex.getMessage());
             }
+            } // END ipopt
+
+            seconds_optimizer += std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() - optimizer_start).count();
 
             // A failed optimization can return NaN or infinite values, which
             // would corrupt the model state. Keep the previous parameters.
@@ -1129,6 +1215,13 @@ void COMAKTool::performCOMAK() {
             }
 
         } // END COMAK ITERATION
+
+        const double seconds_frame = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - frame_start).count();
+        log_info("Timing of this time step (s): total {:.2f}, linearization "
+                 "(model evaluations) {:.2f}, optimizer {:.2f}, other {:.2f}",
+                seconds_frame, seconds_jacobian, seconds_optimizer,
+                seconds_frame - seconds_jacobian - seconds_optimizer);
 
         int frame_converged = 0;
         double min_max_udot_error = max_udot_error;
@@ -1482,6 +1575,7 @@ SimTK::Vector COMAKTool::equilibriateSecondaryCoordinates() {
     if (get_use_visualizer()) { settle_model.setUseVisualizer(true); }
 
     state = settle_model.initSystem();
+    disableFlippedContactMeshes(settle_model, state);
 
     if (get_use_visualizer()) {
         SimTK::Visualizer& viz =

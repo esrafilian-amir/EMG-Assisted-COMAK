@@ -1175,71 +1175,89 @@ bool Smith2018ContactMesh::OBBTreeNode::rayIntersectOBB(
         SimTK::Vec3& intersection_point, double& distance) const {
 
     if (_child1 != NULL) {
-        // Recursively check the child nodes.
+        // Recursively check the child nodes. Each child keeps its own hit
+        // (triangle, point and distance), so that the triangle and point
+        // returned are those of the closer hit.
         SimTK::Real child1distance, child2distance;
-        SimTK::Array_<int> child1triangles, child2triangles;
         bool child1intersects = _child1->_bounds.intersectsRay(
                 origin, direction, child1distance);
         bool child2intersects = _child2->_bounds.intersectsRay(
                 origin, direction, child2distance);
 
-        if (child1intersects) {
-            if (child2intersects) {
-                // The ray intersects both child nodes.
-                // First check the closer one.
+        int tri1 = -1;
+        int tri2 = -1;
+        SimTK::Vec3 point1(0);
+        SimTK::Vec3 point2(0);
+        double hit1 = SimTK::Infinity;
+        double hit2 = SimTK::Infinity;
+        bool found1 = false;
+        bool found2 = false;
 
-                if (child1distance < child2distance) {
-                    child1intersects = _child1->rayIntersectOBB(mesh, origin,
-                            direction, tri_index, intersection_point,
-                            child1distance);
-
-                    if (!child1intersects || child2distance < child1distance)
-                        child2intersects = _child2->rayIntersectOBB(mesh,
-                                origin, direction, tri_index,
-                                intersection_point, child2distance);
-                } else {
-                    child2intersects = _child2->rayIntersectOBB(mesh, origin,
-                            direction, tri_index, intersection_point,
-                            child2distance);
-
-                    if (!child2intersects || child1distance < child2distance)
-                        child1intersects = _child1->rayIntersectOBB(mesh,
-                                origin, direction, tri_index,
-                                intersection_point, child1distance);
+        if (child1intersects && child2intersects) {
+            // The ray intersects both child nodes. First check the closer
+            // one, then the other only if its box starts before the hit.
+            if (child1distance < child2distance) {
+                found1 = _child1->rayIntersectOBB(
+                        mesh, origin, direction, tri1, point1, hit1);
+                if (!found1 || child2distance < hit1) {
+                    found2 = _child2->rayIntersectOBB(
+                            mesh, origin, direction, tri2, point2, hit2);
                 }
-            } else
-                child1intersects =
-                        _child1->rayIntersectOBB(mesh, origin, direction,
-                                tri_index, intersection_point, child1distance);
-        } else if (child2intersects)
-            child2intersects = _child2->rayIntersectOBB(mesh, origin, direction,
-                    tri_index, intersection_point, child2distance);
-
-        // If either one had an intersection, return the closer one.
-
-        if (child1intersects) {
-            if (!child2intersects || child1distance < child2distance) {
-                distance = child1distance;
-                return true;
+            } else {
+                found2 = _child2->rayIntersectOBB(
+                        mesh, origin, direction, tri2, point2, hit2);
+                if (!found2 || child1distance < hit2) {
+                    found1 = _child1->rayIntersectOBB(
+                            mesh, origin, direction, tri1, point1, hit1);
+                }
             }
+        } else if (child1intersects) {
+            found1 = _child1->rayIntersectOBB(
+                    mesh, origin, direction, tri1, point1, hit1);
+        } else if (child2intersects) {
+            found2 = _child2->rayIntersectOBB(
+                    mesh, origin, direction, tri2, point2, hit2);
         }
-        if (child2intersects) {
-            distance = child2distance;
+
+        // Return the closer hit
+        if (found1 && (!found2 || hit1 <= hit2)) {
+            tri_index = tri1;
+            intersection_point = point1;
+            distance = hit1;
+            return true;
+        }
+        if (found2) {
+            tri_index = tri2;
+            intersection_point = point2;
+            distance = hit2;
             return true;
         }
         return false;
     }
 
-    // Reached a leaf node, check all containing triangles
+    // Reached a leaf node: return the nearest hit in front of the origin
+    // among all containing triangles
+    bool found = false;
+    int best_tri = -1;
+    SimTK::Vec3 best_point(0);
+    double best_distance = SimTK::Infinity;
     for (int i = 0; i < (int)_triangles.size(); i++) {
-        if (rayIntersectTri(mesh, origin, direction, _triangles[i],
-                    intersection_point, distance)) {
-
-            tri_index = _triangles[i];
-            return true;
+        SimTK::Vec3 point;
+        double d;
+        if (rayIntersectTri(mesh, origin, direction, _triangles[i], point, d) &&
+                d >= 0.0 && d < best_distance) {
+            found = true;
+            best_tri = _triangles[i];
+            best_point = point;
+            best_distance = d;
         }
     }
-    return false;
+    if (found) {
+        tri_index = best_tri;
+        intersection_point = best_point;
+        distance = best_distance;
+    }
+    return found;
 }
 
 bool Smith2018ContactMesh::OBBTreeNode::rayIntersectTri(
@@ -1278,10 +1296,13 @@ bool Smith2018ContactMesh::OBBTreeNode::rayIntersectTri(
     h = SimTK::cross(direction, e2);
     a = dot(e1, h);
 
-    // If ray is perpendicular to the triangle, no interestion
-    // this should be adjusted for precision, a=0 when e1 and h are pependicular
-
-    if (a > -0.00000001 && a < 0.00000001) { return (false); }
+    // If the ray is parallel to the triangle plane, there is no intersection.
+    // a = 2 * (triangle area) * cos(angle between ray and triangle normal),
+    // so the tolerance is relative to the size of the triangle (an absolute
+    // tolerance would reject more grazing rays on finer meshes).
+    if (std::abs(a) < 1e-6 * e1.norm() * e2.norm()) {
+        return (false);
+    }
 
     // Else on to second test
     // find triangle edges
