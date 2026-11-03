@@ -425,7 +425,8 @@ print('Running COMAK Tool...')
 comak_muscle_weight_result_dir = './results/comak_muscle_weight'
 results_muscle_weight_basename = 'walking_muscle_weight'
 
-comak_muscle_weight = osim.COMAKTool(comak)  # copy of comak (MATLAB: comak.clone())
+comak_muscle_weight_clone = comak.clone()  # keep a reference so the clone is not freed
+comak_muscle_weight = osim.COMAKTool.safeDownCast(comak_muscle_weight_clone)
 comak_muscle_weight.set_results_directory(comak_muscle_weight_result_dir)
 comak_muscle_weight.set_results_prefix(results_muscle_weight_basename)
 
@@ -524,7 +525,8 @@ print('Running COMAK Tool...')
 comak_emg_result_dir = './results/comak_emg'
 results_emg_basename = 'walking_emg'
 
-comak_emg = osim.COMAKTool(comak)  # copy of comak (MATLAB: comak.clone())
+comak_emg_clone = comak.clone()  # keep a reference so the clone is not freed
+comak_emg = osim.COMAKTool.safeDownCast(comak_emg_clone)
 comak_emg.set_results_directory(comak_emg_result_dir)
 comak_emg.set_results_prefix(results_emg_basename)
 
