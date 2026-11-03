@@ -336,6 +336,15 @@ public:
     void setModel(Model& aModel);
     //void loadModel(const std::string &aToolSetupFileName);
     bool run();
+#ifndef SWIG
+    /** Set the muscle force model of COMAK directly (used when the tool is run
+    by the COMAKTool): the same as reading it from comak_setup_file.
+    passive_scale is the passive_force_scale of each muscle, by muscle path. An
+    input_forces_file still has priority. */
+    void setComakMuscleModel(bool force_length_velocity, bool passive_force,
+            bool tendon_compliance,
+            const std::map<std::string, double>& passive_scale);
+#endif
 
     int printResults(const std::string &aBaseName, const std::string &aDir);
 
@@ -353,6 +362,7 @@ private:
     std::vector<double> comakMuscleForces(const SimTK::State& state,
             const std::vector<double>& activation);
     bool _use_comak_force_model = false;
+    bool _comak_model_from_caller = false;
     bool _comak_flv = false;
     bool _comak_passive = false;
     bool _comak_tendon = false;

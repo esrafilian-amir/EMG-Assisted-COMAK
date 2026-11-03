@@ -43,8 +43,11 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
   `upgrade_old_setup` false keeps the old values. New scripts set `set_setup_version(1)`.
 - `saveUpgradedSetup(where)` (MATLAB, Python) and `opensim-cmd run-tool <xml> --save-upgraded[-to <where>]`
   save the upgraded setup: `<name>_v1.xml` next to the file, a path, a folder, or `inplace`.
-- Settle: one `settle_threshold` (rotation and translation), default 5e-4, with a plateau check
-  (`settle_plateau_tolerance` 0.1) on by default, in COMAKTool and COMAKInverseKinematicsTool.
+- Settle: one `settle_threshold` (rotation and translation) with a plateau check
+  (`settle_plateau_tolerance` 0.1) on by default, in COMAKTool (default 5e-4) and
+  COMAKInverseKinematicsTool (`secondary_constraint_sim_settle_threshold`, default 1e-4: the sweep
+  builds the coupling functions from the settled values, and 5e-4 changed them by up to 0.05 rad
+  at the patella compared to the original 1e-4).
 - The COMAK run only covers the time where the coordinates, the ground reaction data and the EMG (with
   the electromechanical delay) all have data: the start is moved later and the stop earlier, with a
   warning. A GRF file that is set but cannot be read is an error.
@@ -83,3 +86,45 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
   mechanics uses the forces COMAK used (the examples set it). With the default model the result is the
   same as before. Walking with the 5 models: knee contact peak 3120 N (rigid), 2613 (force-length-velocity),
   3248 (passive), 2877 (both), 2966 (tendon compliance); EMG trial 2573, 2400, 2697, 2549, 2384.
+
+## Joint mechanics inside COMAK
+
+- `COMAKTool.run_joint_mechanics` (default true) runs the JointMechanicsTool right after COMAK with the
+  settings of the `joint_mechanics` section of the COMAK setup, so no extra XML is needed. Settings that
+  are left empty come from COMAK: model, input states (the states of this run), start and stop time,
+  the muscle force model (force-length-velocity, passive force and scale, tendon compliance), and the
+  results file basename (the trial name: results_prefix or the name of the coordinates file).
+- Without a results directory the results go to `<folder of the COMAK results>/joint_mechanics/<trial name>`
+  (created if needed; existing files in it are not deleted). By default the vtp files and the ForceReporter
+  forces .sto file are written, and no h5 file.
+- A setup of an older version (no setup_version) does not run it: the upgrade sets it to false and says so.
+- The examples use it: the separate joint mechanics code is commented out at the end, and the settings that
+  can be changed are listed (commented) before `comak.run()`.
+
+## Inverse kinematics (COMAKInverseKinematicsTool)
+- Two-pass smoothed IK (`smooth_ik_second_pass`, on by default): the first solution is low-pass filtered
+  (`smooth_ik_lowpass_frequency`, use the `lowpass_filter_frequency` of the COMAK input kinematics; -1 uses
+  40 Hz) and the second solution fits the markers with a soft pull (`smooth_ik_weight`, 1) of each free coordinate
+  towards it. The first solution is written as `<output>_pass1.mot`. Walking test: the frame-to-frame noise
+  (second difference) dropped about 30 times, the marker RMS did not change.
+- `secondary_constraint_sim_settle_threshold` default 1e-4 (the COMAK settle threshold stays 5e-4): at 5e-4
+  the patella coupling functions differed from the original by up to 0.05 rad.
+- The constrained coordinates (e.g. patella flexion) start the sweep from their settled values (they restarted
+  from the model defaults).
+- A model that cannot be assembled at the first frame is an error (it was ignored).
+- A warning if the coupled coordinate (knee flexion) of the trial leaves the sweep range (default 0 to 100
+  deg), where the constraint functions are extrapolated.
+- `settling_sim_integrator_accuracy` below 1e-9 (the default 1e-10) uses the sweep accuracy; this is now logged
+  and the property is no longer overwritten.
+- The coordinate file is converted from degrees only if it is in degrees (`inDegrees=yes`).
+- The sweep states are only kept in memory when the simulation results are printed.
+- Units: JAM works in SI (meters, radians or degrees, Newtons). Marker .trc files are converted from their Units
+  header by OpenSim. The .mot/.sto coordinate files have no length unit, so a translational coordinate above 5
+  is reported as probably mm or cm (COMAKTool and COMAKInverseKinematicsTool).
+- If the model cannot be assembled at the first frame of the IK, the accuracy is relaxed in decades up to 1e-7
+  before it is an error (first and second pass).
+- The sweep covers [min, max] = `secondary_coupled_coordinate_start_value` (default -10 deg) to
+  `secondary_coupled_coordinate_stop_value` (default 110 deg). If min is below 0 and max above, the model is settled at 0
+  and two sweeps start from that settled state: one down to min and one up to max; they are joined into one constraint
+  function, so a trial that goes slightly below 0 (knee hyperextension) is not extrapolated and the part above 0 is the
+  same as before. With min at or above 0 it is the sweep as before (settled at min, swept up). The examples use -10 and 110.

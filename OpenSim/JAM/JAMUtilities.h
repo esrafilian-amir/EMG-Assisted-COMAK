@@ -22,6 +22,8 @@
 //=============================================================================
 //#include <OpenSim/Simulation/Model/Analysis.h>
 #include <OpenSim/Common/Logger.h>
+#include <OpenSim/Common/Storage.h>
+#include <OpenSim/Simulation/Model/Model.h>
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -121,6 +123,33 @@ private:
     bool _hitSafetyLimit = false;
     std::string _reason;
 };
+
+/** JAM works in SI units: meters, radians or degrees, Newtons. The .mot and
+.sto files have no length unit (the .trc marker files do, and OpenSim converts
+them to meters), so a translational coordinate that is larger than 5 is most
+likely in mm or cm. Warn once per coordinate. */
+inline void warnIfTranslationsNotMeters(const OpenSim::Model& model,
+        OpenSim::Storage& store, const std::string& file) {
+    const OpenSim::Array<std::string>& labels = store.getColumnLabels();
+    const OpenSim::CoordinateSet& coordinates = model.getCoordinateSet();
+    for (int i = 1; i < labels.getSize(); ++i) {
+        const std::string& name = labels[i];
+        const int index = coordinates.getIndex(name);
+        if (index < 0 || coordinates.get(index).getMotionType() !=
+                OpenSim::Coordinate::MotionType::Translational) { continue; }
+        OpenSim::Array<double> values;
+        store.getDataColumn(name, values);
+        double largest = 0.0;
+        for (int k = 0; k < values.getSize(); ++k) {
+            largest = (std::max)(largest, std::abs(values[k]));
+        }
+        if (largest > 5.0) {
+            OpenSim::log_warn("{}: the translational coordinate {} goes up "
+                    "to {}. JAM expects meters (SI); this looks like mm or "
+                    "cm. Convert the file to meters.", file, name, largest);
+        }
+    }
+}
 
 /** Print a prominent notice that a tool is running a setup (script or file)
 that was written for an older version, with the changes made to it. */

@@ -41,10 +41,11 @@ comak_ik.set_secondary_coordinates(8,'/jointset/pf_r/pf_tx_r');
 comak_ik.set_secondary_coordinates(9,'/jointset/pf_r/pf_ty_r');
 comak_ik.set_secondary_coordinates(10,'/jointset/pf_r/pf_tz_r');
 comak_ik.set_secondary_coupled_coordinate('/jointset/knee_r/knee_flex_r');
-comak_ik.set_secondary_constraint_sim_settle_threshold(5e-4);
+comak_ik.set_secondary_constraint_sim_settle_threshold(1e-4);
 comak_ik.set_secondary_constraint_sim_sweep_time(3.0);
-comak_ik.set_secondary_coupled_coordinate_start_value(0);
-comak_ik.set_secondary_coupled_coordinate_stop_value(100);
+% range of the knee flexion of the sweeps (deg): settled at 0, then swept down to the minimum and up to the maximum
+comak_ik.set_secondary_coupled_coordinate_start_value(-10);
+comak_ik.set_secondary_coupled_coordinate_stop_value(110);
 comak_ik.set_secondary_constraint_sim_integrator_accuracy(1e-2);
 comak_ik.set_secondary_constraint_sim_internal_step_limit(10000);
 comak_ik.set_secondary_constraint_function_file(...
@@ -60,6 +61,11 @@ comak_ik.set_time_range(1, 2.36);
 comak_ik.set_report_errors(true);
 comak_ik.set_report_marker_locations(false);
 comak_ik.set_ik_constraint_weight(100);
+% Filter frequency (Hz) of the input kinematics and force data. The same value is used by COMAK and by the
+% smoothing pass of the inverse kinematics (smooth_ik_second_pass, on by default). -1: no filter (the smoothing
+% then uses 40 Hz).
+lowpass_filter_frequency = 6;
+comak_ik.set_smooth_ik_lowpass_frequency(lowpass_filter_frequency);
 comak_ik.set_ik_accuracy(1e-5);
 comak_ik.set_use_visualizer(true);
 
@@ -242,7 +248,7 @@ comak.set_force_set_file('../models/healthy/lenhart2015/lenhart2015_reserve_actu
 comak.set_start_time(start_time);
 comak.set_stop_time(stop_time);
 comak.set_time_step(0.01);
-comak.set_lowpass_filter_frequency(6);
+comak.set_lowpass_filter_frequency(lowpass_filter_frequency);
 comak.set_print_processed_input_kinematics(false);
 comak.set_prescribed_coordinates(0,'/jointset/gnd_pelvis/pelvis_tx');
 comak.set_prescribed_coordinates(1,'/jointset/gnd_pelvis/pelvis_ty');
@@ -403,6 +409,22 @@ comak.set_non_muscle_actuator_weight(1000);
 comak.set_model_assembly_accuracy(1e-12);
 comak.set_use_visualizer(true);
 comak.set_verbose(2);
+
+% Joint mechanics: right after COMAK the joint mechanics (contact, ligament and kinematic outputs) is run
+% with the settings of the joint_mechanics section of the COMAK setup (run_joint_mechanics is true by
+% default). What is not set is taken from COMAK: the model, the states, the time range and the muscle force
+% model. The results are written to <results folder>/joint_mechanics/<trial name>: the vtp files and the
+% ForceReporter forces .sto file. Some of the settings that can be changed (uncomment):
+% comak.set_run_joint_mechanics(false);      % do not run the joint mechanics after COMAK
+% jm = comak.upd_joint_mechanics();
+% jm.set_results_directory('./results/joint_mechanics');   % default: <results>/joint_mechanics/<trial name>
+% jm.set_contacts(0,'all');                  % contact forces and pressures of these contacts
+% jm.set_ligaments(0,'all');                 % ligament forces of these ligaments
+% jm.set_muscles(0,'none');                  % muscle outputs
+% jm.set_write_h5_file(false);                % h5 file for the visualization
+% jm.set_normalize_to_cycle(true);            % results in percent of the cycle
+% jm.set_output_position_frame('/bodyset/tibia_proximal_r');     % report in the tibia frame
+% jm.set_output_orientation_frame('/bodyset/tibia_proximal_r');
 
 comak.print('./inputs/comak_settings.xml');
 
@@ -586,51 +608,48 @@ disp('Running COMAK Tool...')
 % yline(0.4,'-')
 % 
 % legend('nominal','emg')
-%% Perform Joint Mechanics Analysis
-jnt_mech = JointMechanicsTool();
-jnt_mech.set_model_file(model_file);
-jnt_mech.set_input_states_file([comak_result_dir '/' results_basename '_states.sto']);
-% the muscle force model of COMAK (force-length-velocity, passive force, tendon compliance) is read from
-% the COMAK setup, so the muscle forces are those COMAK used (activation * maximum force by default)
-jnt_mech.set_comak_setup_file('./inputs/comak_settings.xml');
-jnt_mech.set_use_muscle_physiology(false);
-jnt_mech.set_results_file_basename(results_basename);
-jnt_mech.set_results_directory(jnt_mech_result_dir);
-jnt_mech.set_start_time(1.16);
-jnt_mech.set_stop_time(-1);
-jnt_mech.set_resample_step_size(-1);
-jnt_mech.set_normalize_to_cycle(true);
-jnt_mech.set_lowpass_filter_frequency(-1);
-jnt_mech.set_print_processed_kinematics(false);
-jnt_mech.set_contacts(0,'all');
-jnt_mech.set_contact_outputs(0,'all');
-jnt_mech.set_contact_mesh_properties(0,'none');
-jnt_mech.set_ligaments(0,'all');
-jnt_mech.set_ligament_outputs(0,'all');
-jnt_mech.set_muscles(0,'all');
-jnt_mech.set_muscle_outputs(0,'all');
-
-jnt_mech.set_attached_geometry_bodies(0,'all');
-
-jnt_mech.set_output_orientation_frame('ground');
-jnt_mech.set_output_position_frame('ground');
-jnt_mech.set_write_vtp_files(false);
-jnt_mech.set_vtp_file_format('binary');
-jnt_mech.set_write_h5_file(true);
-jnt_mech.set_h5_kinematics_data(true);
-jnt_mech.set_h5_states_data(true);
-jnt_mech.set_write_transforms_file(false);
-jnt_mech.set_output_transforms_file_type('sto');
-jnt_mech.set_use_visualizer(true);
-
-analysis_set = AnalysisSet();
-
-frc_reporter = ForceReporter();
-frc_reporter.setName('ForceReporter');
-
-analysis_set.cloneAndAppend(frc_reporter);
-jnt_mech.set_AnalysisSet(analysis_set);
-jnt_mech.print('./inputs/joint_mechanics_settings.xml');
-
-disp('Running JointMechanicsTool...');
-jnt_mech.run();
+%% Joint mechanics as a separate tool (optional)
+% The joint mechanics is run by COMAK (see above). It can also be run on its own, with its own setup, for
+% COMAK results or for the results of another simulation. To do so, set comak.set_run_joint_mechanics(false)
+% above and uncomment the code below.
+% jnt_mech = JointMechanicsTool();
+% jnt_mech.set_model_file(model_file);
+% jnt_mech.set_input_states_file([comak_result_dir '/' results_basename '_states.sto']);
+% % the muscle force model of COMAK (force-length-velocity, passive force, tendon compliance) is read from
+% % the COMAK setup, so the muscle forces are those COMAK used (activation * maximum force by default)
+% jnt_mech.set_comak_setup_file('./inputs/comak_settings.xml');
+% jnt_mech.set_use_muscle_physiology(false);
+% jnt_mech.set_results_file_basename(results_basename);
+% jnt_mech.set_results_directory(jnt_mech_result_dir);
+% jnt_mech.set_start_time(1.16);
+% jnt_mech.set_stop_time(-1);
+% jnt_mech.set_resample_step_size(-1);
+% jnt_mech.set_normalize_to_cycle(true);
+% jnt_mech.set_lowpass_filter_frequency(-1);
+% jnt_mech.set_print_processed_kinematics(false);
+% jnt_mech.set_contacts(0,'all');
+% jnt_mech.set_contact_outputs(0,'all');
+% jnt_mech.set_contact_mesh_properties(0,'none');
+% jnt_mech.set_ligaments(0,'all');
+% jnt_mech.set_ligament_outputs(0,'all');
+% jnt_mech.set_muscles(0,'all');
+% jnt_mech.set_muscle_outputs(0,'all');
+% jnt_mech.set_attached_geometry_bodies(0,'all');
+% jnt_mech.set_output_orientation_frame('ground');
+% jnt_mech.set_output_position_frame('ground');
+% jnt_mech.set_write_vtp_files(false);
+% jnt_mech.set_vtp_file_format('binary');
+% jnt_mech.set_write_h5_file(true);
+% jnt_mech.set_h5_kinematics_data(true);
+% jnt_mech.set_h5_states_data(true);
+% jnt_mech.set_write_transforms_file(false);
+% jnt_mech.set_output_transforms_file_type('sto');
+% jnt_mech.set_use_visualizer(true);
+% analysis_set = AnalysisSet();
+% frc_reporter = ForceReporter();
+% frc_reporter.setName('ForceReporter');
+% analysis_set.cloneAndAppend(frc_reporter);
+% jnt_mech.set_AnalysisSet(analysis_set);
+% jnt_mech.print('./inputs/joint_mechanics_settings.xml');
+% disp('Running JointMechanicsTool...');
+% jnt_mech.run();

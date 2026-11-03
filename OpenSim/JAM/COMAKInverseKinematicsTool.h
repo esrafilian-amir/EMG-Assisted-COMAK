@@ -95,8 +95,9 @@ public:
         "change in all COMAKSecondaryCoordinate values is smaller than the "
         "settle_threshold, the settling simulation is finished. The final "
         "secondary coordinate values are used to initialize the sweep "
-        "simulation."
-        "The default value is 5e-4.")
+        "simulation. A tight threshold matters here: the sweep builds the "
+        "coupling functions of the secondary coordinates from the settled "
+        "values. The default value is 1e-4.")
 
     OpenSim_DECLARE_PROPERTY(secondary_constraint_sim_settle_plateau_tolerance,
         double,
@@ -139,22 +140,29 @@ public:
         "range of motion from the  secondary_coupled_coordinate_start_value "
         "to the secondary_coupled_coordinate_stop_value.")
 
-    OpenSim_DECLARE_PROPERTY(secondary_coupled_coordinate_start_value, double, 
-        "Initial Coordinate value for the secondary_coupled_coordinate in the "
+    OpenSim_DECLARE_PROPERTY(secondary_coupled_coordinate_start_value, double,
+        "Lowest value (min) of the secondary_coupled_coordinate in the "
         "secondary_constraint_sim. The units are in meters for translational "
-        "coordinates and degrees for rotational coordinates. "
-        "The default value is 0.0.")
+        "coordinates and degrees for rotational coordinates. If min is below "
+        "0 and the stop value is above 0, the model is settled at 0 and two "
+        "sweeps start from this settled state: one down to min and one up to "
+        "the stop value (max). Otherwise the model is settled at min and "
+        "swept up from it. The default value is -10.0.")
 
-    OpenSim_DECLARE_PROPERTY(secondary_coupled_coordinate_stop_value, double, 
-        "Final Coordinate value for the secondary_coupled_coordinate in the "
+    OpenSim_DECLARE_PROPERTY(secondary_coupled_coordinate_stop_value, double,
+        "Highest value (max) of the secondary_coupled_coordinate in the "
         "secondary_constraint_sim. The units are in meters for translational "
         "coordinates and degrees for rotational coordinates. "
-        "The default value is 100.0.")
+        "The default value is 110.0. The inverse kinematics warns if the "
+        "coordinate leaves the range from the start to the stop value, where "
+        "the constraint functions are extrapolated.")
 
     OpenSim_DECLARE_PROPERTY(
         settling_sim_integrator_accuracy, double, 
-        "Integrator tolerance for the forward simulation."
-        "The default value is 1e-10.")
+        "Integrator tolerance for the settling simulation. A value below 1e-9 "
+        "is not used: the secondary_constraint_sim_integrator_accuracy is "
+        "used instead (the default value 1e-10 therefore means the same "
+        "accuracy as the sweep).")
 
     OpenSim_DECLARE_PROPERTY(
         secondary_constraint_sim_integrator_accuracy, double, 
@@ -234,6 +242,30 @@ public:
         "The accuracy of the inverse kinematics solution in absolute terms. "
         "Default is 1e-5. It determines the number of significant digits to "
         "which the solution can be trusted.");
+
+    OpenSim_DECLARE_PROPERTY(smooth_ik_second_pass, bool,
+        "If true, the inverse kinematics is solved twice. The coordinates of "
+        "the first solution are smoothed (low-pass filtered, see "
+        "smooth_ik_lowpass_frequency) and the second solution fits the "
+        "markers with an added soft pull of each free coordinate towards its "
+        "smoothed value (smooth_ik_weight). It removes the frame-to-frame "
+        "noise of the first solution where the marker fit is flat. The first "
+        "solution is written to the output_motion_file with _pass1 added to "
+        "its name. The default value is true.")
+
+    OpenSim_DECLARE_PROPERTY(smooth_ik_weight, double,
+        "Weight of the soft coordinate references of the second pass (see "
+        "smooth_ik_second_pass), relative to the weights of the marker tasks. "
+        "Coordinates that have an IKCoordinateTask or that are constrained "
+        "(the secondary coordinates) get no reference. The default value is "
+        "1.")
+
+    OpenSim_DECLARE_PROPERTY(smooth_ik_lowpass_frequency, double,
+        "Cutoff frequency (Hz) of the low-pass filter applied to the "
+        "coordinates of the first pass to make the references of the second "
+        "pass. Use the same frequency as the filter of the input kinematics "
+        "(lowpass_filter_frequency of the COMAKTool). -1 (no filter set) "
+        "uses 40 Hz. The default value is 6.")
 
     OpenSim_DECLARE_UNNAMED_PROPERTY(IKTaskSet, 
         "Markers and coordinates to be considered (tasks) and their weightings. "

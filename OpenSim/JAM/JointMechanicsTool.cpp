@@ -159,6 +159,16 @@ void JointMechanicsTool::setModel(Model& aModel)
 }
 
 
+void JointMechanicsTool::setComakMuscleModel(bool force_length_velocity,
+        bool passive_force, bool tendon_compliance,
+        const std::map<std::string, double>& passive_scale) {
+    _comak_flv = force_length_velocity;
+    _comak_passive = passive_force;
+    _comak_tendon = tendon_compliance;
+    _comak_passive_scale = passive_scale;
+    _comak_model_from_caller = true;
+}
+
 bool JointMechanicsTool::run() {
     bool completed = false;
     
@@ -265,8 +275,10 @@ void JointMechanicsTool::initialize() {
     _model.initSystem();
 
     // Muscle force model of COMAK
-    _use_comak_force_model = false;
-    if (!get_comak_setup_file().empty() && get_input_forces_file().empty()) {
+    _use_comak_force_model =
+            _comak_model_from_caller && get_input_forces_file().empty();
+    if (!_comak_model_from_caller && !get_comak_setup_file().empty() &&
+            get_input_forces_file().empty()) {
         COMAKTool comak(get_comak_setup_file());
         _comak_flv = comak.get_use_force_length_velocity() ||
                 comak.get_use_muscle_physiology();

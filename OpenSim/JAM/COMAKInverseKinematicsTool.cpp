@@ -86,7 +86,7 @@ void COMAKInverseKinematicsTool::constructProperties()
     constructProperty_secondary_coordinates();
     constructProperty_constrained_coordinates();
     constructProperty_secondary_coupled_coordinate("");
-    constructProperty_secondary_constraint_sim_settle_threshold(5e-4);
+    constructProperty_secondary_constraint_sim_settle_threshold(1e-4);
     constructProperty_secondary_constraint_sim_settle_plateau_tolerance(0.1);
     constructProperty_secondary_constraint_sim_settle_plateau_window(10);
     constructProperty_secondary_constraint_sim_muscle_activation(0.02);
@@ -94,8 +94,8 @@ void COMAKInverseKinematicsTool::constructProperties()
     constructProperty_enforce_secondary_coordinate_range(false);
     constructProperty_secondary_constraint_sim_sweep_time(3.0);
     constructProperty_sweep_dt(0.005);
-    constructProperty_secondary_coupled_coordinate_start_value(0.0);
-    constructProperty_secondary_coupled_coordinate_stop_value(100.0);
+    constructProperty_secondary_coupled_coordinate_start_value(-10.0);
+    constructProperty_secondary_coupled_coordinate_stop_value(110.0);
     constructProperty_secondary_constraint_sim_integrator_accuracy(1e-6);
     constructProperty_settling_sim_integrator_accuracy(1e-10);
     constructProperty_secondary_constraint_sim_internal_step_limit(-1);
@@ -110,6 +110,9 @@ void COMAKInverseKinematicsTool::constructProperties()
     constructProperty_output_motion_file("");
     constructProperty_ik_constraint_weight(SimTK::Infinity);
     constructProperty_ik_accuracy(1e-5);
+    constructProperty_smooth_ik_second_pass(true);
+    constructProperty_smooth_ik_weight(1.0);
+    constructProperty_smooth_ik_lowpass_frequency(6.0);
     Array<double> range{SimTK::Infinity, 2};
     range[0] = -SimTK::Infinity; 
     constructProperty_time_range(range);
@@ -158,13 +161,18 @@ void COMAKInverseKinematicsTool::upgradeOldSetup() {
              "set_setup_version(1) in the script or set upgrade_old_setup to "
              "false.");
     // the settle threshold of an old setup is replaced by the current default
-    if (std::abs(get_secondary_constraint_sim_settle_threshold() - 5e-4) >
+    if (std::abs(get_secondary_constraint_sim_settle_threshold() - 1e-4) >
             1e-13) {
         _upgrade_changes.push_back(
                 "secondary_constraint_sim_settle_threshold: " +
                 std::to_string(get_secondary_constraint_sim_settle_threshold()) +
-                " -> 5e-4");
-        set_secondary_constraint_sim_settle_threshold(5e-4);
+                " -> 1e-4");
+        set_secondary_constraint_sim_settle_threshold(1e-4);
+    }
+    if (get_smooth_ik_second_pass()) {
+        _upgrade_changes.push_back("smooth_ik_second_pass: true (the "
+                "coordinates are smoothed in a second pass, see "
+                "smooth_ik_lowpass_frequency)");
     }
     if (get_secondary_constraint_sim_settle_plateau_tolerance() == 0.0) {
         _upgrade_changes.push_back(
@@ -368,9 +376,12 @@ bool COMAKInverseKinematicsTool::initialize()
         if (ind > -1) { _constrained_coord_index[ind] = nCoord; }
         nCoord++;
     }
-    if (get_settling_sim_integrator_accuracy() < 1e-9)
-        set_settling_sim_integrator_accuracy(
+    if (get_settling_sim_integrator_accuracy() < 1e-9) {
+        log_info("settling_sim_integrator_accuracy {} is below 1e-9: the "
+                "secondary_constraint_sim_integrator_accuracy {} is used.",
+                get_settling_sim_integrator_accuracy(),
                 get_secondary_constraint_sim_integrator_accuracy());
+    }
 
     log_info("Secondary Coordinates:");
     log_info("----------------------");
@@ -400,6 +411,7 @@ bool COMAKInverseKinematicsTool::initialize()
 
         log_info("Sweep secondary_coupled_coordinate stop value: {}",
             get_secondary_coupled_coordinate_stop_value());
+
     }
 
     _state = _model.initSystem();
@@ -482,11 +494,16 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
                 "constraint simulation.", get_constrained_coordinates(i));
     }
        
+    // The model is settled at 0 if the range of the sweep spans 0 (min below
+    // 0, max above), otherwise at min. The sweeps start from the settled state.
+    const double settle_value =
+            (start_value < 0 && stop_value > 0) ? 0.0 : start_value;
+
     //Perform Settling Simulation
     //---------------------------
 
     //prescribe coupled coord
-    Constant settle_func = Constant(start_value);
+    Constant settle_func = Constant(settle_value);
     coupled_coord.set_prescribed_function(settle_func);
     
     model.setUseVisualizer(get_use_visualizer());
@@ -512,7 +529,10 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
     //setup integrator
     SimTK::CPodesIntegrator integrator(
         model.getSystem(), SimTK::CPodes::BDF, SimTK::CPodes::Newton);
-    integrator.setAccuracy(get_settling_sim_integrator_accuracy());
+    integrator.setAccuracy(
+            get_settling_sim_integrator_accuracy() < 1e-9
+                    ? get_secondary_constraint_sim_integrator_accuracy()
+                    : get_settling_sim_integrator_accuracy());
 
     if (get_secondary_constraint_sim_internal_step_limit() != -1) {
         integrator.setInternalStepLimit(
@@ -606,6 +626,8 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
 
     SimTK::Vector settled_secondary_values(_secondary_coord_path.getSize());
     SimTK::Vector settled_secondary_speeds(_secondary_coord_path.getSize());
+    SimTK::Vector settled_constrained_values(_n_constrained_coord);
+    SimTK::Vector settled_constrained_speeds(_n_constrained_coord);
 
     //Save secondardy coord values to initialize sweep simulation
     for (int c = 0; c < _secondary_coord_path.getSize(); c++) {
@@ -613,6 +635,14 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
         Coordinate& coord = model.updComponent<Coordinate>(secondary_coord);
         settled_secondary_values.set(c, coord.getValue(state));
         settled_secondary_speeds.set(c, coord.getSpeedValue(state));
+    }
+    // the constrained coordinates (e.g. patella flexion) are free in the
+    // settling simulation too, so the sweep starts from their settled values
+    for (int c = 0; c < _n_constrained_coord; c++) {
+        const Coordinate& coord =
+                model.getComponent<Coordinate>(_constrained_coord_path[c]);
+        settled_constrained_values.set(c, coord.getValue(state));
+        settled_constrained_speeds.set(c, coord.getSpeedValue(state));
     }
 
 
@@ -623,83 +653,9 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
     //Perform Sweep Simulation
     //------------------------
 
-    //setup quadratic sweep function
-    double Vx = 0;
-    double Vy = start_value;
-    double Px = Vx + get_secondary_constraint_sim_sweep_time();
-    double Py = stop_value;
-    double a = (Py - Vy) / SimTK::square(Px - Vx);
-
-    double C1 = a;
-    double C2 = -2 * a * Vx;
-    double C3 = a * SimTK::square(Vx) + Vy;
-
-    SimTK::Vector coefficients(3);
-    coefficients.set(0, C1);
-    coefficients.set(1, C2);
-    coefficients.set(2, C3);
-
-    PolynomialFunction sweep_func = PolynomialFunction(coefficients);
-    coupled_coord.set_prescribed_function(sweep_func);
-
-    state = model.initSystem();
-    if (get_use_visualizer()) {
-        SimTK::Visualizer& viz = model.updVisualizer().updSimbodyVisualizer();
-        viz.setWindowTitle("Sweeping: " + get_model_file());
-        viz.setBackgroundColor(SimTK::White);
-        viz.setShowSimTime(true);
-        viz.setDesiredFrameRate(100);
-    }
-
-    //prescribe muscle force
-    for (Muscle& msl : model.updComponentList<Muscle>()) {
-        msl.overrideActuation(state, true);
-        double value = msl.getMaxIsometricForce() *
-                get_secondary_constraint_sim_muscle_activation();
-        msl.setOverrideActuation(state, value);
-    }
-    model.equilibrateMuscles(state);
-
-    //set settled secondary coordinate values
-    for (int c = 0; c < _secondary_coord_path.getSize(); c++) {
-        std::string secondary_coord = _secondary_coord_path[c];
-        Coordinate& coord = model.updComponent<Coordinate>(secondary_coord);
-        coord.setValue(state, settled_secondary_values(c));
-        coord.setSpeedValue(state, settled_secondary_speeds(c));
-    }
-
-    double sweep_start = 0;
-    double sweep_stop = Px;
-    dt = get_sweep_dt();
-
-    int nSteps = (int)lround((sweep_stop - sweep_start) / dt);
-
-    //Setup storage for computing constraint functions
-    TimeSeriesTable q_table;
-    SimTK::RowVector q_row(model.getNumCoordinates());
-    std::vector<std::string> q_names;
-
-    for (Coordinate& coord : _model.updComponentList<Coordinate>()) {
-        q_names.push_back(coord.getAbsolutePathString() + "/value");
-    }
-
-    q_table.setColumnLabels(q_names);
-
-    //setup integrator
-    SimTK::CPodesIntegrator sweep_integrator(model.getSystem(), SimTK::CPodes::BDF, SimTK::CPodes::Newton);
-    sweep_integrator.setAccuracy(get_secondary_constraint_sim_integrator_accuracy());
-    if (get_secondary_constraint_sim_internal_step_limit() != -1) {
-        sweep_integrator.setInternalStepLimit(
-            get_secondary_constraint_sim_internal_step_limit());
-    }
-    SimTK::TimeStepper sweep_timestepper(model.getSystem(), sweep_integrator);
-
-    sweep_timestepper.initialize(state);
-    
+    // The ligament lengths, strains and forces during the sweep are written
+    // only if print_secondary_constraint_sim_results is true
     StatesTrajectory sweep_states;
-
-    // Ligament lengths, strains and forces during the sweep (written only if
-    // print_secondary_constraint_sim_results is true)
     std::vector<const Blankevoort1991Ligament*> sweep_ligaments;
     TimeSeriesTable lig_table;
     int n_lig_columns = 0;
@@ -720,41 +676,168 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
         n_lig_columns = (int)lig_labels.size();
     }
 
-    for (int i = 0; i <= nSteps; ++i) {
+    // One sweep: the coupled coordinate is prescribed from the settled value to
+    // target_value (quadratic in time, starting at rest) from the settled
+    // state. The coordinates are recorded in the returned table; the states
+    // and ligament outputs only if record is true.
+    auto run_sweep = [&](double target_value, double sweep_time,
+            bool record) -> TimeSeriesTable {
+        //setup quadratic sweep function
+        double Vx = 0;
+        double Vy = settle_value;
+        double Px = Vx + sweep_time;
+        double Py = target_value;
+        double a = (Py - Vy) / SimTK::square(Px - Vx);
 
-        sweep_timestepper.stepTo(sweep_start + i*dt);
-        state = sweep_timestepper.getState();
+        double C1 = a;
+        double C2 = -2 * a * Vx;
+        double C3 = a * SimTK::square(Vx) + Vy;
 
-        sweep_states.append(state);
+        SimTK::Vector coefficients(3);
+        coefficients.set(0, C1);
+        coefficients.set(1, C2);
+        coefficients.set(2, C3);
 
-        int j = 0;
-        for (const auto& coord : model.getComponentList<Coordinate>()) {
-            q_row(j) = coord.getValue(state);
-            j++;
+        PolynomialFunction sweep_func = PolynomialFunction(coefficients);
+        coupled_coord.set_prescribed_function(sweep_func);
+
+        state = model.initSystem();
+        if (get_use_visualizer()) {
+            SimTK::Visualizer& viz =
+                    model.updVisualizer().updSimbodyVisualizer();
+            viz.setWindowTitle("Sweeping: " + get_model_file());
+            viz.setBackgroundColor(SimTK::White);
+            viz.setShowSimTime(true);
+            viz.setDesiredFrameRate(100);
         }
-        q_table.appendRow(state.getTime(), q_row);
 
-        if (!sweep_ligaments.empty()) {
-            model.realizeDynamics(state);
-            SimTK::RowVector lig_row(n_lig_columns);
-            int c = 0;
-            lig_row(c++) = model.getComponent<Coordinate>(
-                    get_secondary_coupled_coordinate()).getValue(state);
-            for (int j = 0; j < _n_constrained_coord; ++j) {
+        //prescribe muscle force
+        for (Muscle& msl : model.updComponentList<Muscle>()) {
+            msl.overrideActuation(state, true);
+            double value = msl.getMaxIsometricForce() *
+                    get_secondary_constraint_sim_muscle_activation();
+            msl.setOverrideActuation(state, value);
+        }
+        model.equilibrateMuscles(state);
+
+        //set settled secondary coordinate values
+        for (int c = 0; c < _secondary_coord_path.getSize(); c++) {
+            std::string secondary_coord = _secondary_coord_path[c];
+            Coordinate& coord =
+                    model.updComponent<Coordinate>(secondary_coord);
+            coord.setValue(state, settled_secondary_values(c));
+            coord.setSpeedValue(state, settled_secondary_speeds(c));
+        }
+        for (int c = 0; c < _n_constrained_coord; c++) {
+            Coordinate& coord =
+                    model.updComponent<Coordinate>(_constrained_coord_path[c]);
+            coord.setValue(state, settled_constrained_values(c));
+            coord.setSpeedValue(state, settled_constrained_speeds(c));
+        }
+
+        const double sweep_start = 0;
+        const double sweep_stop = Px;
+        const double sweep_dt = get_sweep_dt();
+        const int nSteps = (int)lround((sweep_stop - sweep_start) / sweep_dt);
+
+        //Setup storage for computing constraint functions
+        TimeSeriesTable q_table;
+        SimTK::RowVector q_row(model.getNumCoordinates());
+        std::vector<std::string> q_names;
+
+        for (Coordinate& coord : _model.updComponentList<Coordinate>()) {
+            q_names.push_back(coord.getAbsolutePathString() + "/value");
+        }
+
+        q_table.setColumnLabels(q_names);
+
+        //setup integrator
+        SimTK::CPodesIntegrator sweep_integrator(model.getSystem(),
+                SimTK::CPodes::BDF, SimTK::CPodes::Newton);
+        sweep_integrator.setAccuracy(
+                get_secondary_constraint_sim_integrator_accuracy());
+        if (get_secondary_constraint_sim_internal_step_limit() != -1) {
+            sweep_integrator.setInternalStepLimit(
+                get_secondary_constraint_sim_internal_step_limit());
+        }
+        SimTK::TimeStepper sweep_timestepper(model.getSystem(),
+                sweep_integrator);
+
+        sweep_timestepper.initialize(state);
+
+        for (int i = 0; i <= nSteps; ++i) {
+
+            sweep_timestepper.stepTo(sweep_start + i*sweep_dt);
+            state = sweep_timestepper.getState();
+
+            if (record && get_print_secondary_constraint_sim_results()) {
+                sweep_states.append(state);
+            }
+
+            int j = 0;
+            for (const auto& coord : model.getComponentList<Coordinate>()) {
+                q_row(j) = coord.getValue(state);
+                j++;
+            }
+            q_table.appendRow(state.getTime(), q_row);
+
+            if (record && !sweep_ligaments.empty()) {
+                model.realizeDynamics(state);
+                SimTK::RowVector lig_row(n_lig_columns);
+                int c = 0;
                 lig_row(c++) = model.getComponent<Coordinate>(
-                        _constrained_coord_path[j]).getValue(state);
+                        get_secondary_coupled_coordinate()).getValue(state);
+                for (int j = 0; j < _n_constrained_coord; ++j) {
+                    lig_row(c++) = model.getComponent<Coordinate>(
+                            _constrained_coord_path[j]).getValue(state);
+                }
+                for (const auto* lig : sweep_ligaments) {
+                    lig_row(c++) = lig->getOutputValue<double>(state, "length");
+                    lig_row(c++) = lig->getOutputValue<double>(state, "strain");
+                    lig_row(c++) =
+                            lig->getOutputValue<double>(state, "total_force");
+                }
+                lig_table.appendRow(state.getTime(), lig_row);
             }
-            for (const auto* lig : sweep_ligaments) {
-                lig_row(c++) = lig->getOutputValue<double>(state, "length");
-                lig_row(c++) = lig->getOutputValue<double>(state, "strain");
-                lig_row(c++) =
-                        lig->getOutputValue<double>(state, "total_force");
-            }
-            lig_table.appendRow(state.getTime(), lig_row);
-        }
 
-        log_info("{}",state.getTime());
-        if (get_verbose() > 0) printDebugInfo(model, state);
+            log_info("{}",state.getTime());
+            if (get_verbose() > 0) printDebugInfo(model, state);
+        }
+        return q_table;
+    };
+
+    TimeSeriesTable q_table = run_sweep(stop_value,
+            get_secondary_constraint_sim_sweep_time(), true);
+
+    // Second sweep, from the same settled state (0) down to min (e.g. knee
+    // hyperextension). It is the same quadratic function of time as the sweep
+    // up, with the same acceleration of the coupled coordinate (so the same
+    // speed at the same distance from 0), starting at rest at 0 like it. The
+    // rows of both are joined in order of increasing coupled coordinate, so
+    // the function is one curve from min to max and the part above 0 is the
+    // same as without the second sweep.
+    if (start_value < settle_value) {
+        const double down_time = get_secondary_constraint_sim_sweep_time() *
+                std::sqrt((settle_value - start_value) /
+                          (stop_value - settle_value));
+        log_info("Starting Sweep Simulation down to {} ({} s).", start_value,
+                down_time);
+        TimeSeriesTable q_down = run_sweep(start_value, down_time, false);
+
+        TimeSeriesTable joined;
+        joined.setColumnLabels(q_table.getColumnLabels());
+        const double join_dt = get_sweep_dt();
+        double t = 0;
+        // the first row of each sweep is the settled value
+        for (int r = (int)q_down.getNumRows() - 1; r >= 1; --r) {
+            joined.appendRow(t, q_down.getRowAtIndex(r));
+            t += join_dt;
+        }
+        for (int r = 0; r < (int)q_table.getNumRows(); ++r) {
+            joined.appendRow(t, q_table.getRowAtIndex(r));
+            t += join_dt;
+        }
+        q_table = joined;
     }
 
     //Compute Coupled Constraint Functions
@@ -1223,21 +1306,44 @@ void COMAKInverseKinematicsTool::runInverseKinematics(Model& model) {
         ikSolver.setAccuracy(get_ik_accuracy());
         s.updTime() = times[start_ix];
 
-        for (int i = 0; i < 7; ++i) {
+        // If the assembly fails, it is tried again with a looser accuracy,
+        // up to 1e-7, before it is an error.
+        bool assembled = false;
+        std::string assembly_error;
+        double accuracy = get_ik_accuracy();
+        for (int i = 0; i < 7 && !assembled; ++i) {
+            ikSolver.setAccuracy(accuracy);
             try {
                 ikSolver.assemble(s);
-                break;
+                assembled = true;
             }
-            catch (std::exception const&){
+            catch (std::exception const&) {
                 try {
                     ikSolver.track(s);
-                    break;
+                    assembled = true;
                 }
-                catch (std::exception const&) {
-                    log_error("Assembly failed... " 
-                        "retrying with new initial conditions.");
+                catch (std::exception const& ex) {
+                    assembly_error = ex.what();
+                    if (accuracy >= 1e-7) { break; }
+                    accuracy = std::min(accuracy * 10, 1e-7);
+                    log_warn("Assembly failed, retrying with accuracy {}.",
+                            accuracy);
                 }
             }
+        }
+        if (!assembled) {
+            throw Exception("The model could not be assembled at the first "
+                    "frame (" + std::to_string(times[start_ix]) + " s), also "
+                    "not with an accuracy of 1e-7: " + assembly_error +
+                    " Check the markers and the coordinates file at this "
+                    "time.");
+        }
+        // setAccuracy() would undo the assembly, so a relaxed accuracy is kept
+        // for the tracking
+        if (accuracy != get_ik_accuracy()) {
+            log_warn("The model was assembled with a relaxed accuracy of {} "
+                    "(ik_accuracy is {}), which is used for all frames.",
+                    accuracy, get_ik_accuracy());
         }
 
         kinematicsReporter->begin(s);
@@ -1306,6 +1412,153 @@ void COMAKInverseKinematicsTool::runInverseKinematics(Model& model) {
 
             kinematicsReporter->step(s, i);
             analysisSet.step(s, i);
+        }
+
+        if (get_smooth_ik_second_pass()) {
+            // no filter frequency set (-1): 40 Hz
+            const double cutoff = (get_smooth_ik_lowpass_frequency() > 0) ?
+                    get_smooth_ik_lowpass_frequency() : 40.0;
+            log_info("Second pass of the inverse kinematics: coordinates "
+                     "smoothed at {} Hz, weight {}",
+                    cutoff, get_smooth_ik_weight());
+
+            // the first pass, written with _pass1 in its name
+            Storage* pass1 = kinematicsReporter->getPositionStorage();
+            if (get_output_motion_file() != "" &&
+                    get_output_motion_file() != "Unassigned") {
+                std::string name1 = get_output_motion_file();
+                const size_t dot = name1.find_last_of('.');
+                name1 = (dot == std::string::npos)
+                        ? name1 + "_pass1"
+                        : name1.substr(0, dot) + "_pass1" + name1.substr(dot);
+                IO::makeDir(get_results_directory());
+                pass1->print(get_results_directory() + "/" + name1);
+            }
+
+            // smoothed coordinates of the first pass (radians)
+            Storage smooth(*pass1);
+            if (smooth.isInDegrees()) {
+                model.getSimbodyEngine().convertDegreesToRadians(smooth);
+            }
+            smooth.pad(smooth.getSize() / 2);
+            smooth.lowpassIIR(cutoff);
+            GCVSplineSet smoothed_splines(5, &smooth);
+
+            // soft references for the free coordinates that have no task
+            SimTK::Array_<CoordinateReference> references2 =
+                    coordinateReferences;
+            int n_added = 0;
+            for (const Coordinate& coord :
+                    model.getComponentList<Coordinate>()) {
+                const std::string& name = coord.getName();
+                bool has_task = false;
+                for (const auto& ref : coordinateReferences) {
+                    if (ref.getName() == name) { has_task = true; }
+                }
+                const int index = smoothed_splines.getIndex(name);
+                if (has_task || index < 0 || coord.getLocked(s) ||
+                        coord.isConstrained(s)) {
+                    continue;
+                }
+                CoordinateReference ref(name, smoothed_splines.get(index));
+                ref.setWeight(get_smooth_ik_weight());
+                references2.push_back(ref);
+                ++n_added;
+            }
+            log_info("The second pass has {} soft coordinate references.",
+                    n_added);
+
+            InverseKinematicsSolver ikSolver2(model, markersReference,
+                    references2, get_ik_constraint_weight());
+            ikSolver2.setAccuracy(get_ik_accuracy());
+            s.updTime() = times[start_ix];
+            {
+                // relaxed up to 1e-7 if the assembly fails, like the first pass
+                double accuracy2 = get_ik_accuracy();
+                bool assembled2 = false;
+                while (!assembled2) {
+                    ikSolver2.setAccuracy(accuracy2);
+                    try {
+                        ikSolver2.assemble(s);
+                        assembled2 = true;
+                    }
+                    catch (std::exception const&) {
+                        if (accuracy2 >= 1e-7) { throw; }
+                        accuracy2 = std::min(accuracy2 * 10, 1e-7);
+                        log_warn("Assembly of the second pass failed, "
+                                "retrying with accuracy {}.", accuracy2);
+                    }
+                }
+            }
+
+            Kinematics* kinematicsReporter2 = new Kinematics();
+            kinematicsReporter2->setRecordAccelerations(false);
+            kinematicsReporter2->setInDegrees(true);
+            model.addAnalysis(kinematicsReporter2);
+            // added after initSystem(), so it is not connected to the model yet
+            kinematicsReporter2->setModel(model);
+            kinematicsReporter2->begin(s);
+
+            Storage* modelMarkerErrors2 = get_report_errors() ?
+                    new Storage(Nframes, "ModelMarkerErrors") : nullptr;
+            SimTK::Array_<double> squaredErrors2(nm, 0.0);
+            for (int i = start_ix; i <= final_ix; ++i) {
+                s.updTime() = times[i];
+                ikSolver2.track(s);
+                if (modelMarkerErrors2) {
+                    double total = 0.0;
+                    double max_squared = 0.0;
+                    ikSolver2.computeCurrentSquaredMarkerErrors(squaredErrors2);
+                    for (int j = 0; j < nm; ++j) {
+                        total += squaredErrors2[j];
+                        max_squared = std::max(max_squared, squaredErrors2[j]);
+                    }
+                    Array<double> errors(0.0, 3);
+                    errors.set(0, total);
+                    errors.set(1, nm > 0 ? sqrt(total / nm) : 0);
+                    errors.set(2, sqrt(max_squared));
+                    modelMarkerErrors2->append(s.getTime(), 3, &errors[0]);
+                }
+                kinematicsReporter2->step(s, i);
+            }
+
+            // the second pass replaces the first one in the results
+            model.removeAnalysis(kinematicsReporter);
+            kinematicsReporter = kinematicsReporter2;
+            if (modelMarkerErrors2) {
+                delete modelMarkerErrors;
+                modelMarkerErrors = modelMarkerErrors2;
+            }
+        }
+
+        // the constraint functions are only computed over the range of the
+        // sweep and are extrapolated outside of it
+        if (get_perform_secondary_constraint_sim()) {
+            const std::string coupled_name = model.getComponent<Coordinate>(
+                    get_secondary_coupled_coordinate()).getName();
+            Array<double> coupled_values;
+            kinematicsReporter->getPositionStorage()->getDataColumn(
+                    coupled_name, coupled_values);
+            if (coupled_values.getSize() > 0) {
+                double lo = coupled_values[0];
+                double hi = coupled_values[0];
+                for (int k = 1; k < coupled_values.getSize(); ++k) {
+                    lo = std::min(lo, coupled_values[k]);
+                    hi = std::max(hi, coupled_values[k]);
+                }
+                if (lo < get_secondary_coupled_coordinate_start_value() ||
+                        hi > get_secondary_coupled_coordinate_stop_value()) {
+                    log_warn("{} is {} to {} in this trial, outside the range "
+                            "of the sweep ({} to {}, set by "
+                            "secondary_coupled_coordinate_start_value and "
+                            "secondary_coupled_coordinate_stop_value). The "
+                            "constraint functions of the secondary "
+                            "coordinates are extrapolated there.",
+                            coupled_name, lo, hi,
+                            get_secondary_coupled_coordinate_start_value(),
+                            get_secondary_coupled_coordinate_stop_value());
+                }
+            }
         }
 
         if (get_output_motion_file() != "" &&
@@ -1379,8 +1632,15 @@ void COMAKInverseKinematicsTool::populateReferences(const Model& model,
     // bool haveCoordinateFile = false;
     if (get_coordinate_file() != "" && get_coordinate_file() != "Unassigned") {
         Storage coordinateValues(get_coordinate_file());
-        // Convert degrees to radian (TODO: this needs to have a check that the storage is, in fact, in degrees!)
-        model.getSimbodyEngine().convertDegreesToRadians(coordinateValues);
+        warnIfTranslationsNotMeters(model, coordinateValues,
+                get_coordinate_file());
+        // only a file in degrees is converted
+        if (coordinateValues.isInDegrees()) {
+            model.getSimbodyEngine().convertDegreesToRadians(coordinateValues);
+        } else {
+            log_info("The coordinate_file {} is in radians (inDegrees=no).",
+                    get_coordinate_file());
+        }
         // haveCoordinateFile = true;
         coordFunctions = new GCVSplineSet(5, &coordinateValues);
     }

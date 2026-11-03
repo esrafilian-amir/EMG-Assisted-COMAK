@@ -26,6 +26,7 @@
 #include <OpenSim/Simulation/StatesTrajectory.h>
 
 #include "COMAKSettingsSet.h"
+#include "JointMechanicsTool.h"
 
 namespace OpenSim { 
 
@@ -120,6 +121,26 @@ public:
 
     OpenSim_DECLARE_PROPERTY(results_prefix, std::string, 
         "Prefix to all results files names.")
+
+    OpenSim_DECLARE_PROPERTY(run_joint_mechanics, bool,
+        "If true, the JointMechanicsTool is run right after COMAK, with the "
+        "settings of the joint_mechanics section, so no separate setup is "
+        "needed. A setup written for an older version does not run it (see "
+        "setup_version). The default value is true.")
+
+    OpenSim_DECLARE_PROPERTY(joint_mechanics, JointMechanicsTool,
+        "Settings of the JointMechanicsTool that is run after COMAK (see "
+        "run_joint_mechanics). Anything that is left empty is taken from "
+        "COMAK: the model_file, the input_states_file (the states of this "
+        "COMAK run), the start and stop time, the muscle force model "
+        "(use_force_length_velocity, use_passive_muscle_force, "
+        "use_tendon_compliance and passive_force_scale), and the "
+        "results_file_basename (the trial name: the results_prefix, or the "
+        "name of the coordinates_file). If results_directory is not set, the "
+        "results are written to <folder of the COMAK results_directory>/"
+        "joint_mechanics/<trial name>. By default the vtp files and the "
+        "ForceReporter forces .sto file (contact, ligament and coordinate "
+        "outputs) are written, and no h5 file.")
 
     OpenSim_DECLARE_PROPERTY(replace_force_set, bool, 
         "Replace the model ForceSet with the forces listed in force_set_file. "
@@ -597,6 +618,7 @@ public:
 //-----------------------------------------------------------------------------
 private:
     void upgradeOldSetup();
+    bool performJointMechanics();
     void updateTendonComplianceForces(SimTK::State& s);
     bool forceLengthVelocity() const {
         return get_use_force_length_velocity() || get_use_muscle_physiology();

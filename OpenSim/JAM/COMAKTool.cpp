@@ -22,6 +22,7 @@
 #include <cstring>
 #include <memory>
 #include "JAMUtilities.h"
+#include <OpenSim/Analyses/ForceReporter.h>
 #include <cmath>
 #include "OpenSim/Actuators/CoordinateActuator.h"
 #include "OpenSim/Common/Constant.h"
@@ -63,6 +64,19 @@ void COMAKTool::constructProperties() {
     constructProperty_external_loads_file("");
     constructProperty_results_directory("");
     constructProperty_results_prefix("");
+    constructProperty_run_joint_mechanics(true);
+    {
+        // by default: the vtp files and the ForceReporter forces file
+        JointMechanicsTool joint_mechanics;
+        joint_mechanics.set_write_h5_file(false);
+        joint_mechanics.set_write_vtp_files(true);
+        AnalysisSet analysis_set;
+        ForceReporter* force_reporter = new ForceReporter();
+        force_reporter->setName("ForceReporter");
+        analysis_set.adoptAndAppend(force_reporter);
+        joint_mechanics.set_AnalysisSet(analysis_set);
+        constructProperty_joint_mechanics(joint_mechanics);
+    }
 
     constructProperty_replace_force_set(false);
     constructProperty_force_set_file("");
@@ -227,6 +241,11 @@ void COMAKTool::upgradeOldSetup() {
         _upgrade_changes.push_back("use_central_difference_jacobian: false -> true");
         set_use_central_difference_jacobian(true);
     }
+    if (get_run_joint_mechanics()) {
+        _upgrade_changes.push_back("run_joint_mechanics: true -> false (a "
+                "setup of an older version did not run the joint mechanics)");
+        set_run_joint_mechanics(false);
+    }
     for (int i = 0; i < get_COMAKSecondaryCoordinateSet().getSize(); ++i) {
         COMAKSecondaryCoordinate& coord =
                 upd_COMAKSecondaryCoordinateSet().get(i);
@@ -250,6 +269,67 @@ std::string COMAKTool::saveUpgradedSetup(const std::string& where) {
     return file;
 }
 
+bool COMAKTool::performJointMechanics() {
+    std::unique_ptr<JointMechanicsTool> jmt(get_joint_mechanics().clone());
+
+    // trial name: the results prefix, or the name of the coordinates file
+    std::string trial = get_results_prefix();
+    if (trial.empty()) {
+        const std::string& f = get_coordinates_file();
+        const size_t slash = f.find_last_of("/" + std::string(1, (char)92));
+        trial = (slash == std::string::npos) ? f : f.substr(slash + 1);
+        const size_t dot = trial.find_last_of('.');
+        if (dot != std::string::npos) { trial = trial.substr(0, dot); }
+    }
+
+    if (jmt->get_model_file().empty()) { jmt->set_model_file(get_model_file()); }
+    if (jmt->get_input_states_file().empty() &&
+            jmt->get_input_transforms_file().empty() &&
+            jmt->get_input_activations_file().empty() &&
+            jmt->get_input_forces_file().empty()) {
+        jmt->set_input_states_file(get_results_directory() + "/" +
+                get_results_prefix() + "_states.sto");
+    }
+    if (jmt->get_results_file_basename().empty()) {
+        jmt->set_results_file_basename(trial);
+    }
+    if (jmt->get_start_time() == -1) { jmt->set_start_time(get_start_time()); }
+    if (jmt->get_stop_time() == -1) { jmt->set_stop_time(get_stop_time()); }
+
+    // the results folder of the joint mechanics, if it was not set: next to the
+    // COMAK results folder, in joint_mechanics/<trial>. Existing files of the
+    // folder are not touched.
+    if (jmt->get_results_directory().empty() ||
+            jmt->get_results_directory() == ".") {
+        std::string comak_dir = get_results_directory();
+        while (!comak_dir.empty() &&
+                (comak_dir.back() == '/' || comak_dir.back() == (char)92)) {
+            comak_dir.pop_back();
+        }
+        const size_t slash = comak_dir.find_last_of("/" + std::string(1, (char)92));
+        const std::string parent =
+                (slash == std::string::npos) ? "." : comak_dir.substr(0, slash);
+        const std::string base = parent + "/joint_mechanics";
+        IO::makeDir(base);
+        const std::string folder = base + "/" + trial;
+        IO::makeDir(folder);
+        jmt->set_results_directory(folder);
+    }
+
+    std::map<std::string, double> passive_scale;
+    for (int i = 0; i < get_COMAKCostFunctionParameterSet().getSize(); ++i) {
+        const auto& cost = get_COMAKCostFunctionParameterSet().get(i);
+        passive_scale[cost.get_actuator()] = cost.get_passive_force_scale();
+    }
+    jmt->setComakMuscleModel(forceLengthVelocity(),
+            get_use_passive_muscle_force(), get_use_tendon_compliance(),
+            passive_scale);
+
+    log_info("Running the joint mechanics of COMAK, results in {}",
+            jmt->get_results_directory());
+    return jmt->run();
+}
+
 bool COMAKTool::run() {
     bool completed = false;
     upgradeOldSetup();
@@ -271,6 +351,10 @@ bool COMAKTool::run() {
         }
 
         performCOMAK();
+        bool joint_mechanics_ok = true;
+        if (get_run_joint_mechanics()) {
+            joint_mechanics_ok = performJointMechanics();
+        }
 
         const long long elapsed = stopwatch.getElapsedTimeInNs();
 
@@ -279,7 +363,7 @@ bool COMAKTool::run() {
         log_info("Printed results to: {}", get_results_directory());
         log_info("");
 
-        completed = true;
+        completed = joint_mechanics_ok;
     }
 
     catch (const std::exception& x) {
@@ -2315,6 +2399,7 @@ void COMAKTool::extractKinematicsFromFile() {
     }
 
 
+    warnIfTranslationsNotMeters(_model, store, get_coordinates_file());
     if (store.isInDegrees()) {
         _model.getSimbodyEngine().convertDegreesToRadians(store);
     }
