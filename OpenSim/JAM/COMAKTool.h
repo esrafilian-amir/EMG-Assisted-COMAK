@@ -318,12 +318,16 @@ public:
     OpenSim_DECLARE_PROPERTY(force_tolerance_rotation, double,
         "For convergence_criterion 'force': tolerance on the unbalanced "
         "generalized force of rotational coordinates, in N*m. The default "
-        "value is 0.1.")
+        "value is 0.1. In the walking test up to 30 times the default (3 "
+        "N*m) changed the activations by less than 0.012; larger values "
+        "degrade the solution.")
 
     OpenSim_DECLARE_PROPERTY(force_tolerance_translation, double,
         "For convergence_criterion 'force': tolerance on the unbalanced "
         "generalized force of translational coordinates, in N. The default "
-        "value is 1.0.")
+        "value is 1.0. In the walking test up to 30 times the default (30 "
+        "N) changed the activations by less than 0.012; larger values "
+        "degrade the solution.")
 
     OpenSim_DECLARE_PROPERTY(unit_udot_epsilon, double, 
         "The size of the perturbation applied to COMAKSecondaryCoordinates "

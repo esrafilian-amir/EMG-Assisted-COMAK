@@ -426,6 +426,18 @@ comak.set_settle_sim_results_prefix('walking_meniscus_settle_sim');
 comak.set_max_iterations(25);
 comak.set_udot_tolerance(1);
 comak.set_udot_worse_case_tolerance(50);
+% A time step has converged when the unbalanced generalized force of the
+% primary and secondary coordinates is below these tolerances
+% (convergence_criterion 'force', the default; udot_tolerance and
+% udot_worse_case_tolerance then count multiples of them). Rough maximum from
+% the walking test: up to 30 times the defaults (3 N*m and 30 N) changed the
+% muscle activations by less than 0.012 and the secondary coordinates by less
+% than 0.03 (deg or mm) and halved the COMAK iterations; 100 times (10 N*m
+% and 100 N) changed the activations by up to 0.04 and the coordinates by up
+% to 0.08. Do not go above this. Use convergence_criterion 'acceleration' for
+% the previous acceleration based test.
+comak.set_force_tolerance_rotation(0.1); % N*m
+comak.set_force_tolerance_translation(1.0); % N
 comak.set_unit_udot_epsilon(1e-6);
 comak.set_optimization_scale_delta_coord(1);
 comak.set_ipopt_diagnostics_level(3);
