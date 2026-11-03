@@ -93,7 +93,7 @@ void COMAKTool::constructProperties() {
     constructProperty_normalize_constraint_rows(false);
     constructProperty_secondary_step_penalty_weight(0.0);
     constructProperty_step_penalty_rotation_length(0.05);
-    constructProperty_position_extrapolation_factor(1.0);
+    constructProperty_secondary_velocity_carryover_to_next_step(0.0);
     constructProperty_optimization_scale_delta_coord(1e-3);
 
     constructProperty_ipopt_diagnostics_level(0);
@@ -846,7 +846,7 @@ void COMAKTool::performCOMAK() {
             double prev_speed = coord.getSpeedValue(state);
 
             double new_value = prev_value +
-                    get_position_extrapolation_factor() * prev_speed * _dt;
+                    get_secondary_velocity_carryover_to_next_step() * prev_speed * _dt;
             coord.setValue(state, new_value);
         }
 

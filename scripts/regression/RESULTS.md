@@ -49,7 +49,8 @@ the failures but does not by itself fix the meniscus model.
 
 New properties of `COMAKTool`: `use_central_difference_jacobian`, `ignore_secondary_speed_term`,
 `normalize_constraint_rows`, `secondary_step_penalty_weight` (+ `step_penalty_rotation_length`),
-`position_extrapolation_factor`. They act on every secondary coordinate, patella and menisci alike.
+`secondary_velocity_carryover_to_next_step` (first called `position_extrapolation_factor`). They act on every
+secondary coordinate, patella and menisci alike. The projection factor now defaults to 0 (see below).
 
 Meniscus window (12 frames, control: 6 converged, 16.1 iterations, 732 s):
 
@@ -74,13 +75,15 @@ iterations, 750 s (no gain over extrapolation 0 alone); walking 13/13, 7.1 itera
 (worse than extrapolation 0 alone, 5.3 iterations, 141 s); EMG 31/31, 6.2 iterations, 595 s
 (18% slower than the control). The two do not add up.
 
-**Recommendation (not applied, defaults are unchanged):** `position_extrapolation_factor = 0`
-is the best single option: meniscus 8/12 instead of 6/12, walking 27% fewer iterations and
-20% less time, EMG about equal (6.3 against 6.0 iterations, 3 IPOPT failures against 0, all
-frames still converge). It is a one-line default change in `COMAKTool.cpp`
-(`constructProperty_position_extrapolation_factor`). Central differences help the worst case of
-the meniscus window (worst acceleration error 8.5 against 50) at about 13% more time and are
-neutral on walking. The step penalty, ignoring the speed term and row normalization did not help.
+**Decision:** `secondary_velocity_carryover_to_next_step` defaults to 0 (it was called
+`position_extrapolation_factor` in the test runs). It is the best single option: meniscus 8/12
+instead of 6/12, walking 27% fewer iterations and 20% less time, EMG about equal (6.3 against 6.0
+iterations, 3 IPOPT failures against 0, all frames still converge). The converged solutions barely
+change (walking and EMG activations differ by at most 0.005, secondary rotations by 0.002 deg,
+translations by 0.003 mm). Set it to 1 to get the old constant-velocity projection back.
+Central differences help the worst case of the meniscus window (worst acceleration error 8.5
+against 50) at about 13% more time and are neutral on walking, so they stay off. The step penalty,
+ignoring the speed term and row normalization did not help.
 
 ## 6. Reference IK
 

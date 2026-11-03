@@ -255,11 +255,16 @@ public:
         "secondary coordinates (rad) to the unit of the translations (m) "
         "in secondary_step_penalty_weight. The default value is 0.05.")
 
-    OpenSim_DECLARE_PROPERTY(position_extrapolation_factor, double,
-        "Fraction of the secondary coordinate velocity of the previous "
-        "time step that is used to extrapolate the secondary coordinates "
-        "to the next time step. 1 is a full extrapolation, 0 starts from "
-        "the previous values. The default value is 1.")
+    OpenSim_DECLARE_PROPERTY(secondary_velocity_carryover_to_next_step, double,
+        "Fraction of the velocity of each secondary coordinate in the previous "
+        "time step that is carried over to the next time step: each time "
+        "step starts from the previous value plus this fraction of the "
+        "previous velocity times the time step, before the optimization "
+        "changes it. 1 carries over the full velocity (constant velocity "
+        "projection), 0 starts every time step from the previous value. 0 "
+        "needed fewer iterations in the example models, because the "
+        "secondary coordinates follow the force equilibrium and not their "
+        "own momentum. The default value is 0.")
 
     OpenSim_DECLARE_PROPERTY(unit_udot_epsilon, double, 
         "The size of the perturbation applied to COMAKSecondaryCoordinates "
