@@ -47,6 +47,10 @@ setup(name='opensim',
               'opensim-moco-generate-report = opensim.report:main',
           ],
       },
+      # numpy is needed by the bindings, scipy by the JAM Python examples (examples/JAM)
+      install_requires=['numpy', 'scipy'],
+      # matplotlib is optional and only used to plot the inputs of some JAM examples
+      extras_require={'examples': ['matplotlib']},
       include_package_data=True,
       classifiers=[
           'Intended Audience :: Science/Research',
