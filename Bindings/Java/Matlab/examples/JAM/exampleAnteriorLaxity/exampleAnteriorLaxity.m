@@ -171,7 +171,9 @@ saveas(ext_loads_fig,'./results/graphics/external_loads.png')
 %% Create ACL deficient model
 
 model = Model(model_file);
-acld_model = model;
+% separate copy: with acld_model = model both names refer to the same Java object and
+% removing the ACL would also remove it from the healthy model
+acld_model = Model(model_file);
 
 %Remove ACL Ligaments
 n=1;
