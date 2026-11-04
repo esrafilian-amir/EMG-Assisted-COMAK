@@ -22,6 +22,9 @@ def main():
     p.add_argument('--tendon-compliance', action='store_true',
                    help='use_tendon_compliance on: optimal fiber length and tendon slack length '
                         'then act on the COMAK muscle force')
+    p.add_argument('--joint-mechanics', action='store_true',
+                   help='also run the JointMechanicsTool after COMAK (contact forces), '
+                        'written to <results>/joint_mechanics')
     a = p.parse_args()
 
     sys.path.insert(0, os.path.join(a.install, 'sdk', 'python'))
@@ -41,6 +44,10 @@ def main():
     comak.set_verbose(0)
     if a.tendon_compliance:
         comak.set_use_tendon_compliance(True)
+    if a.joint_mechanics:
+        comak.set_run_joint_mechanics(True)
+        comak.upd_joint_mechanics().set_results_directory(
+            os.path.abspath(os.path.join(a.results, 'joint_mechanics')))
     comak.printToXML(os.path.join(a.results, 'comak_settings_calibrated.xml'))
     print('Running COMAK with', a.model)
     comak.run()
