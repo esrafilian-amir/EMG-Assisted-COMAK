@@ -6,21 +6,46 @@ together with the shared `models` folder.
 
 ## Python environment
 
-Create a conda environment as described in "Scripting in Python" in the OpenSim
-documentation, and add `scipy` (used by the EMG, passive flexion and anterior laxity
-examples; `matplotlib` is optional and only plots the inputs):
+These steps follow "Scripting in Python" in the OpenSim documentation (manual
+installation), with `scipy` added. `<OPENSIM_INSTALL_DIR>` is the installation with the
+`bin` and `sdk` folders. The bindings in `sdk/Python` were built for one Python version,
+so use that version in the environment (64-bit Python is required).
 
-    conda create -n opensim_scripting python=3.11 numpy scipy
-    conda activate opensim_scripting
+1. Create and activate a conda environment (the name can be changed). `scipy` is used by
+   the EMG, passive flexion and anterior laxity examples; `matplotlib` is optional and
+   only plots the inputs:
 
-Install the OpenSim Python package of this installation into that environment:
+       conda create -n opensim_scripting python=3.11 numpy scipy
+       conda activate opensim_scripting
 
-    cd <OPENSIM_INSTALL_DIR>/sdk/Python
-    python -m pip install .
+2. Install the OpenSim Python package of this installation into the environment
+   (also installs numpy and scipy if they are missing, see `setup.py`):
 
-`pip install .` also installs numpy and scipy if they are missing (see `setup.py`).
-Alternatively, without installing the package, put `<OPENSIM_INSTALL_DIR>/bin` first
-on `PATH` and `<OPENSIM_INSTALL_DIR>/sdk/Python` on `PYTHONPATH`.
+       cd <OPENSIM_INSTALL_DIR>/sdk/Python
+       python -m pip install .
+
+   If `setup_win_python38.py` exists there (Windows, Python 3.8), run
+   `python setup_win_python38.py` first.
+
+3. Make the OpenSim libraries findable:
+   - Windows: put `<OPENSIM_INSTALL_DIR>/bin` at the top of the `Path` environment
+     variable (Edit the system environment variables, Environment Variables, Path, Edit,
+     New, move to the top) and restart the terminal.
+   - Mac: `export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:<OPENSIM_INSTALL_DIR>/sdk/lib`
+     and `.../sdk/Simbody/lib`.
+   - Linux: the same with `LD_LIBRARY_PATH`.
+
+   Without installing the package, put `<OPENSIM_INSTALL_DIR>/bin` first on `PATH` and
+   `<OPENSIM_INSTALL_DIR>/sdk/Python` on `PYTHONPATH`.
+
+4. Test:
+
+       python
+       >>> import opensim as osim
+       >>> osim.GetVersionAndDate()
+
+Troubleshooting: a 32-bit Python or `bin` missing from `Path` are the usual causes of an
+import error.
 
 ## Run
 
