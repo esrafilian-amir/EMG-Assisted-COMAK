@@ -1,6 +1,6 @@
 """EMG muscle calibration driven by a setup file.
 
-    python run_muscle_calibration.py <muscle_calibration_setup.xml> --install <opensim install>
+    python run_muscle_calibration.py <muscle_calibration_setup.xml> [--install <opensim install>]
 
 Inputs: the setup file (see muscle_calibration_setup.xml) and, for each trial, a finished
 COMAK run, whose COMAK setup gives the model, the EMG file, its mapping and delay, the
@@ -167,12 +167,13 @@ def write_outputs(cfg, cms, pr, x):
     return model_path, emg_paths, new
 
 
-def main():
+def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument('setup')
-    ap.add_argument('--install', required=True, help='OpenSim install with the Python bindings')
+    ap.add_argument('--install', default=None,
+                    help='OpenSim install with the Python bindings, if they are not importable')
     ap.add_argument('--recompute-geometry', action='store_true')
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
 
     cfg = read_setup(a.setup)
     os.makedirs(cfg['results'], exist_ok=True)

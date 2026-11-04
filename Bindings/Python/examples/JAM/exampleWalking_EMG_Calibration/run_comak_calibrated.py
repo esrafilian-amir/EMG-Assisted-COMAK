@@ -11,9 +11,9 @@ import os
 import sys
 
 
-def main():
+def main(argv=None):
     p = argparse.ArgumentParser()
-    p.add_argument('--install', required=True)
+    p.add_argument('--install', default=None, help='OpenSim install, if the bindings are not importable')
     p.add_argument('--comak-setup', required=True)
     p.add_argument('--model', required=True)
     p.add_argument('--emg', required=True)
@@ -25,10 +25,11 @@ def main():
     p.add_argument('--joint-mechanics', action='store_true',
                    help='also run the JointMechanicsTool after COMAK (contact forces), '
                         'written to <results>/joint_mechanics')
-    a = p.parse_args()
+    a = p.parse_args(argv)
 
-    sys.path.insert(0, os.path.join(a.install, 'sdk', 'python'))
-    os.environ['PATH'] = os.path.join(a.install, 'bin') + os.pathsep + os.environ['PATH']
+    if a.install:    # not needed when the OpenSim Python bindings can already be imported
+        sys.path.insert(0, os.path.join(a.install, 'sdk', 'python'))
+        os.environ['PATH'] = os.path.join(a.install, 'bin') + os.pathsep + os.environ['PATH']
     import opensim as osim
 
     setup = os.path.abspath(a.comak_setup)

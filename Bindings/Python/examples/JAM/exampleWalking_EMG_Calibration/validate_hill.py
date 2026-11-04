@@ -39,7 +39,7 @@ def compare(title, names, ref, mine):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--install', required=True)
+    p.add_argument('--install', default=None)
     p.add_argument('--comak-setup', required=True)
     p.add_argument('--comak-results', required=True)
     p.add_argument('--geometry', required=True)

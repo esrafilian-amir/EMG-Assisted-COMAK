@@ -57,3 +57,12 @@ anywhere:
 The results are written next to the script (`inputs`, `results`). Copy the example
 folder and the `models` folder to a writable location first if the installation is
 in a protected folder.
+
+## Muscle calibration (`exampleWalking_EMG_Calibration`)
+
+Calibrates the muscle-tendon parameters (strength, optimal fiber length, tendon slack length)
+and the EMG shape of the Lenhart model against the inverse dynamics moments of the walking
+trial and the knee contact force, then reruns COMAK with the calibrated model and EMG. It needs
+`scipy` and `matplotlib` and takes about 25 minutes. The calibrated model is written next to
+the original one in `models`. Not part of the automated tests. See the docstring of
+`exampleWalking_EMG_Calibration.py`; the settings are in `muscle_calibration_setup.xml`.

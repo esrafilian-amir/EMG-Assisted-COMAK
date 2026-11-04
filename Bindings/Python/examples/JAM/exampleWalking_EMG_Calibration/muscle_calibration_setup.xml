@@ -11,10 +11,10 @@
 		    comak_working_directory directly in the tool.)-->
 		<MuscleCalibrationTrials>
 			<MuscleCalibrationTrial name="walking1">
-				<comak_setup_file>../exampleWalking_EMG_Assisted/inputs/comak_settings.xml</comak_setup_file>
+				<comak_setup_file>./inputs/comak_settings_baseline.xml</comak_setup_file>
 				<!--Folder the relative paths of the COMAK setup refer to (the folder COMAK was run from).
 				    Default: the parent folder of the COMAK setup file.-->
-				<comak_working_directory>../exampleWalking_EMG_Assisted</comak_working_directory>
+				<comak_working_directory>.</comak_working_directory>
 			</MuscleCalibrationTrial>
 			<!--Add one MuscleCalibrationTrial per trial, e.g. walking2, a faster speed, ...-->
 		</MuscleCalibrationTrials>
@@ -24,7 +24,7 @@
 		    tendon_slack_length of the calibrated muscles. A relative path refers to the folder
 		    of the original model, because the contact meshes and the geometry are found next
 		    to the model file.-->
-		<output_model_file>P1_lenhart2015_calibrated.osim</output_model_file>
+		<output_model_file>P1_lenhart2015_emg_calibrated.osim</output_model_file>
 		<!--EMG with the calibrated shape: use it as emg_file of COMAK with the new model.-->
 		<output_emg_file>calibrated_emg.sto</output_emg_file>
 		<!--Coordinates whose moments are fitted (sagittal plane).-->

@@ -94,8 +94,9 @@ class Problem:
 
     def __init__(self, geo, emg_file, force_file, install, delay, dofs, emg_map, groups,
                  bounds=None, contact_weight=0.0):
-        sys.path.insert(0, os.path.join(install, 'sdk', 'python'))
-        os.environ['PATH'] = os.path.join(install, 'bin') + os.pathsep + os.environ['PATH']
+        if install:
+            sys.path.insert(0, os.path.join(install, 'sdk', 'python'))
+            os.environ['PATH'] = os.path.join(install, 'bin') + os.pathsep + os.environ['PATH']
         import opensim as osim
         osim.Logger.setLevelString('Error')
         g = np.load(geo)

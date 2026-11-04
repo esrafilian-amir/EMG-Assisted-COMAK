@@ -34,7 +34,7 @@ def read_sto(path):
     return data[:, 0], {lab: data[:, i] for i, lab in enumerate(labels) if i > 0}
 
 
-def main():
+def main(argv=None):
     p = argparse.ArgumentParser()
     p.add_argument('--comak-setup', required=True)
     p.add_argument('--comak-cwd', required=True)
@@ -43,7 +43,7 @@ def main():
                    help='name=results folder[=EMG file the run was given]')
     p.add_argument('--prefix', default='walking')
     p.add_argument('--out', required=True)
-    a = p.parse_args()
+    a = p.parse_args(argv)
     os.makedirs(a.out, exist_ok=True)
 
     cm = rmc.read_comak_setup({'comak_setup': os.path.abspath(a.comak_setup),
