@@ -9,7 +9,10 @@ operations (no OpenSim). Per muscle group it can fit
 The EMG is delayed by the electromechanical delay. Muscles without an EMG channel keep
 the force COMAK found (a fixed background). The objective is the CEINMS one: the
 squared error of the coordinate moments, normalised by the ID variance, plus small
-priors that keep the parameters near their starting values.
+priors that keep the parameters near their starting values. Optionally also the knee
+contact force the muscles cause (contact_weight): the sum over the muscles of force times the
+compression that one newton of the muscle adds to the knee (contact_gain of extract_geometry),
+normalised by its peak with the starting parameters.
 """
 import os
 import sys
@@ -90,7 +93,7 @@ class Problem:
     """emg_map: {muscle: [(weight, channel), ...]}; groups: [{'name', 'muscles', 'fit', 'bounds'}]"""
 
     def __init__(self, geo, emg_file, force_file, install, delay, dofs, emg_map, groups,
-                 bounds=None):
+                 bounds=None, contact_weight=0.0):
         sys.path.insert(0, os.path.join(install, 'sdk', 'python'))
         os.environ['PATH'] = os.path.join(install, 'bin') + os.pathsep + os.environ['PATH']
         import opensim as osim
@@ -111,6 +114,11 @@ class Problem:
         self.curves = (g['curve_active_force_length'], g['curve_passive_force_length'],
                        g['curve_tendon_force_length'])
         self.id = g['id_moments'][:, self.dof_idx]
+        self.contact_weight = contact_weight
+        if contact_weight > 0 and 'contact_gain' not in g.files:
+            raise SystemExit(f'{geo} has no contact gains: recompute the geometry cache '
+                             f'(--recompute-geometry)')
+        self.gain = g['contact_gain'] if 'contact_gain' in g.files else None
 
         # EMG of each muscle: weighted sum of its channels, delayed
         emg = osim.TimeSeriesTable(emg_file)
@@ -152,6 +160,14 @@ class Problem:
         self.lb = np.array([gr.get('bounds', {}).get(p, bounds[p])[0] for gr in groups for p in PARAMS])
         self.ub = np.array([gr.get('bounds', {}).get(p, bounds[p])[1] for gr in groups for p in PARAMS])
         self.free = np.array([p in gr['fit'] for gr in groups for p in PARAMS])
+        self.cf_scale = 1.0
+        if self.gain is not None:
+            self.cf_scale = max(self.contact(self.x0).max(), 1.0)
+
+    def contact(self, x):
+        """Knee compression (N) that the muscle forces cause, per frame."""
+        f, _ = self.forces(x)
+        return (f * self.gain).sum(axis=1)
 
     def unpack(self, x):
         p = x.reshape(len(self.groups), len(PARAMS))
@@ -173,7 +189,11 @@ class Problem:
 
     def errors(self, x):
         """Moment errors normalised by the ID variance; sum of squares = CEINMS error."""
-        return ((self.id - self.moments(x)) / np.sqrt(self.var) / np.sqrt(len(self.t))).ravel()
+        e = ((self.id - self.moments(x)) / np.sqrt(self.var) / np.sqrt(len(self.t))).ravel()
+        if self.contact_weight > 0:
+            e = np.concatenate([e, self.contact_weight * self.contact(x) / self.cf_scale
+                                / np.sqrt(len(self.t))])
+        return e
 
     def prior(self, x, w_prior=0.05):
         return (x - self.x0) / (self.ub - self.lb) * w_prior
@@ -188,6 +208,9 @@ class Problem:
             err = self.id[:, d] - m[:, d]
             out[n] = {'rmse_Nm': float(np.sqrt(np.mean(err ** 2))),
                       'r2': float(1 - err.var() / self.id[:, d].var())}
+        if self.gain is not None:
+            c = self.contact(x)
+            out['knee_compression_N'] = {'peak': float(c.max()), 'mean': float(c.mean())}
         return out
 
     def fit(self, max_nfev=300):

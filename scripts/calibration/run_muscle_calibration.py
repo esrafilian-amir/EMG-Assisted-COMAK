@@ -82,6 +82,8 @@ def read_setup(setup_file):
     cfg['out_emg'] = text(tool, 'output_emg_file', 'calibrated_emg.sto')
     cfg['coordinates'] = text(tool, 'coordinates', 'hip_flex_r knee_flex_r ankle_flex_r').split()
     cfg['suffix'] = text(tool, 'muscle_side_suffix', '_r')
+    # weight of the knee contact force (compression the muscles cause) in the objective; 0 = off
+    cfg['contact_weight'] = float(text(tool, 'contact_force_weight', '0'))
     cfg['bounds'] = {k: pair(tool, k + '_bounds', calibrate.DEFAULT_BOUNDS[k])
                      for k in calibrate.PARAMS}
     cfg['groups'] = []
@@ -192,7 +194,7 @@ def main():
             print(f"Stage 1 [{trial['name']}]: using the cache", cache)
         problems.append(calibrate.Problem(cache, cm['emg'], force, a.install, cm['delay'],
                                           cfg['coordinates'], cm['map'], cfg['groups'],
-                                          cfg['bounds']))
+                                          cfg['bounds'], cfg['contact_weight']))
 
     print('Stage 2: calibration on', len(problems), 'trial(s)')
     pr = problems[0] if len(problems) == 1 else calibrate.MultiProblem(
@@ -209,6 +211,10 @@ def main():
             print('%-14s %10.1f  %8.2f %12.1f  %8.2f' % (
                 n, before[t][n]['rmse_Nm'], before[t][n]['r2'],
                 after[t][n]['rmse_Nm'], after[t][n]['r2']))
+        if 'knee_compression_N' in after[t]:
+            b, c = before[t]['knee_compression_N'], after[t]['knee_compression_N']
+            print('knee compression from the muscles (N): peak %.0f -> %.0f, mean %.0f -> %.0f' % (
+                b['peak'], c['peak'], b['mean'], c['mean']))
     print('%-24s %s' % ('group', ' '.join('%12s' % p for p in calibrate.PARAMS)))
     for name, v in pr.group_values(x).items():
         print('%-24s %s' % (name, ' '.join('%12.3f' % v[p] for p in calibrate.PARAMS)))

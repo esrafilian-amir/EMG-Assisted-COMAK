@@ -28,6 +28,11 @@
 		<!--EMG with the calibrated shape: use it as emg_file of COMAK with the new model.-->
 		<output_emg_file>calibrated_emg.sto</output_emg_file>
 		<!--Coordinates whose moments are fitted (sagittal plane).-->
+		<!--Weight of the knee contact force in the objective: the compression the muscles cause
+		    (sum of muscle force times the compression one newton of that muscle adds to the knee,
+		    from the statics of the shank and foot), divided by its peak with the starting parameters.
+		    The moment errors are normalised the same way, so 1 gives the two similar weight. 0 = off.-->
+		<contact_force_weight>1</contact_force_weight>
 		<coordinates>hip_flex_r knee_flex_r ankle_flex_r</coordinates>
 		<muscle_side_suffix>_r</muscle_side_suffix>
 		<!--Bounds as factors of the model values (the EMG shape A is not a factor).-->

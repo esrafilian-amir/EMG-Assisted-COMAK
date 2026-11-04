@@ -25,6 +25,11 @@ PRIMARY = ['hip_flex_r', 'hip_add_r', 'hip_rot_r', 'knee_flex_r', 'ankle_flex_r'
 # on the patella, have none about knee_flex_r. Their effective arm follows from the chain rule
 # along the motion, arm_eff = arm_direct + sum_s arm_s * dq_s/dtheta (virtual work).
 FOLLOW = 'knee_flex_r'
+# Bodies below the knee (the tibiofemoral joint), the tibia that gives the axis of the
+# compressive force, the patella and the muscles that end on it (see contact_gain below).
+DISTAL = ['tibia_proximal', 'tibia', 'talus', 'calcn', 'toes']
+TIBIA = 'tibia'
+PATELLA = 'patella'
 SECONDARY = ['knee_add_r', 'knee_rot_r', 'knee_tx_r', 'knee_ty_r', 'knee_tz_r',
              'pf_flex_r', 'pf_rot_r', 'pf_tilt_r', 'pf_tx_r', 'pf_ty_r', 'pf_tz_r']
 
@@ -61,6 +66,11 @@ def main(a=None):
     use_cols = [(i, l) for i, l in enumerate(labels) if l in model_vars]
 
     muscles = [m for m in model.getMuscles() if m.getName().endswith(a.suffix)]
+    distal = {n + a.suffix for n in DISTAL}
+    tibia = model.getBodySet().get(TIBIA + a.suffix)
+    fset0 = model.getForceSet()
+    pt_ligaments = [osim.Blankevoort1991Ligament.safeDownCast(fset0.get(i))
+                    for i in range(fset0.getSize()) if re.fullmatch(r'PT\d+', fset0.get(i).getName())]
     names = [m.getName() for m in muscles]
     coords = [model.getCoordinateSet().get(c) for c in PRIMARY]
     n_t, n_m, n_d = len(time), len(muscles), len(coords)
@@ -75,12 +85,40 @@ def main(a=None):
     speed = np.zeros((n_t, n_m))
     arm = np.zeros((n_t, n_m, n_d))
     arm_sec = np.zeros((n_t, n_m, n_s))
+    gain = np.zeros((n_t, n_m))
     q_sec = np.zeros((n_t, n_s))
     theta = np.zeros(n_t)
+    def point_forces(path):
+        # (body name, direction in ground of the force the path applies to it, per unit tension)
+        pf = osim.ArrayPointForceDirection()
+        path.getPointForceDirections(state, pf)
+        return [(pf.get(i).frame().getName(),
+                 np.array([pf.get(i).direction().get(c) for c in range(3)])) for i in range(pf.getSize())]
+
     for k in range(n_t):
         for i, l in use_cols:
             model.setStateVariableValue(state, l, data[k, i])
         model.realizeVelocity(state)
+        # The compression of the knee that one newton of a muscle adds (statics of the shank and
+        # foot: the net force a muscle puts on them, along the long axis of the tibia, pointing
+        # to the knee). The quadriceps end on the patella: its force reaches the tibia through
+        # the patellar ligament (equal tension), in the direction of that ligament.
+        y_prox = np.array([tibia.expressVectorInGround(state, osim.Vec3(0, 1, 0)).get(c)
+                           for c in range(3)])
+        d_pt = np.zeros(3)
+        for lig in pt_ligaments:
+            for body, d in point_forces(lig.getGeometryPath()):
+                if body in distal:
+                    d_pt += d
+        d_pt = d_pt / max(np.linalg.norm(d_pt), 1e-9)
+        for j, m in enumerate(muscles):
+            f_dist, f_pat = np.zeros(3), np.zeros(3)
+            for body, d in point_forces(m.getGeometryPath()):
+                if body in distal:
+                    f_dist += d
+                elif body == PATELLA + a.suffix:
+                    f_pat += d
+            gain[k, j] = f_dist @ y_prox + np.linalg.norm(f_pat) * (d_pt @ y_prox)
         theta[k] = follow.getValue(state)
         for s, c in enumerate(sec):
             q_sec[k, s] = c.getValue(state)
@@ -184,6 +222,7 @@ def main(a=None):
 
     np.savez(a.out, time=time, names=np.array(names), primary=np.array(PRIMARY),
              length=length, speed=speed, arm=arm, arm_direct=arm_direct, id_moments=moments,
+             contact_gain=gain,
              **curves, **{k: v for k, v in par.items()})
     print('muscles', n_m, 'frames', n_t, 'wrote', a.out)
 
