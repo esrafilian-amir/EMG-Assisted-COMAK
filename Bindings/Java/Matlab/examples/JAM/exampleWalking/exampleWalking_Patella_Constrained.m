@@ -64,6 +64,11 @@ comak_ik.set_ik_constraint_weight(100);
 % then uses 40 Hz).
 lowpass_filter_frequency = 6;
 comak_ik.set_smooth_ik_lowpass_frequency(lowpass_filter_frequency);
+% Two-pass smoothed IK (on by default): pass 1 is the usual IK (saved as <output>_pass1.mot); its free coordinates are
+% low-pass filtered and pass 2 re-solves the markers with a soft pull toward them, which removes frame-to-frame jitter
+% without changing the marker fit. To turn it off, or to change how strongly it pulls (default 1):
+% comak_ik.set_smooth_ik_second_pass(false);
+% comak_ik.set_smooth_ik_weight(1);
 comak_ik.set_ik_accuracy(1e-5);
 comak_ik.set_use_visualizer(true);
 comak_ik.set_verbose(10);
