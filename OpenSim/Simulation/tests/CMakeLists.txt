@@ -25,6 +25,14 @@ OpenSimAddTest(NAME testExponentialContact
 OpenSimAddTest(NAME testForceProducer
         LINKLIBS ${OSIM_SIMULATION_TEST_LIBS})
 
+OpenSimAddTest(NAME testSmith2018ArticularContactForce
+        LINKLIBS ${OSIM_SIMULATION_TEST_LIBS}
+        RESOURCES resources/x_z_plane.stl
+                  resources/x_z_disk_10cm_radius.stl
+                  resources/half_sphere_10cm_radius.stl
+                  resources/sphere_10cm_radius.stl
+        )
+
 OpenSimAddTest(NAME testSmith2018NonlinearContact
         LINKLIBS ${OSIM_SIMULATION_TEST_LIBS}
         RESOURCES resources/x_z_plane.stl
