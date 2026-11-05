@@ -253,7 +253,7 @@ public:
     // DATA
     //=========================================================================
 public:
-	bool _is_emg_assisted;
+    bool _is_emg_assisted;
 
 private:
     Model *_model;

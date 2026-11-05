@@ -121,7 +121,7 @@ void COMAKInverseKinematicsTool::constructProperties()
     constructProperty_constrained_model_file("");
     constructProperty_geometry_folder("");
     constructProperty_use_visualizer(false);
-	constructProperty_verbose(0);
+    constructProperty_verbose(0);
 }
 
 void COMAKInverseKinematicsTool::setModel(Model& model) {
@@ -1081,7 +1081,7 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
 
             model_cons.addConstraint(cc_constraint);
         }
-		
+
         for (int i = model_cons.upd_ForceSet().getSize() - 1; i >= 0; i--) {
             if (model_cons.getForceSet().get(i).getConcreteClassName() ==
                     "Blankevoort1991Ligament") {
