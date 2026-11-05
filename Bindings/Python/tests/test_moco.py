@@ -436,6 +436,8 @@ class TestWorkflow(unittest.TestCase):
         mass_goal.addParameter(parameter, "p")
         mass_goal.addParameter(parameter2, "q")
 
+        if not osim.MocoTropterSolver.isAvailable():
+            self.skipTest("MocoTropterSolver is not available.")
         ms = study.initTropterSolver()
         ms.set_num_mesh_intervals(25)
         sol = study.solve()

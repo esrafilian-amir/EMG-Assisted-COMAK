@@ -47,6 +47,7 @@
 #include <OpenSim/Analyses/osimAnalyses.h>
 #include <OpenSim/Auxiliary/auxiliaryTestFunctions.h>
 #include <OpenSim/Simulation/osimSimulation.h>
+#include <OpenSim/Actuators/SpringGeneralizedForce.h>
 #include <catch2/catch_all.hpp>
 
 using namespace OpenSim;

@@ -15,6 +15,13 @@ if (sys.platform.startswith('win')):
     dev_path = os.path.join(curFolder, "../../../../Release")
     if (os.path.exists(dev_path)):
         os.add_dll_directory(dev_path)
+    # For local testing of a build in another configuration (RelWithDebInfo,
+    # Debug...): the package is <build>/Bindings/Python/<config>/opensim and the
+    # libraries are in <build>/<config>
+    config_name = os.path.basename(os.path.dirname(curFolder))
+    config_path = os.path.join(curFolder, "../../../..", config_name)
+    if (os.path.isfile(os.path.join(config_path, "osimCommon.dll"))):
+        os.add_dll_directory(config_path)
 
 from .simbody import *
 from .common import *
