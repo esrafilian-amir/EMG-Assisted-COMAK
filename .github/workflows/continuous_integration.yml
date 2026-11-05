@@ -30,6 +30,10 @@ on:
     tags:
       - '*'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   # The branch that the scheduled (Monday) build checks out.
   SCHEDULED_REF: master_v2
@@ -80,6 +84,7 @@ jobs:
         key: ${{ runner.os }}-dependencies-${{ hashFiles('dependencies/*') }}
 
     - name: Build dependencies
+      id: build-deps
       if: steps.cache-dependencies.outputs.cache-hit != 'true'
       run: |
         echo $env:GITHUB_WORKSPACE\\build_deps
@@ -89,7 +94,27 @@ jobs:
         # https://msdn.microsoft.com/en-us/library/19z1t1wy.aspx
         # TODO: CMake provides /W3, which overrides our /W0
         cmake -E env CXXFLAGS="/W0" cmake $env:GITHUB_WORKSPACE/dependencies -LAH -G"Visual Studio 17 2022" -A x64 -DCMAKE_INSTALL_PREFIX=~/opensim_dependencies_install -DSUPERBUILD_ezc3d=ON -DOPENSIM_WITH_TROPTER=ON -DOPENSIM_WITH_CASADI=ON
-        cmake --build . --config Release -- /maxcpucount:4
+        # The errors of this build are also written to build_errors.log (see the next step).
+        cmake --build . --config Release -- /maxcpucount:4 /fl1 '/flp1:logfile=build_errors.log;errorsonly'
+
+    - name: Show the errors of the dependency build
+      if: failure() && steps.build-deps.conclusion == 'failure'
+      run: |
+        echo "=== errors of the MSBuild run (build_errors.log)"
+        Get-Content $env:GITHUB_WORKSPACE\\build_deps\\build_errors.log -ErrorAction SilentlyContinue | Select-Object -First 80
+        echo "=== newest non-empty log files of the external project steps"
+        Get-ChildItem $env:GITHUB_WORKSPACE\\build_deps -Recurse -Filter *-err.log -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 0 } | Sort-Object LastWriteTime -Descending | Select-Object -First 6 | ForEach-Object { echo ("--- " + $_.FullName); Get-Content $_.FullName -Tail 40 }
+
+    - name: Upload the dependency build logs
+      if: failure() && steps.build-deps.conclusion == 'failure'
+      uses: actions/upload-artifact@v4
+      with:
+        name: dependency-build-logs-win2022
+        path: |
+          build_deps/build_errors.log
+          build_deps/**/*-err.log
+          build_deps/**/*-out.log
+        retention-days: 7
 
     - name: Configure EMG-Assisted-COMAK
       id: configure
