@@ -214,10 +214,14 @@ AddDependency(NAME hdf5
                          -DHDF5_BUILD_EXAMPLES:BOOL=OFF
                          -DHDF5_BUILD_TOOLS:BOOL=OFF)
 
+# Catch2 asks for a very old CMake: like HDF5, it needs these two lines to be built
+# with the DLL C runtime (/MD) on Windows, as the tests are.
 AddDependency(NAME       catch2
               DEFAULT    ON
               GIT_URL    https://github.com/catchorg/Catch2.git
-              GIT_TAG    v3.5.0)
+              GIT_TAG    v3.5.0
+              CMAKE_ARGS -DCMAKE_POLICY_DEFAULT_CMP0091:STRING=NEW
+                         -DCMAKE_MSVC_RUNTIME_LIBRARY:STRING=MultiThreadedDLL)
 
 # Moco settings.
 # --------------
