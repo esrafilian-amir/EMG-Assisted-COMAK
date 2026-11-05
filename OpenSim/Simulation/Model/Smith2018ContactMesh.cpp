@@ -21,6 +21,7 @@
  * -------------------------------------------------------------------------- */
 
 #include "Smith2018ContactMesh.h"
+#include <OpenSim/Common/PropertyStr.h>
 
 #include "OpenSim/Common/Object.h"
 #include "OpenSim/JAM/JAMUtilities.h"
@@ -1101,7 +1102,7 @@ void Smith2018ContactMesh::printMeshDebugInfo() const {
         SimTK::Vec3 n = normal(i);
 
         log_trace("{:<10} {:<15} {:<15} {:<15} {:<15} {:<35} {:<35}", i, a, t,
-                E, v, c, n);
+                E, v, c.toString(), n.toString());
     }
 }
 

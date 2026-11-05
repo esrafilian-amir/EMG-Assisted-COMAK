@@ -204,6 +204,11 @@ AddDependency(NAME hdf5
               GIT_URL https://github.com/HDFGroup/hdf5.git
               GIT_TAG hdf5-1_12_0
               CMAKE_ARGS -DBUILD_STATIC_LIBS:BOOL=ON
+                         # HDF5 asks for CMake 3.12: without these two lines its
+                         # static libraries are built with the static C runtime (/MT)
+                         # and do not link into OpenSim (/MD).
+                         -DCMAKE_POLICY_DEFAULT_CMP0091:STRING=NEW
+                         -DCMAKE_MSVC_RUNTIME_LIBRARY:STRING=MultiThreadedDLL
                          -DBUILD_TESTING:BOOL=OFF
                          -DHDF5_CPP_LIB:BOOL=ON
                          -DHDF5_BUILD_EXAMPLES:BOOL=OFF

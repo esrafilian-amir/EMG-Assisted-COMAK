@@ -182,8 +182,9 @@ class OSIMSIMULATION_API Smith2018ContactMesh : public ContactGeometry {
         std::vector<std::vector<int>> triangles);
 
     // TODO This function must be overriden for because this component is
-    // derived from OpenSim::ContactGeometry.
-    SimTK::ContactGeometry createSimTKContactGeometry() const override {
+    // derived from OpenSim::ContactGeometry (createSimTKContactGeometry() is
+    // not virtual in ContactGeometry any more, the Impl function is).
+    SimTK::ContactGeometry createSimTKContactGeometryImpl() const override {
         return SimTK::ContactGeometry();
     };
 
