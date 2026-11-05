@@ -26,11 +26,15 @@
 #include "PiecewiseLinearFunction.h"
 #include "STOFileAdapter.h"
 #include "TimeSeriesTable.h"
+#include <array>
 #include <chrono>
+#include <cstdint>
 #include <ctime>
 #include <iomanip>
+#include <limits>
 #include <memory>
 #include <sstream>
+#include <unordered_map>
 
 #include <SimTKcommon/internal/Pathname.h>
 
@@ -69,11 +73,38 @@ std::string OpenSim::getFormattedDateTime(
     return ss.str();
 }
 
+std::string OpenSim::detectDelimiter(
+        const std::string& input, const std::vector<std::string>& delimiters) {
+
+    std::unordered_map<std::string, std::size_t> counts;
+
+    // Count occurrences of common delimiters in the input string
+    std::transform(delimiters.begin(), delimiters.end(),
+            std::inserter(counts, counts.end()), [&input](const std::string& d) {
+                std::size_t count = 0;
+                std::size_t pos = 0;
+                // Find all occurrences of delimiter in input string
+                while ((pos = input.find(d, pos)) != std::string::npos) {
+                    ++count;
+                    pos += d.length(); // Move past the current delimiter
+                }
+                return std::pair<std::string, std::size_t>(d, count);
+            });
+
+    // Find the delimiter with the highest frequency
+    auto maxElem = std::max_element(counts.begin(), counts.end(),
+            [](const auto& a, const auto& b) { return a.second < b.second; });
+
+    // If a delimiter is found, return it, otherwise return an empty string
+    return (maxElem != counts.end() && maxElem->second > 0) ? maxElem->first : "";
+}
+
 SimTK::Vector OpenSim::createVectorLinspace(
         int length, double start, double end) {
     SimTK::Vector v(length);
+    const double step_size = (end - start) / static_cast<double>((length - 1));
     for (int i = 0; i < length; ++i) {
-        v[i] = start + i * (end - start) / (length - 1);
+        v[i] = std::fma(i, step_size, start);
     }
     return v;
 }
@@ -160,7 +191,7 @@ SimTK::Real OpenSim::solveBisection(
                                       x.getContiguousScalarData() + x.size()),
                 residual, {"residual"});
         STOFileAdapter::write(
-                table, fmt::format("solveBisection_residual_{}.sto",
+                table, std::format("solveBisection_residual_{}.sto",
                                getFormattedDateTime()));
     }
     OPENSIM_THROW_IF(sameSign, Exception,
@@ -195,6 +226,10 @@ SimTK::Matrix OpenSim::computeKNearestNeighbors(const SimTK::Matrix& x,
             "columns, but found {} and {}, respectively.",
             x.ncol(), y.ncol());
 
+    OPENSIM_THROW_IF(k < 1 || k > x.nrow(), Exception,
+            "Expected 'k' to be between 1 and the number of rows in 'x' ({}), "
+            "but received {}.", x.nrow(), k);
+
     // Initialize the output matrices.
     SimTK::Matrix distances(y.nrow(), k, 0.0);
 
@@ -224,8 +259,8 @@ SimTK::Matrix OpenSim::computeKNearestNeighbors(const SimTK::Matrix& x,
     return distances;
 }
 
-double OpenSim::factorizeMatrixNonNegative(const SimTK::Matrix& A, 
-        int numFactors, int maxIterations, double tolerance, 
+double OpenSim::factorizeMatrixNonNegative(const SimTK::Matrix& A,
+        int numFactors, int maxIterations, double tolerance,
         SimTK::Matrix& W, SimTK::Matrix& H) {
 
     // Initialize W and H.
@@ -259,7 +294,7 @@ double OpenSim::factorizeMatrixNonNegative(const SimTK::Matrix& A,
     SimTK::Matrix error(A.nrow(), A.ncol());
     double normError0 = SimTK::Infinity;
     double normError = SimTK::Infinity;
-    double deltaError = SimTK::Infinity;    
+    double deltaError = SimTK::Infinity;
     for (int j = 0; j < maxIterations; ++j) {
 
         // Alternating least squares.
@@ -272,7 +307,7 @@ double OpenSim::factorizeMatrixNonNegative(const SimTK::Matrix& A,
                 H(i, k) = std::max(0.0, H(i, k));
             }
         }
-        // ~H * ~W = ~A --> ~W = ~H^(-1) * ~A  
+        // ~H * ~W = ~A --> ~W = ~H^(-1) * ~A
         SimTK::FactorSVD svd_H(H.transpose().getAsMatrix());
         svd_H.solve(A.transpose().getAsMatrix(), W.transpose().updAsMatrix());
         for (int i = 0; i < W.nrow(); ++i) {
@@ -292,10 +327,10 @@ double OpenSim::factorizeMatrixNonNegative(const SimTK::Matrix& A,
 
         // Compute error using the Frobenius norm.
         error = A - W * H;
-        normError = std::sqrt(error.scalarNormSqr()) / 
+        normError = std::sqrt(error.scalarNormSqr()) /
                            std::sqrt(A.nelt());
         deltaError = normError0 - normError;
-        log_info("Iteration {} | norm(error) = {} | change in norm(error) = {}", 
+        log_info("Iteration {} | norm(error) = {} | change in norm(error) = {}",
                 j, normError, deltaError);
 
         // Check for convergence.
@@ -308,11 +343,47 @@ double OpenSim::factorizeMatrixNonNegative(const SimTK::Matrix& A,
             log_info("");
             break;
         }
-    
+
         // Update variables.
         normError0 = normError;
         W0 = W;
     }
 
     return normError;
+}
+
+int OpenSim::choose(int n, int k) {
+    OPENSIM_THROW_IF(n < 0, Exception, "n must be non-negative.");
+    OPENSIM_THROW_IF(k < 0 || k > n, Exception, "k must be between 0 and n.");
+
+    // Use symmetry C(n,k) == C(n,n-k) to minimize loop iterations.
+    if (k > n - k) { k = n - k; }
+
+    int64_t result = 1;
+    for (int i = 0; i < k; ++i) {
+        // Check for overflow before multiplying.
+        OPENSIM_THROW_IF(result > std::numeric_limits<int64_t>::max() / (n - i),
+                Exception, "Intermediate overflow in binomial coefficient.");
+        result *= (n - i);
+        result /= (i + 1); // exact: result holds C(n,i), so product is divisible
+    }
+
+    OPENSIM_THROW_IF(result > std::numeric_limits<int>::max(), Exception,
+            "Binomial coefficient exceeds int range.");
+    return static_cast<int>(result);
+}
+
+std::optional<SimTK::CoordinateAxis> OpenSim::parseCoordinateAxis(
+        const std::string& axisName) {
+    if (axisName.size() != 1) { return std::nullopt; }
+    switch (axisName.front()) {
+    case 'x': case 'X': return SimTK::CoordinateAxis::XCoordinateAxis();
+    case 'y': case 'Y': return SimTK::CoordinateAxis::YCoordinateAxis();
+    case 'z': case 'Z': return SimTK::CoordinateAxis::ZCoordinateAxis();
+    default: return std::nullopt;
+    }
+}
+
+std::string OpenSim::getCoordinateAxisName(SimTK::CoordinateAxis axis) {
+    return std::string(1, std::array<char, 3>{'x', 'y', 'z'}.at(axis));
 }

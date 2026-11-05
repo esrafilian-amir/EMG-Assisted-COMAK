@@ -41,6 +41,7 @@
 
 #include <OpenSim/Moco/MocoGoal/MocoOutputGoal.h>
 #include <OpenSim/Moco/osimMoco.h>
+#include <OpenSim/Simulation/Model/Bhargava2004SmoothedMuscleMetabolics.h>
 
 using namespace OpenSim;
 
@@ -117,7 +118,7 @@ void gaitTrackingMetabolics() {
     track.set_track_reference_position_derivatives(true);
     track.set_apply_tracked_states_to_guess(true);
     track.set_initial_time(0.0);
-    track.set_final_time(0.47008941);
+    track.set_final_time(0.470089);
     MocoStudy study = track.initialize();
     MocoProblem& problem = study.updProblem();
 

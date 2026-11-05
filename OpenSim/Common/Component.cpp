@@ -26,12 +26,11 @@
 #include "Component.h"
 #include "OpenSim/Common/IO.h"
 #include "XMLDocument.h"
+#include "Detail/SimbodyFormatterShims.h"
 
 #include <regex>
 #include <unordered_map>
 #include <unordered_set>
-
-using namespace SimTK;
 
 namespace OpenSim {
 
@@ -159,6 +158,33 @@ void Component::addComponent(Component* subcomponent)
     // allow the derived Component to perform secondary operations
     // in response to the inclusion of the subcomponent
     extendAddComponent(subcomponent);
+}
+
+std::unique_ptr<Component> Component::extractComponent(Component* subcomponent)
+{
+    auto& componentsProp = updProperty_components();
+
+    // Try to find `subcomponent` in the `components` property.
+    int idx = -1;
+    for (int i = 0; i < componentsProp.size(); ++i) {
+        if (&componentsProp[i] == subcomponent) {
+            idx = i;
+            break;
+        }
+    }
+    if (idx == -1) {
+        return nullptr;  // Not found.
+    }
+
+    // Perform removal
+    std::unique_ptr<Component> rv = componentsProp.extractValueAtIndex(idx);
+    finalizeFromProperties();
+    return rv;
+}
+
+bool Component::removeComponent(Component* subcomponent)
+{
+    return extractComponent(subcomponent) != nullptr;  // `std::unique_ptr<Component>` handles destruction
 }
 
 void Component::prependComponentPathToConnecteePath(
@@ -516,8 +542,8 @@ void Component::addStateVariable(const std::string&  stateVariableName,
                                  const SimTK::Stage& invalidatesStage,
                                  bool isHidden) const
 {
-    if( (invalidatesStage < Stage::Position) ||
-        (invalidatesStage > Stage::Dynamics)) {
+    if ((invalidatesStage < SimTK::Stage::Position) ||
+            (invalidatesStage > SimTK::Stage::Dynamics)) {
         throw Exception("Component::addStateVariable: invalidatesStage "
                         "must be Position, Velocity or Dynamics.");
     }
@@ -555,7 +581,8 @@ void Component::addStateVariable(Component::StateVariable*  stateVariable) const
     // to enable a similar interface for setting and getting the derivatives
     // based on the creator specified state name
     if(asv){
-        addCacheVariable(stateVariableName+"_deriv", 0.0, Stage::Dynamics);
+        addCacheVariable(
+                stateVariableName + "_deriv", 0.0, SimTK::Stage::Dynamics);
     }
 
 }
@@ -972,9 +999,8 @@ double Component::
 
 // Set the value of a state variable allocated by this Component given its name
 // for this component.
-void Component::
-    setStateVariableValue(State& s, const std::string& name, double value) const
-{
+void Component::setStateVariableValue(
+        SimTK::State& s, const std::string& name, double value) const {
     // Must have already called initSystem.
     OPENSIM_THROW_IF_FRMOBJ(!hasSystem(), ComponentHasNoSystem);
 
@@ -1039,7 +1065,7 @@ SimTK::Vector Component::
             _allStateVariables[i].reset(traverseToStateVariable(names[i]));
     }
 
-    Vector stateVariableValues(nsv, SimTK::NaN);
+    SimTK::Vector stateVariableValues(nsv, SimTK::NaN);
     for(int i=0; i<nsv; ++i){
         stateVariableValues[i]= _allStateVariables[i]->getValue(state);
     }
@@ -1078,10 +1104,8 @@ void Component::
 }
 
 // Set the derivative of a state variable computed by this Component by name.
-void Component::
-    setStateVariableDerivativeValue(const State& state,
-                               const std::string& name, double value) const
-{
+void Component::setStateVariableDerivativeValue(const SimTK::State& state,
+        const std::string& name, double value) const {
     std::map<std::string, StateVariableInfo>::const_iterator it;
     it = _namedStateVariableInfo.find(name);
 
@@ -1098,7 +1122,6 @@ void Component::
         throw Exception(msg.str(),__FILE__,__LINE__);
     }
 }
-
 
 Array<std::string> Component::getDiscreteVariableNames() const {
     // Must have already called initSystem.
@@ -1796,8 +1819,8 @@ void Component::extendRealizeAcceleration(const SimTK::State& s) const
             if(asv)
                 // set corresponding system derivative value from
                 // cached value
-                subSys.updZDot(s)[ZIndex(asv->getVarIndex())] =
-                    asv->getDerivative(s);
+                subSys.updZDot(s)[SimTK::ZIndex(asv->getVarIndex())] =
+                        asv->getDerivative(s);
         }
     }
 }
@@ -1826,10 +1849,10 @@ void Component::extendRealizeReport(const SimTK::State& state) const {}
 //override virtual methods
 double Component::AddedStateVariable::getValue(const SimTK::State& state) const
 {
-    ZIndex zix(getVarIndex());
+    SimTK::ZIndex zix(getVarIndex());
     if(getSubsysIndex().isValid() && zix.isValid()){
         const SimTK::Vector& z = getOwner().getDefaultSubsystem().getZ(state);
-        return z[ZIndex(zix)];
+        return z[SimTK::ZIndex(zix)];
     }
 
     std::stringstream msg;
@@ -1842,10 +1865,10 @@ double Component::AddedStateVariable::getValue(const SimTK::State& state) const
 
 void Component::AddedStateVariable::setValue(SimTK::State& state, double value) const
 {
-    ZIndex zix(getVarIndex());
+    SimTK::ZIndex zix(getVarIndex());
     if(getSubsysIndex().isValid() && zix.isValid()){
         SimTK::Vector& z = getOwner().getDefaultSubsystem().updZ(state);
-        z[ZIndex(zix)] = value;
+        z[SimTK::ZIndex(zix)] = value;
         return;
     }
 
@@ -1885,7 +1908,7 @@ void Component::AddedStateVariable::
 
 
 void Component::printSocketInfo() const {
-    std::string str = fmt::format("Sockets for component {} of type [{}] along "
+    std::string str = std::format("Sockets for component {} of type [{}] along "
                                   "with connectee paths:", getName(),
                                   getConcreteClassName());
     if (getNumSockets() == 0)
@@ -1906,8 +1929,8 @@ void Component::printSocketInfo() const {
     for (const auto& it : _socketsTable) {
         const auto& socket = it.second;
         // Right-justify the connectee type names and socket names.
-        str = fmt::format("{:>{}} {:>{}} : ",
-                          fmt::format("[{}]", socket->getConnecteeTypeName()),
+        str = std::format("{:>{}} {:>{}} : ",
+                          std::format("[{}]", socket->getConnecteeTypeName()),
                           maxlenTypeName,
                           socket->getName(), maxlenSockName);
         if (socket->getNumConnectees() == 0) {
@@ -1918,14 +1941,14 @@ void Component::printSocketInfo() const {
                 connecteePaths.push_back(socket->getConnecteePath(i));
             }
             // Join the connectee paths with spaces in between.
-            str += fmt::format("{}", fmt::join(connecteePaths, " "));
+            str += std::format("{}", detail::join(connecteePaths, " "));
         }
         log_cout(str);
     }
 }
 
 void Component::printInputInfo() const {
-    std::string str = fmt::format("Inputs for component {} of type [{}] along "
+    std::string str = std::format("Inputs for component {} of type [{}] along "
                                   "with connectee paths:",
                                   getName(), getConcreteClassName());
     if (getNumInputs() == 0)
@@ -1945,8 +1968,8 @@ void Component::printInputInfo() const {
     for (const auto& it : _inputsTable) {
         const auto& input = it.second;
         // Right-justify the connectee type names and input names.
-        str = fmt::format("{:>{}} {:>{}} : ",
-                          fmt::format("[{}]", input->getConnecteeTypeName()),
+        str = std::format("{:>{}} {:>{}} : ",
+                          std::format("[{}]", input->getConnecteeTypeName()),
                           maxlenTypeName,
                           input->getName(), maxlenInputName);
         if (input->getNumConnectees() == 0 ||
@@ -1960,7 +1983,7 @@ void Component::printInputInfo() const {
                 // std::cout << " (alias: " << input.getAlias(i) << ") ";
             }
             // Join the connectee paths with spaces in between.
-            str += fmt::format("{}", fmt::join(connecteePaths, " "));
+            str += std::format("{}", detail::join(connecteePaths, " "));
         }
         log_cout(str);
     }
@@ -1974,7 +1997,7 @@ void Component::printOutputInfo(const bool includeDescendants) const {
 
     // Do not display header for Components with no outputs.
     if (getNumOutputs() > 0) {
-        std::string msg = fmt::format("Outputs from {} [{}]",
+        std::string msg = std::format("Outputs from {} [{}]",
                                       getAbsolutePathString(),
                                       getConcreteClassName());
         msg += "\n" + std::string(msg.size(), '=');
@@ -1989,7 +2012,7 @@ void Component::printOutputInfo(const bool includeDescendants) const {
         for(const auto& output : outputs) {
             const auto& name = output.second->getTypeName();
             log_cout("{:>{}}  {}",
-                     fmt::format("[{}]", output.second->getTypeName()),
+                     std::format("[{}]", output.second->getTypeName()),
                      maxlen, output.first);
         }
         log_cout("");

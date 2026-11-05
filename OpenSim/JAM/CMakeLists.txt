@@ -44,7 +44,7 @@ set(JAM_INCLUDES
 OpenSimAddLibrary(
     KIT JAM
     AUTHORS "Colin_Smith"    
-    LINKLIBS PUBLIC ${Simbody_LIBRARIES} spdlog::spdlog osimTools osimCommon
+    LINKLIBS PUBLIC ${Simbody_LIBRARIES} osimTools osimCommon
              # Need to link static libraries because MATLAB already links a 
              # different hdf5 internally somewhere and this leads to 
              

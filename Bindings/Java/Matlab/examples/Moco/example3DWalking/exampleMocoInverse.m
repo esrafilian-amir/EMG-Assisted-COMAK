@@ -27,6 +27,11 @@
 
 function exampleMocoInverse()
 
+import org.opensim.modeling.*;
+
+% Log outputs to 'opensim.log'.
+Logger.addFileSink('opensim.log');
+
 % Solve the basic muscle redundancy problem with MocoInverse.
 solveMocoInverse();
 
@@ -55,6 +60,13 @@ inverse = MocoInverse();
 % parameters.
 modelProcessor = ModelProcessor('subject_walk_scaled.osim');
 modelProcessor.append(ModOpAddExternalLoads('grf_walk.xml'));
+% Replace the PinJoints representing the model's toes with WeldJoints.
+jointsToWeld = StdVectorString();
+jointsToWeld.add("mtp_r");
+jointsToWeld.add("mtp_l");
+modelProcessor.append(ModOpReplaceJointsWithWelds(jointsToWeld));
+% Add CoordinateActuators to the pelvis coordinates. 
+modelProcessor.append(ModOpAddResiduals(250.0, 50.0, 1.0));
 modelProcessor.append(ModOpIgnoreTendonCompliance());
 modelProcessor.append(ModOpReplaceMusclesWithDeGrooteFregly2016());
 % Only valid for DeGrooteFregly2016Muscles.
@@ -109,6 +121,13 @@ import org.opensim.modeling.*;
 inverse = MocoInverse();
 modelProcessor = ModelProcessor('subject_walk_scaled.osim');
 modelProcessor.append(ModOpAddExternalLoads('grf_walk.xml'));
+% Replace the PinJoints representing the model's toes with WeldJoints.
+jointsToWeld = StdVectorString();
+jointsToWeld.add("mtp_r");
+jointsToWeld.add("mtp_l");
+modelProcessor.append(ModOpReplaceJointsWithWelds(jointsToWeld));
+% Add CoordinateActuators to the pelvis coordinates. 
+modelProcessor.append(ModOpAddResiduals(250.0, 50.0, 1.0));
 modelProcessor.append(ModOpIgnoreTendonCompliance());
 modelProcessor.append(ModOpReplaceMusclesWithDeGrooteFregly2016());
 modelProcessor.append(ModOpIgnorePassiveFiberForcesDGF());
@@ -196,6 +215,13 @@ import org.opensim.modeling.*;
 % simplify the problem given the muscle synergy controllers.
 modelProcessor = ModelProcessor('subject_walk_scaled.osim');
 modelProcessor.append(ModOpAddExternalLoads('grf_walk.xml'));
+% Replace the PinJoints representing the model's toes with WeldJoints.
+jointsToWeld = StdVectorString();
+jointsToWeld.add("mtp_r");
+jointsToWeld.add("mtp_l");
+modelProcessor.append(ModOpReplaceJointsWithWelds(jointsToWeld));
+% Add CoordinateActuators to the pelvis coordinates. 
+modelProcessor.append(ModOpAddResiduals(250.0, 50.0, 1.0));
 modelProcessor.append(ModOpIgnoreTendonCompliance());
 modelProcessor.append(ModOpIgnoreActivationDynamics());
 modelProcessor.append(ModOpReplaceMusclesWithDeGrooteFregly2016());
@@ -266,25 +292,34 @@ end
 
 % Use non-negative matrix factorization (NNMF) to extract a set of muscle
 % synergies for each leg.
-Al = leftControls.getMatrix().getAsMat();
-[Wl, Hl] = nnmf(Al, numSynergies);
+maxIterations = 100;
+tolerance = 1e-6;
 
-Ar = rightControls.getMatrix().getAsMat();
-[Wr, Hr] = nnmf(Ar, numSynergies);
-
-% Scale W and H assuming that the elements of H are all 0.5. This prevents
-% the synergy vector weights and synergy excitations from being very large 
-% or very small.
-scaleVec = 0.5*ones(1, length(leftControlNames));
-for i = 1:numSynergies
-    scale_l = norm(scaleVec) / norm(Hl(i, :));
-    Hl(i, :) = Hl(i, :) * scale_l;
-    Wl(:, i) = Wl(:, i) / scale_l;
-
-    scale_r = norm(scaleVec) / norm(Hr(i, :));
-    Hr(i, :) = Hr(i, :) * scale_r;
-    Wr(:, i) = Wr(:, i) / scale_r;
+leftControlsMat = leftControls.getMatrix();
+Al = Matrix(leftControlsMat.nrow(), leftControlsMat.ncol());
+for i = 1:leftControlsMat.nrow()
+    for j = 1:leftControlsMat.ncol()
+        Al.set(i-1, j-1, leftControlsMat.getElt(i-1, j-1));
+    end
 end
+
+Wl = Matrix();
+Hl = Matrix();
+opensimCommon.factorizeMatrixNonNegative(Al, numSynergies, ...
+    maxIterations, tolerance, Wl, Hl);
+
+rightControlsMat = rightControls.getMatrix();
+Ar = Matrix(rightControlsMat.nrow(), rightControlsMat.ncol());
+for i = 1:rightControlsMat.nrow()
+    for j = 1:rightControlsMat.ncol()
+        Ar.set(i-1, j-1, rightControlsMat.getElt(i-1, j-1));
+    end
+end
+
+Wr = Matrix();
+Hr = Matrix();
+opensimCommon.factorizeMatrixNonNegative(Ar, numSynergies, ...
+    maxIterations, tolerance, Wr, Hr);
 
 % Add a SynergyController for the left leg to the model.
 leftController = SynergyController();
@@ -301,7 +336,7 @@ end
 for i = 1:numSynergies  
     synergyVector = Vector(length(leftControlNames), 0.0);
     for j = 1:length(leftControlNames)
-        synergyVector.set(j-1, Hl(i, j));
+        synergyVector.set(j-1, Hl.getElt(i-1, j-1));
     end
     leftController.addSynergyVector(synergyVector);
 end
@@ -317,7 +352,7 @@ end
 for i = 1:numSynergies  
     synergyVector = Vector(length(rightControlNames), 0.0);
     for j = 1:length(rightControlNames)
-        synergyVector.set(j-1, Hr(i, j));
+        synergyVector.set(j-1, Hr.getElt(i-1, j-1));
     end
     rightController.addSynergyVector(synergyVector);
 end

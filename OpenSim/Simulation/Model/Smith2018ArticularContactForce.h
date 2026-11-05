@@ -963,7 +963,10 @@ public:
 
 protected:
     void extendAddToSystem(SimTK::MultibodySystem& system) const override;
-    void extendFinalizeFromProperties() override;
+
+    // Throws InvalidPropertyValue for an unknown elastic_foundation_formulation
+    // or a max_strain outside (0, 1)
+    void checkPropertyValues() const;
 
     void computeMeshProximity(const SimTK::State& state,
         const Smith2018ContactMesh& casting_mesh,

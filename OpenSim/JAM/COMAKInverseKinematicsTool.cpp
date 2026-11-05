@@ -1750,9 +1750,9 @@ void COMAKInverseKinematicsTool::printDebugInfo(const Model& model, const SimTK:
 
         log_debug("{:<20} {:<20} {:<20}", cnt.getName(),
                 cnt.getOutputValue<SimTK::Vec3>(
-                        state, "casting_total_contact_force"),
+                        state, "casting_total_contact_force").toString(),
                 cnt.getOutputValue<SimTK::Vec3>(
-                        state, "casting_total_center_of_pressure"));
+                        state, "casting_total_center_of_pressure").toString());
     }
     log_debug("");
     /*

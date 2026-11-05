@@ -281,7 +281,7 @@ MocoCasOCProblem::MocoCasOCProblem(const MocoCasADiSolver& mocoCasADiSolver,
         addPathConstraint(name, casBounds);
     }
 
-    m_fileDeletionThrower = OpenSim::make_unique<FileDeletionThrower>(
-            fmt::format("delete_this_to_stop_optimization_{}_{}.txt",
+    m_fileDeletionThrower = std::make_unique<FileDeletionThrower>(
+            std::format("delete_this_to_stop_optimization_{}_{}.txt",
                     problemRep.getName(), m_formattedTimeString));
 }

@@ -21,6 +21,7 @@
  * Define the standard SimTK compliant "version" and "about" routines.
  */
 
+#include <format>
 #include "About.h"
 
 #include <stdio.h>
@@ -47,7 +48,7 @@ namespace OpenSim {
 static const char* OpenSimJAMVersion = GET_OPENSIM_JAM_VERSION_STRING;
 
 std::string GetJAMVersionAndDate() {
-    return fmt::format("version {}, build date {} {}", OpenSimJAMVersion,
+    return std::format("version {}, build date {} {}", OpenSimJAMVersion,
             __TIME__, __DATE__);
 }
 

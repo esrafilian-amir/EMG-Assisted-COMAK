@@ -32,7 +32,6 @@
 // STATICS
 //=============================================================================
 using namespace std;
-//using namespace SimTK;
 using namespace OpenSim;
 
 //=============================================================================
@@ -255,7 +254,7 @@ Array<std::string> Constraint::getRecordLabels() const
     }
 
     for(int i=0; i<ncm; ++i){
-        labels.append(fmt::format("{}_mobility_F{}", getName(), i));
+        labels.append(std::format("{}_mobility_F{}", getName(), i));
     }
     
     return labels;

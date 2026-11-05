@@ -6,8 +6,8 @@ cmake_minimum_required(VERSION 3.2)
 # ---------
 set(TARGET exampleMuscle CACHE TYPE STRING)
 
-# OpenSim uses c++14 language features.
-set(CMAKE_CXX_STANDARD 14)
+# OpenSim uses C++20 language features.
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find and hook up to OpenSim.

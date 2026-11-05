@@ -23,26 +23,29 @@
  * limitations under the License.                                             *
  * -------------------------------------------------------------------------- */
 
-#include "osimCommonDLL.h"
 #include "Assertion.h"
+#include "osimCommonDLL.h"
+
+#include <OpenSim/Common/Property.h>
+
+#include <SimTKcommon/internal/BigMatrix.h>
+#include <SimTKcommon/internal/CoordinateAxis.h>
+
+#include <algorithm>
+#include <cmath>
+#include <condition_variable>
 #include <functional>
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <numeric>
+#include <optional>
 #include <stack>
-#include <condition_variable>
-
-#include <SimTKcommon/internal/BigMatrix.h>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace OpenSim {
-
-/// Since OpenSim does not require C++14 (which contains std::make_unique()),
-/// here is an implementation of make_unique().
-/// @ingroup commonutil
-template <typename T, typename... Args>
-std::unique_ptr<T> make_unique(Args&&... args) {
-    return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
-}
 
 /// Get a string with the current date and time formatted as %Y-%m-%dT%H%M%S
 /// (year, month, day, "T", hour, minute, second). You can change the datetime
@@ -81,12 +84,150 @@ private:
 OSIMCOMMON_API
 SimTK::Vector createVectorLinspace(int length, double start, double end);
 
+/**
+ * @brief Creates a vector of uniformly spaced values with a known interval.
+ *
+ * This function generates a vector of length `length`, where each element
+ * is calculated based on the starting value and the specified step size.
+ * The elements are computed as:
+ *
+ * output[i] = start + i * step_size
+ *
+ * for i = 0, 1, 2, ..., length-1.
+ *
+ * @tparam T The type of the elements in the output vector. This can be any
+ *            numeric type (e.g., int, float, double).
+ * @param length The number of elements in the output vector.
+ * @param start The starting value of the sequence.
+ * @param step_size The difference between consecutive elements in the output vector.
+ * @return A std::vector<T> containing `length` elements, uniformly spaced
+ *         starting from `start` with a step size of `step_size`.
+ *
+ * @example
+ * std::vector<double> vec = createVectorLinspaceInterval(5, 0.0, 2.0);
+ * // vec will contain: [0.0, 2.0, 4.0, 6.0, 8.0]
+ */
+ /// @ingroup commonutil
+template <typename T>
+std::vector<T> createVectorLinspaceInterval(
+        const int length, const T start, const T step_size) {
+    std::vector<int> ivec(length);
+    std::iota(ivec.begin(), ivec.end(), 0); // ivec will become: [0..length]
+    std::vector<T> output(ivec.size());
+    std::transform(ivec.begin(), ivec.end(), output.begin(),
+                    [step_size, start](int value) {
+                    return static_cast<T>(std::fma(static_cast<T>(value), step_size, start));
+                    });
+    return output;
+};
+
 #ifndef SWIG
 /// Create a SimTK::Vector using modern C++ syntax.
 /// @ingroup commonutil
 OSIMCOMMON_API
 SimTK::Vector createVector(std::initializer_list<SimTK::Real> elements);
 #endif
+
+/**
+ * @brief Detects the most likely string delimiter in an input string.
+ *
+ * This function identifies the most frequent delimiter from a predefined list
+ * of common delimiters based on occurrences in the input string.
+ *
+ * @param input The string to analyze.
+ * @param delimiters A vector of candidate delimiters.
+ *
+ * @return: The most likely delimiter (as an std::string),
+ * or an empty string if none was found.
+ *
+ * @note Supports single-character delimiters.
+ */
+ /// @ingroup commonutil
+OSIMCOMMON_API
+std::string detectDelimiter(
+        const std::string& input, const std::vector<std::string>& delimiters);
+
+/**
+ * @brief Checks if the elements of a vector are uniformly spaced.
+ *
+ * This function determines whether the elements in the provided vector are
+ * uniformly spaced within a specified tolerance. It calculates the mean step
+ * size between adjacent elements and checks if the absolute difference between
+ * each step and the mean step is within the defined tolerance. If the vector
+ * contains only two elements, it is considered uniform by default. Specifically
+ * this verifies that the spacing between consecutive elements in numeric vector
+ * x does not deviate from the mean spacing by more than 4*eps(max(abs(x))),
+ * provided that the mean spacing is greater than that tolerance.
+ *
+ * @tparam T The type of the elements in the vector. Must support arithmetic
+ * operations and the std::abs function.
+ *
+ * @param x A constant reference to a vector of elements of type T. The vector
+ * should contain at least one element.
+ *
+ * @return A pair containing:
+ * - A boolean indicating whether the elements are uniformly spaced
+ * (true) or not (false).
+ * - The calculated step size if the elements are uniform, or the
+ * minimum positive step size found if they are not uniform. If the elements are
+ * uniform, this value will be the mean step size. If the input is a one element
+ * vector, the step size will be NaN since a valid step size cannot be
+ * calculated with only 1 element.
+ *
+ * @note The function uses a tolerance based on the maximum absolute value of
+ *       the first and last elements in the vector, scaled by machine epsilon.
+ *       If the vector is empty or contains only one element,
+ *       the behavior is undefined.
+ * @note The function implementation draws inspiration from Matlab's `isuniform`.
+ *       See https://mathworks.com/help/matlab/ref/isuniform.html for more details.
+ */
+/// @ingroup commonutil
+template <typename T>
+std::pair<bool, T> isUniform(const std::vector<T>& x) {
+
+    // Initialize step as NaN
+    T step = std::numeric_limits<T>::quiet_NaN();
+    bool tf = false;
+
+    T maxElement = std::max(std::abs(x.front()), std::abs(x.back()));
+    T tol = 4 * std::numeric_limits<T>::epsilon() * maxElement;
+    size_t numSpaces = x.size() - 1;
+    T span = x.back() - x.front();
+    const T mean_step =
+            (std::isfinite(span))
+                    ? span / numSpaces
+                    : (x.back() / numSpaces - x.front() / numSpaces);
+
+    T stepAbs = std::abs(mean_step);
+    if (stepAbs < tol) {
+        tol = (stepAbs < std::numeric_limits<T>::epsilon() * maxElement)
+                      ? std::numeric_limits<T>::epsilon() * maxElement
+                      : stepAbs;
+    }
+    std::vector<T> results(x.size());
+    std::adjacent_difference(x.begin(), x.end(), results.begin());
+    // First value from adjacent_difference is the first input so it is skipped
+    tf = std::all_of(
+            results.begin() + 1, results.end(), [&mean_step, &tol](T val) {
+                return std::abs(val - mean_step) <= tol;
+            });
+
+    if (!tf && x.size() == 2) {
+        tf = true; // Handle special case for two elements
+    }
+    if (tf) {
+        step = mean_step;
+    } else {
+         // Use std::remove_if to filter out non-positive numbers from the adjacent difference
+        auto end = std::remove_if(results.begin(), results.end(), [](T n) { return n <= 0; });
+        // Now find the minimum element among the positive numbers
+        if (end != results.begin()) { // Check if there are any positive numbers
+            step = *std::min_element(results.begin(), end);
+        }
+    }
+
+    return {tf, step};
+}
 
 /// Linearly interpolate y(x) at new values of x. The optional 'ignoreNaNs'
 /// argument will ignore any NaN values contained in the input vectors and
@@ -182,26 +323,60 @@ private:
 OSIMCOMMON_API SimTK::Matrix computeKNearestNeighbors(const SimTK::Matrix& x,
         const SimTK::Matrix& y, int k = 1);
 
-/// Use non-negative matrix factorization to decompose an matrix A (NxM) for a 
-/// selected number of factors 'K' into two matrices W (NxK) and H (KxM) such 
-/// that A = W * H. The alternating least squares (ALS) algorithm is used to 
-/// solve for W and H by minimizing the Frobenius norm of the error between A 
+/// Use non-negative matrix factorization to decompose an matrix A (NxM) for a
+/// selected number of factors 'K' into two matrices W (NxK) and H (KxM) such
+/// that A = W * H. The alternating least squares (ALS) algorithm is used to
+/// solve for W and H by minimizing the Frobenius norm of the error between A
 /// and W * H. The matrices W and H are scaled assuming that the rows of H
 /// have magnitudes as if all elements in H were equal to 0.5, which prevents
-/// individual factors from being very large or very small. The algorithm 
-/// terminates when the change in the error norm is less than the specified 
+/// individual factors from being very large or very small. The algorithm
+/// terminates when the change in the error norm is less than the specified
 /// tolerance or the maximum number of iterations is reached.
 ///
 /// @returns The final Frobenius norm of the error between A and W * H.
 ///
 /// Reference
 /// ---------
-/// Berry, M. W., et al. (2007). Algorithms and Applications for Approximate 
-/// Nonnegative Matrix Factorization. Computational Statistics & Data Analysis, 
+/// Berry, M. W., et al. (2007). Algorithms and Applications for Approximate
+/// Nonnegative Matrix Factorization. Computational Statistics & Data Analysis,
 /// 52(1), 155-173. doi:10.1016/j.csda.2006.11.006.
-OSIMCOMMON_API double factorizeMatrixNonNegative(const SimTK::Matrix& A, 
-        int numFactors, int maxIterations, double tolerance, 
+OSIMCOMMON_API double factorizeMatrixNonNegative(const SimTK::Matrix& A,
+        int numFactors, int maxIterations, double tolerance,
         SimTK::Matrix& W, SimTK::Matrix& H);
+
+/**
+ * Generate the number of possible combinations of `k` elements from a set
+ * of `n` total elements.
+ */
+OSIMCOMMON_API int choose(int n, int k);
+
+#ifndef SWIG // std::optional is not supported by the scripting interfaces.
+/// Convert a string naming a coordinate axis into a SimTK::CoordinateAxis.
+/// The string must be a single character: "x" or "X" for the X axis, "y" or
+/// "Y" for the Y axis, and "z" or "Z" for the Z axis.
+/// @returns the matching coordinate axis, or std::nullopt if `axisName` does
+///     not name a coordinate axis.
+/// @ingroup commonutil
+OSIMCOMMON_API std::optional<SimTK::CoordinateAxis> parseCoordinateAxis(
+        const std::string& axisName);
+#endif
+
+/// Convert a SimTK::CoordinateAxis into its lowercase name: "x", "y", or "z".
+/// This is the inverse of parseCoordinateAxis().
+/// @ingroup commonutil
+OSIMCOMMON_API std::string getCoordinateAxisName(SimTK::CoordinateAxis axis);
+
+namespace detail {
+/**
+ * Returns true if value is a valid name for a file.
+ */
+template <typename T> bool isValidFileName(const Property<T>& value) {
+    return false;
+}
+inline bool isValidFileName(const Property<std::string>& value) {
+    return !value.getValue().empty() && !value.getValueIsDefault();
+}
+} // namespace detail
 
 } // namespace OpenSim
 

@@ -30,7 +30,8 @@
 
 // INCLUDES
 #include "osimCommonDLL.h"
-#include <spdlog/common.h>
+
+#include <format>
 #include <string>
 
 #ifdef SWIG
@@ -45,6 +46,7 @@
 
 namespace OpenSim {
 
+class Component;
 class Object;
 
 
@@ -176,30 +178,48 @@ public:
               const Object& obj,
               const std::string& msg);
 
+    /** The message created by this constructor will contain the class name and
+    absolute path of the provided Component. Use this when throwing from derived
+    components. Use OPENSIM_THROW<> macros at throw sites.                    */
+    Exception(
+        const std::string& file,
+        size_t line,
+        const std::string& func,
+        const Component& component);
+
+    /** The message created by this constructor will contain the class name and
+    ansolute path of the provided Component, and also accepts a message. Use this
+    when throwing from derived components. Use OPENSIM_THROW<> macros at throw
+    sites.                                                                    */
+    Exception(
+        const std::string& file,
+        size_t line,
+        const std::string& func,
+        const Component& component,
+        const std::string& msg);
+
+#ifndef SWIG
     /** Use this when you want to throw an Exception (with OPENSIM_THROW or
     OPENSIM_THROW_IF) and also provide a message that is formatted
-    using fmt::format() syntax. */
+    using std::format() syntax. */
     template <typename... Args>
-    Exception(const std::string& file,
-              size_t line,
-              const std::string& func,
-              spdlog::string_view_t fmt,
-              const Args&... args)
-            : Exception{file, line, func, fmt::format(fmt, args...)} {}
+    Exception(const std::string& file, size_t line, const std::string& func,
+            std::format_string<Args...> fmt, Args&&... args)
+            : Exception{file, line, func,
+                      std::format(fmt, std::forward<Args>(args)...)} {}
 
     /** The message created by this constructor will contain the class name and
     instance name of the provided Object, and also accepts a message formatted
-    using fmt::format() syntax. Use this when throwing an Exception directly.
+    using std::format() syntax. Use this when throwing an Exception directly.
     Use OPENSIM_THROW_FRMOBJ and OPENSIM_THROW_IF_FRMOBJ macros at throw sites.
     */
     template <typename... Args>
-    Exception(const std::string& file,
-              size_t line,
-              const std::string& func,
-              const Object& obj,
-              spdlog::string_view_t fmt,
-              const Args&... args)
-            : Exception{file, line, func, obj, fmt::format(fmt, args...)} {}
+    Exception(const std::string& file, size_t line, const std::string& func,
+            const Object& obj, std::format_string<Args...> fmt,
+            Args&&... args)
+            : Exception{file, line, func, obj,
+                      std::format(fmt, std::forward<Args>(args)...)} {}
+#endif
 
     virtual ~Exception() throw() {}
 
@@ -302,7 +322,10 @@ public:
 
 class ComponentNotFound : public Exception {
 public:
-    using Exception::Exception;
+    ComponentNotFound(
+            const std::string& file, size_t line, const std::string& func)
+            : Exception(file, line, func) {}
+
     ComponentNotFound(const std::string& file,
         size_t line,
         const std::string& func,

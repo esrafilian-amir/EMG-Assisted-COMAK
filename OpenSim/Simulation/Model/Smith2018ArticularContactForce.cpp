@@ -84,17 +84,17 @@ void Smith2018ArticularContactForce::constructProperties()
     constructProperty_max_strain(0.8);
 }
 
-void Smith2018ArticularContactForce::extendFinalizeFromProperties()
+void Smith2018ArticularContactForce::checkPropertyValues() const
 {
-    Super::extendFinalizeFromProperties();
-
     const std::string& formulation = get_elastic_foundation_formulation();
     OPENSIM_THROW_IF_FRMOBJ(formulation != "linear" && formulation != "nonlinear",
-        Exception, "elastic_foundation_formulation must be 'linear' or "
-        "'nonlinear', but it is '" + formulation + "'.");
+        InvalidPropertyValue, getProperty_elastic_foundation_formulation().getName(),
+        "elastic_foundation_formulation must be 'linear' or 'nonlinear', but "
+        "it is '" + formulation + "'.");
 
     OPENSIM_THROW_IF_FRMOBJ(!(get_max_strain() > 0.0 && get_max_strain() < 1.0),
-        Exception, "max_strain must be greater than 0 and less than 1.");
+        InvalidPropertyValue, getProperty_max_strain().getName(),
+        "max_strain must be greater than 0 and less than 1.");
 }
 
 namespace {
@@ -184,6 +184,12 @@ void Smith2018ArticularContactForce::
 extendAddToSystem(MultibodySystem& system) const
 {
     Super::extendAddToSystem(system);
+
+    // Checked here and not when the properties are finalized: a component that
+    // throws in finalizeFromProperties() cannot be added to a model with
+    // Model::addModelComponent() (generic tests that fill the properties of all
+    // components with random values rely on that)
+    checkPropertyValues();
 
     int target_mesh_nTri =
         getSocket<Smith2018ContactMesh>("target_mesh").

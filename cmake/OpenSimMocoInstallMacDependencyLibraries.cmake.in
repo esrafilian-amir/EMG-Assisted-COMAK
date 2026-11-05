@@ -28,8 +28,6 @@ macro(install_name_tool_delete_rpath lib rpath)
             "${libdir}/lib${lib}.dylib")
 endmacro()
 
-
-# See tropter_install_mac_dependency_libraries.cmake.
 macro(install_name_tool_change_gfortran lib)
     execute_process(COMMAND bash "-c"
         "otool -L ${libdir}/lib${lib}.dylib | grep 'libgfortran.*version' | perl -pe 's/^\\s+(.*)\\/libg.*/\\1/gc'"
@@ -56,19 +54,36 @@ execute_process(COMMAND bash "-c"
 endmacro()
 
 
-
-install_name_tool_change(osimMoco adolc.2 "@ADOLC_DIR@/lib64")
-
 if (OPENSIM_WITH_CASADI)
     install_name_tool_add_rpath(casadi.3.7)
     install_name_tool_delete_rpath(casadi.3.7 "@CASADI_LIBDIR@")
+    install_name_tool_delete_rpath(casadi_nlpsol_ipopt.3.7 "@CASADI_LIBDIR@")
+
+    install_name_tool_add_rpath(ipopt.3)
+    install_name_tool_add_rpath(coinmumps.3)
+    # Ipopt's and MUMPS's install names are absolute build-machine paths; use
+    # @rpath like the other bundled libraries.
+    install_name_tool_id(ipopt.3)
+    install_name_tool_id(coinmumps.3)
+    install_name_tool_change(ipopt.3 coinmumps.3 "@IPOPT_LIBDIR@")
+
+    # libipopt and libcoinmumps link against the Fortran runtime themselves, so
+    # they need the same treatment as the CasADi plugin below. Without this,
+    # their references to libgfortran/libquadmath keep pointing at the absolute
+    # path those libraries had on the build machine, and loading the Ipopt
+    # plugin fails on any machine that does not have them there (#4445).
+    install_name_tool_change_gfortran(ipopt.3)
+    install_name_tool_change_quadmath(ipopt.3)
+    install_name_tool_change_gfortran(coinmumps.3)
+    install_name_tool_change_quadmath(coinmumps.3)
 
     install_name_tool_change(casadi_nlpsol_ipopt.3.7 ipopt.3 "@IPOPT_LIBDIR@")
     install_name_tool_change(casadi_nlpsol_ipopt.3.7 coinmumps.3 "@IPOPT_LIBDIR@")
-    install_name_tool_change(casadi_nlpsol_ipopt.3.7 coinmetis.1 "@IPOPT_LIBDIR@")
+    install_name_tool_change(casadi_nlpsol_ipopt.3.7 metis "@IPOPT_LIBDIR@")
+    install_name_tool_change_gfortran(casadi_nlpsol_ipopt.3.7)
     install_name_tool_change_quadmath(casadi_nlpsol_ipopt.3.7)
     install_name_tool_add_rpath(casadi_nlpsol_ipopt.3.7)
-    install_name_tool_delete_rpath(casadi_nlpsol_ipopt.3.7 "@CASADI_LIBDIR@")
+
 endif()
 
 

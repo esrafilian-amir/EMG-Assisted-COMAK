@@ -20,7 +20,6 @@
 #include "Components/AccelerationMotion.h"
 #include "Components/ControlDistributor.h"
 #include "Components/DiscreteForces.h"
-#include "Components/StationPlaneContactForce.h"
 #include "MocoBounds.h"
 #include "MocoCasADiSolver/MocoCasADiSolver.h"
 #include "MocoControlBoundConstraint.h"
@@ -56,7 +55,6 @@
 #include "MocoScaleFactor.h"
 #include "MocoStudy.h"
 #include "MocoTrack.h"
-#include "MocoTropterSolver.h"
 #include "MocoWeightSet.h"
 #include "ModelOperatorsDGF.h"
 #include <exception>
@@ -64,7 +62,9 @@
 
 using namespace OpenSim;
 
-static osimMocoInstantiator instantiator;
+#ifndef OPENSIM_DISABLE_STATIC_TYPE_REGISTRATION
+    static osimMocoInstantiator instantiator;
+#endif
 
 OSIMMOCO_API void RegisterTypes_osimMoco() {
     try {
@@ -112,8 +112,6 @@ OSIMMOCO_API void RegisterTypes_osimMoco() {
         Object::registerType(MocoInverse());
         Object::registerType(MocoTrack());
 
-        Object::registerType(MocoTropterSolver());
-
         Object::registerType(MocoControlBoundConstraint());
         Object::registerType(MocoOutputBoundConstraint());
         Object::registerType(MocoStateBoundConstraint());
@@ -126,10 +124,6 @@ OSIMMOCO_API void RegisterTypes_osimMoco() {
         Object::registerType(ModOpTendonComplianceDynamicsModeDGF());
         Object::registerType(ModOpIgnorePassiveFiberForcesDGF());
         Object::registerType(ModOpScaleActiveFiberForceCurveWidthDGF());
-
-        Object::registerType(AckermannVanDenBogert2010Force());
-        Object::registerType(MeyerFregly2016Force());
-        Object::registerType(EspositoMiller2018Force());
 
         Object::registerType(DiscreteForces());
         Object::registerType(AccelerationMotion());

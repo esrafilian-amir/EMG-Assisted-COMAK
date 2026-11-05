@@ -35,6 +35,8 @@
 
 using namespace OpenSim;
 
+
+
 const std::vector<std::string> MocoProblemRep::m_disallowedJoints(
         {"FreeJoint", "BallJoint", "EllipsoidJoint", "ScapulothoracicJoint"});
 
@@ -153,7 +155,7 @@ void MocoProblemRep::initialize() {
     // order (we verified this with checkOrderSystemControls() above). 
     // Therefore, this is valid whether or not solvers need to compute the 
     // controls from the model.
-    auto actuatorController = make_unique<ActuatorInputController>();
+    auto actuatorController = std::make_unique<ActuatorInputController>();
     actuatorController->setName("actuator_controller");
     for (const auto& actu : m_model_base.getComponentList<Actuator>()) {
         if (!controlledActuatorPaths.count(actu.getAbsolutePathString()) &&
@@ -168,7 +170,7 @@ void MocoProblemRep::initialize() {
                 actuatorController->connectInput_controls(channel, actuPath);
             } else {
                 for (int i = 0; i < actu.numControls(); ++i) {
-                    std::string controlName = fmt::format("{}_{}", actuPath, i);
+                    std::string controlName = std::format("{}_{}", actuPath, i);
                     controlDistributor.addControl(controlName);
                     controlDistributor.finalizeFromProperties();
                     const auto& output = 
@@ -267,7 +269,7 @@ void MocoProblemRep::initialize() {
     // The constraint forces will be applied to the copied model via an
     // OpenSim::DiscreteForces component, a thin wrapper to Simbody's
     // DiscreteForces class, which adds discrete variables to the state.
-    auto constraintForcesUPtr = make_unique<DiscreteForces>();
+    auto constraintForcesUPtr = std::make_unique<DiscreteForces>();
     constraintForcesUPtr->setName("constraint_forces");
     m_constraint_forces.reset(constraintForcesUPtr.get());
     m_model_disabled_constraints.addComponent(constraintForcesUPtr.release());
@@ -285,7 +287,7 @@ void MocoProblemRep::initialize() {
         // forces can be computed correctly from the solver-supplied UDot
         // (otherwise, Simbody will compute its own "incorrect" UDot using
         // forward dynamics).
-        auto accelMotionUPtr = make_unique<AccelerationMotion>("motion");
+        auto accelMotionUPtr = std::make_unique<AccelerationMotion>("motion");
         m_acceleration_motion.reset(accelMotionUPtr.get());
         m_model_disabled_constraints.addModelComponent(
                 accelMotionUPtr.release());
@@ -358,21 +360,24 @@ void MocoProblemRep::initialize() {
             // TODO how to name multiplier variables?
             std::vector<MocoVariableInfo> multInfos;
             for (int i = 0; i < mp; ++i) {
-                std::string name = fmt::format("cid{}_p{}", cid, i);
+                std::string name =
+                        std::format("cid{}_p{}", static_cast<int>(cid), i);
                 kc_perr_names.push_back(name);
                 MocoVariableInfo info("lambda_" + name, multBounds,
                         multInitBounds, multFinalBounds);
                 multInfos.push_back(info);
             }
             for (int i = 0; i < mv; ++i) {
-                std::string name = fmt::format("cid{}_v{}", cid, i);
+                std::string name =
+                        std::format("cid{}_v{}", static_cast<int>(cid), i);
                 MocoVariableInfo info("lambda_" + name, multBounds,
                         multInitBounds, multFinalBounds);
                 kc_verr_names.push_back(name);
                 multInfos.push_back(info);
             }
             for (int i = 0; i < ma; ++i) {
-                std::string name = fmt::format("cid{}_a{}", cid, i);
+                std::string name =
+                        std::format("cid{}_a{}", static_cast<int>(cid), i);
                 MocoVariableInfo info("lambda_" + name, multBounds,
                         multInitBounds, multFinalBounds);
                 kc_aerr_names.push_back(name);
@@ -464,7 +469,7 @@ void MocoProblemRep::initialize() {
         for (const auto& output : outputsBound) {
             const auto nameStart = output->getName().find("_") + 1;
             const auto stateName = output->getName().substr(nameStart);
-            const auto statePath = fmt::format(
+            const auto statePath = std::format(
                     "{}/{}", component.getAbsolutePathString(), stateName);
             // If this is indeed a state and no info has been provided for it,
             // use the state bounds from the output.

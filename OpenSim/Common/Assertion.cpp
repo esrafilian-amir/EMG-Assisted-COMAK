@@ -23,7 +23,9 @@
 
 #include "Assertion.h"
 
+#include <OpenSim/Common/Detail/SimbodyFormatterShims.h>
 #include <OpenSim/Common/Exception.h>
+#include <OpenSim/Common/Object.h>
 
 void OpenSim::OnAssertionError(
     char const* failingCode,

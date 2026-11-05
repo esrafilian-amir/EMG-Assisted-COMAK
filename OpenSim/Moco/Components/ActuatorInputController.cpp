@@ -75,7 +75,7 @@ ActuatorInputController::getInputControlLabels() const {
                 // Use the control name format based on
                 // SimulationUtilities::createControlNamesFromModel().
                 labels.push_back(
-                        fmt::format("{}_{}", actu.getAbsolutePathString(), j));
+                        std::format("{}_{}", actu.getAbsolutePathString(), j));
             }
         } else {
             // Scalar actuator.
@@ -94,7 +94,7 @@ void ActuatorInputController::extendConnectToModel(Model& model) {
 
     const auto& controlNames = getControlNames();
     const auto& controlIndexes = getControlIndexes();
-    OPENSIM_ASSERT(getNumControls() == static_cast<int>(controlNames.size()))
+    OPENSIM_ASSERT(getNumControls() == static_cast<int>(controlNames.size()));
 
     const auto& input = getInput<double>("controls");
     const auto inputControlLabels = getInputControlLabels();

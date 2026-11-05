@@ -55,6 +55,8 @@
 #include <OpenSim/Common/osimCommonDLL.h>
 
 #include <functional>
+#include <memory>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 
@@ -670,6 +672,41 @@ public:
     * @param subcomponent is the Component to be added. */
     void addComponent(Component* subcomponent);
 
+#ifndef SWIG
+    /**
+     * Returns `subcomponent` if `subcomponent` was successfully extracted from
+     * this `Component`.
+     *
+     * Specifically, this tries to extract a direct sub-`Component` that was
+     * previously added via `addComponent`, or existed in the `<components>` list
+     * XML of this `Component`.
+     */
+    std::unique_ptr<Component> extractComponent(Component* subcomponent);
+
+    template<
+        typename T,
+        std::enable_if_t<std::is_base_of_v<Component, T>, bool> = true
+    >
+    std::unique_ptr<T> extractComponent(T* subcomponent)
+    {
+        // If the type of `subcomponent` is known at compile-time then it is also
+        // known that the return value will be `subcomponent`, which will have the
+        // same type.
+        std::unique_ptr<Component> typeErased = extractComponent(static_cast<Component*>(subcomponent));
+        return std::unique_ptr<T>{static_cast<T*>(typeErased.release())};
+    }
+#endif
+
+    /**
+     * Returns `true` if `subcomponent`, which should be a direct subcomponent
+     * of this component, was successfully removed from this component.
+     *
+     * Specifically, this tries to remove a direct component that was
+     * previously added via `addComponent`, or existed in the `<components>`
+     * list XML for this component.
+     */
+    bool removeComponent(Component* subcomponent);
+
     /**
      * Get an iterator through the underlying subcomponents that this component is
      * composed of. The hierarchy of Components/subComponents forms a tree.
@@ -972,9 +1009,11 @@ public:
 
     /**
     * Get the "connectee" object that the Component's Socket
-    * is bound to. Guaranteed to be valid only after the Component
-    * has been connected (that is connect() has been invoked).
-    * If the Socket has not been connected, an exception is thrown.
+    * is bound to. If the Component is already connected, the connected object
+    * will be retrieved via the Socket's connectee pointer (fast path). IF the
+    * Socket has not been connected, the connectee will be retrieved via the
+    * connectee's path property (slow path). If both paths fail, an exception
+    * is thrown.
     *
     * This method is for getting the concrete connectee object, and is not
     * available in scripting. If you want generic access to the connectee as an
@@ -993,17 +1032,16 @@ public:
     */
     template<typename T>
     const T& getConnectee(const std::string& name) const {
-        // get the Socket and check if it is connected.
-        const Socket<T>& socket = getSocket<T>(name);
-        OPENSIM_ASSERT_FRMOBJ(socket.isConnected());
-        return socket.getConnectee();
+        return getSocket<T>(name).getConnectee();
     }
 
     /**
     * Get the "connectee" object at the provided index that the Component's
-    * Socket is bound to. Guaranteed to be valid only after the Component
-    * has been connected (that is, connect() has been invoked).
-    * If the Socket has not been connected, an exception is thrown.
+    * Socket is bound to. If the Component is already connected, the connected
+    * object will be retrieved via the Socket's connectee pointer (fast path).
+    * If the Socket has not been connected, the connectee will be retrieved via
+    * the connectee's path property (slow path). If either path fails, an
+    * exception is thrown.
     *
     * This method is for getting the concrete connectee object, and is not
     * available in scripting. If you want generic access to the connectee as an
@@ -1023,10 +1061,7 @@ public:
     */
     template<typename T>
     const T& getConnectee(const std::string& name, int index) const {
-        // get the Socket and check if it is connected.
-        const Socket<T>& socket = getSocket<T>(name);
-        OPENSIM_ASSERT_FRMOBJ(socket.isConnected());
-        return socket.getConnectee(index);
+        return getSocket<T>(name).getConnectee(index);
     }
 
     /** Get the connectee as an Object. This means you will not have
@@ -1054,9 +1089,7 @@ public:
     * @endcode
     */
     const Object& getConnectee(const std::string& name) const {
-        const AbstractSocket& socket = getSocket(name);
-        OPENSIM_ASSERT_FRMOBJ(socket.isConnected());
-        return socket.getConnecteeAsObject();
+        return getSocket(name).getConnecteeAsObject();
     }
 
     /** Get the connectee at the provided index as an Object. This means you
@@ -1084,9 +1117,7 @@ public:
     * @endcode
     */
     const Object& getConnectee(const std::string& name, int index) const {
-        const AbstractSocket& socket = getSocket(name);
-        OPENSIM_ASSERT_FRMOBJ(socket.isConnected());
-        return socket.getConnecteeAsObject(index);
+        return getSocket(name).getConnecteeAsObject(index);
     }
 
     /**
@@ -2770,9 +2801,9 @@ public:
         for (const C& thisComp : compList) {
             const std::string thisClass = thisComp.getConcreteClassName();
             auto path = thisComp.getAbsolutePath();
-            log_cout(fmt::format(
+            log_cout(std::format(
                     "{:>{}}  {}/{}",
-                    fmt::format("[{}]", thisClass),
+                    std::format("[{}]", thisClass),
                     maxlen,
                     std::string((path.getNumPathLevels() - 1) * 4, ' '),
                     path.getComponentName()));
@@ -3525,10 +3556,10 @@ public:
                 foundCs.push_back(&comp);
                 // TODO Revisit why the exact match isn't found when
                 // when what appears to be the complete path.
-                log_debug("{} Found '{}' as a match for: Component '{}' of "
-                          "type {}, but it is not on the specified path.",
-                          msg, compAbsPath.toString(),
-                          comp.getConcreteClassName());
+                log_debug("{} Found '{}' as a match for: Component '{}', "
+                          "but it is not on the specified path.",
+                        msg, compAbsPath.toString(),
+                        comp.getConcreteClassName());
                 //throw Exception(details, __FILE__, __LINE__);
             }
         }

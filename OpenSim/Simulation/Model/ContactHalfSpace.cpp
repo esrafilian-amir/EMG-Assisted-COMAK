@@ -7,7 +7,7 @@
  * National Institutes of Health (U54 GM072970, R24 HD065690) and by DARPA    *
  * through the Warrior Web program.                                           *
  *                                                                            *
- * Copyright (c) 2005-2017 Stanford University and the Authors                *
+ * Copyright (c) 2005-2025 Stanford University and the Authors                *
  * Author(s): Peter Eastman                                                   *
  *                                                                            *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may    *
@@ -22,11 +22,10 @@
  * -------------------------------------------------------------------------- */
 
 #include "ContactHalfSpace.h"
-#include "Model.h"
 
-using namespace SimTK;
+#include <OpenSim/Common/ModelDisplayHints.h>
 
-namespace OpenSim {
+using namespace OpenSim;
 
 ContactHalfSpace::ContactHalfSpace() :
     ContactGeometry()
@@ -41,7 +40,7 @@ ContactHalfSpace::ContactHalfSpace(const SimTK::Vec3& location,
     setNull();
 }
 
-ContactHalfSpace::ContactHalfSpace(const SimTK::Vec3& location, 
+ContactHalfSpace::ContactHalfSpace(const SimTK::Vec3& location,
     const SimTK::Vec3& orientation, const PhysicalFrame& frame,
     const std::string& name) :
         ContactHalfSpace(location, orientation, frame)
@@ -55,21 +54,25 @@ void ContactHalfSpace::setNull()
 }
 
 
-SimTK::ContactGeometry ContactHalfSpace::createSimTKContactGeometry() const
+SimTK::ContactGeometry ContactHalfSpace::createSimTKContactGeometryImpl() const
 {
     return SimTK::ContactGeometry::HalfSpace();
 }
 
-void ContactHalfSpace::generateDecorations(bool fixed, const ModelDisplayHints& hints,
+void ContactHalfSpace::generateDecorations(bool fixed,
+    const ModelDisplayHints& hints,
     const SimTK::State& s,
     SimTK::Array_<SimTK::DecorativeGeometry>& geometry) const
 {
-    Super::generateDecorations(fixed, hints, s, geometry);
-
     // There is no fixed geometry to generate here.
     if (fixed) { return; }
 
-    if (!hints.get_show_contact_geometry()) return;
+    // Model-wide hints indicate that contact geometry shouldn't be shown.
+    if (!hints.get_show_contact_geometry()) { return; }
+
+    // The decoration has been toggled off by its `Appearance` block.
+    if (!get_Appearance().get_visible())  { return; }
+
     // B: base Frame (Body or Ground)
     // F: PhysicalFrame that this ContactGeometry is connected to
     // P: the frame defined (relative to F) by the location and orientation
@@ -79,17 +82,15 @@ void ContactHalfSpace::generateDecorations(bool fixed, const ModelDisplayHints& 
     const auto X_BP = X_BF * X_FP;
     const double brickHalfThickness = 0.0005;
     geometry.push_back(
-        SimTK::DecorativeBrick(Vec3{brickHalfThickness, 0.5, 0.5})
-        // The brick is centered on the origin. To ensure the decorative
-        // geometry is within the contact geomtry, we must offset by half
-        // the thickness of the brick.
-        .setTransform(X_BP * Transform(Vec3(brickHalfThickness, 0, 0)))
-        .setScale(1)
-        .setRepresentation(get_Appearance().get_representation())
-        .setBodyId(getFrame().getMobilizedBodyIndex())
-        .setColor(get_Appearance().get_color())
-        .setOpacity(get_Appearance().get_opacity()));
+            SimTK::DecorativeBrick(SimTK::Vec3{brickHalfThickness, 0.5, 0.5})
+                    // The brick is centered on the origin. To ensure the
+                    // decorative geometry is within the contact geomtry, we
+                    // must offset by half the thickness of the brick.
+                    .setTransform(X_BP * SimTK::Transform(SimTK::Vec3(
+                                                brickHalfThickness, 0, 0)))
+                    .setScale(1)
+                    .setRepresentation(get_Appearance().get_representation())
+                    .setBodyId(getFrame().getMobilizedBodyIndex())
+                    .setColor(get_Appearance().get_color())
+                    .setOpacity(get_Appearance().get_opacity()));
 }
-
-
-} // end of namespace OpenSim

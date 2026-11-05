@@ -21,6 +21,7 @@
  * -------------------------------------------------------------------------- */
 
 #include "Smith2018ContactMesh.h"
+#include <OpenSim/Common/PropertyStr.h>
 
 #include "OpenSim/Common/Object.h"
 #include "OpenSim/JAM/JAMUtilities.h"
@@ -161,15 +162,6 @@ void Smith2018ContactMesh::extendScale(
 void Smith2018ContactMesh::extendFinalizeFromProperties() {
     Super::extendFinalizeFromProperties();
 
-    // The elastic foundation stiffness (1-v)E/((1+v)(1-2v)) and the pressure
-    // depth relationship are not defined for these values
-    OPENSIM_THROW_IF_FRMOBJ(!(get_elastic_modulus() > 0.0), Exception,
-        "elastic_modulus must be greater than 0.");
-    OPENSIM_THROW_IF_FRMOBJ(!(get_poissons_ratio() >= 0.0 &&
-        get_poissons_ratio() < 0.5), Exception,
-        "poissons_ratio must be at least 0 and less than 0.5.");
-    OPENSIM_THROW_IF_FRMOBJ(!(get_thickness() > 0.0), Exception,
-        "thickness must be greater than 0.");
     if (!_mesh_is_cached) { initializeMesh(); }
 
     // Create Decorative Mesh
@@ -180,6 +172,25 @@ void Smith2018ContactMesh::extendFinalizeFromProperties() {
         _decorative_mesh.reset(new SimTK::DecorativeMesh(getPolygonalMesh()));
         _decorative_mesh->setScaleFactors(get_scale_factors());
     }
+}
+
+void Smith2018ContactMesh::extendAddToSystem(
+        SimTK::MultibodySystem& system) const {
+    Super::extendAddToSystem(system);
+
+    // Checked here and not in extendFinalizeFromProperties(): a component that
+    // throws there cannot be added to a model with Model::addModelComponent()
+    // The elastic foundation stiffness (1-v)E/((1+v)(1-2v)) and the pressure
+    // depth relationship are not defined for these values
+    OPENSIM_THROW_IF_FRMOBJ(!(get_elastic_modulus() > 0.0),
+        InvalidPropertyValue, getProperty_elastic_modulus().getName(),
+        "elastic_modulus must be greater than 0.");
+    OPENSIM_THROW_IF_FRMOBJ(!(get_poissons_ratio() >= 0.0 &&
+        get_poissons_ratio() < 0.5), InvalidPropertyValue,
+        getProperty_poissons_ratio().getName(),
+        "poissons_ratio must be at least 0 and less than 0.5.");
+    OPENSIM_THROW_IF_FRMOBJ(!(get_thickness() > 0.0), InvalidPropertyValue,
+        getProperty_thickness().getName(), "thickness must be greater than 0.");
 }
 
 void Smith2018ContactMesh::extendConnectToModel(Model& model) {
@@ -243,7 +254,9 @@ std::string Smith2018ContactMesh::findMeshFile(const std::string& file) {
         log_error("No mesh_file property defined in Smith2018ContactMesh: "
                   "{}",
                 getName());
-        OPENSIM_THROW(Exception, "");
+        OPENSIM_THROW_FRMOBJ(InvalidPropertyValue,
+                getProperty_mesh_file().getName(),
+                "The mesh file could not be used (see the error above).");
         // return;  // Return immediately if no file has been specified.
     }
 
@@ -257,7 +270,9 @@ std::string Smith2018ContactMesh::findMeshFile(const std::string& file) {
         log_error("Smith2018ContactMesh file type error: '{}'; "
                   "only .vtp, .stl, and .obj files currently supported.",
                 file);
-        OPENSIM_THROW(Exception, "");
+        OPENSIM_THROW_FRMOBJ(InvalidPropertyValue,
+                getProperty_mesh_file().getName(),
+                "The mesh file could not be used (see the error above).");
         // return;
     }
 
@@ -277,7 +292,9 @@ std::string Smith2018ContactMesh::findMeshFile(const std::string& file) {
                 !SimTK::Pathname::environmentVariableExists("OPENSIM_HOME"))
             log_debug("Set environment variable OPENSIM_HOME to search "
                       "$OPENSIM_HOME/Geometry.");
-        OPENSIM_THROW(Exception, "");
+        OPENSIM_THROW_FRMOBJ(InvalidPropertyValue,
+                getProperty_mesh_file().getName(),
+                "The mesh file could not be used (see the error above).");
         // return;
     }
 
@@ -290,7 +307,9 @@ std::string Smith2018ContactMesh::findMeshFile(const std::string& file) {
     } catch (const std::exception& e) {
         log_warn("Visualizer couldn't open {} because: {}", attempts.back(),
                 e.what());
-        OPENSIM_THROW(Exception, "");
+        OPENSIM_THROW_FRMOBJ(InvalidPropertyValue,
+                getProperty_mesh_file().getName(),
+                "The mesh file could not be used (see the error above).");
         // return;
     }
 
@@ -1101,7 +1120,7 @@ void Smith2018ContactMesh::printMeshDebugInfo() const {
         SimTK::Vec3 n = normal(i);
 
         log_trace("{:<10} {:<15} {:<15} {:<15} {:<15} {:<35} {:<35}", i, a, t,
-                E, v, c, n);
+                E, v, c.toString(), n.toString());
     }
 }
 

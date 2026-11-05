@@ -2926,8 +2926,8 @@ void COMAKTool::printOptimizationResultsToConsole(
                 state, "casting_total_max_proximity");
 
         log_debug("{:<20} {:<10} {:<10} {:<10} {:<10} {:<10} {:<10} {:<10}",
-                cnt.getName(), num_cnt_tri, cnt_frc, cnt_moment, mean_prs,
-                max_prs, mean_prx, max_prx);
+                cnt.getName(), num_cnt_tri, cnt_frc.toString(),
+                cnt_moment.toString(), mean_prs, max_prs, mean_prx, max_prx);
     }
 
     log_debug("");

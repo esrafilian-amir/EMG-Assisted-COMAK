@@ -28,6 +28,7 @@
 #include <OpenSim/Simulation/osimSimulationDLL.h>
 #include <OpenSim/Common/Object.h>
 #include <OpenSim/Common/XMLDocument.h>
+#include <SimTKcommon/internal/DecorativeGeometry.h>
 
 namespace OpenSim {
 
@@ -70,6 +71,7 @@ public:
     SurfaceProperties() {
         // Surface shaded by default
         constructProperty_representation(VisualRepresentation::DrawSurface);
+        constructProperty_texture();
     }
     virtual ~SurfaceProperties() {};
 
