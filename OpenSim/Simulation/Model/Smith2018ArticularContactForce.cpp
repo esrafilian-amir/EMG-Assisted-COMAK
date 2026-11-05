@@ -34,7 +34,7 @@
 #include "Smith2018ArticularContactForce.h"
 #include "Smith2018ContactMesh.h"
 #include <cctype>
-#include <OpenSim/Common/Lmdif.h>
+#include <cmath>
 
 //=============================================================================
 // USING
@@ -81,7 +81,104 @@ void Smith2018ArticularContactForce::constructProperties()
     constructProperty_max_proximity(0.01);
     constructProperty_elastic_foundation_formulation("linear");
     constructProperty_use_lumped_contact_model(true);
+    constructProperty_max_strain(0.8);
 }
+
+void Smith2018ArticularContactForce::extendFinalizeFromProperties()
+{
+    Super::extendFinalizeFromProperties();
+
+    const std::string& formulation = get_elastic_foundation_formulation();
+    OPENSIM_THROW_IF_FRMOBJ(formulation != "linear" && formulation != "nonlinear",
+        Exception, "elastic_foundation_formulation must be 'linear' or "
+        "'nonlinear', but it is '" + formulation + "'.");
+
+    OPENSIM_THROW_IF_FRMOBJ(!(get_max_strain() > 0.0 && get_max_strain() < 1.0),
+        Exception, "max_strain must be greater than 0 and less than 1.");
+}
+
+namespace {
+
+// Nonlinear elastic foundation (Bei and Fregly 2004) of one or two elastic
+// layers in series, for the total overlap depth d of the layers:
+//     d = h1 (1 - exp(-P/k1)) + h2 (1 - exp(-P/k2)),   k = (1-v)E/((1+v)(1-2v))
+// Pass h2 = 0 for a single (lumped) layer.
+//
+// The relationship is only defined for strains (depth/thickness) below one, so
+// the pressure is continued linearly (same slope) beyond the strain
+// max_strain of a layer. The pressure and the energy are therefore finite,
+// continuous and have a continuous derivative for any depth, and the energy is
+// the integral of the pressure (dE/dd = A * P, with the energy per unit area
+// returned here times the area A).
+//
+// The pressure is found with a Newton iteration started at the linear
+// pressure. The depth is a concave increasing function of the pressure and
+// the linear pressure is never larger than the solution, so the iteration
+// converges monotonically (a bisection is the fallback).
+//
+// Returns the energy per unit area (J/m^2) and sets the pressure (Pa) and
+// whether the strain cap was used.
+double nonlinearElasticFoundation(double d, double h1, double k1, double h2,
+        double k2, double max_strain, double& pressure, bool& capped) {
+
+    const bool two_layers = h2 > 0.0;
+
+    // depth, its slope w.r.t. the pressure and the energy per area
+    auto depth = [&](double P) {
+        double depth = h1 * (-std::expm1(-P / k1));
+        if (two_layers) { depth += h2 * (-std::expm1(-P / k2)); }
+        return depth;
+    };
+    auto slope = [&](double P) {
+        double slope = h1 / k1 * std::exp(-P / k1);
+        if (two_layers) { slope += h2 / k2 * std::exp(-P / k2); }
+        return slope;
+    };
+    auto layer_energy = [](double P, double k, double h) {
+        const double x = P / k;
+        return k * h * (-std::expm1(-x) - x * std::exp(-x));
+    };
+    auto energy = [&](double P) {
+        double energy = layer_energy(P, k1, h1);
+        if (two_layers) { energy += layer_energy(P, k2, h2); }
+        return energy;
+    };
+
+    // pressure at which the most strained layer reaches max_strain
+    double P_cap = -k1 * std::log1p(-max_strain);
+    if (two_layers) { P_cap = std::min(P_cap, -k2 * std::log1p(-max_strain)); }
+    const double d_cap = depth(P_cap);
+
+    capped = d > d_cap;
+    if (capped) {
+        const double excess = d - d_cap;
+        const double stiffness = 1.0 / slope(P_cap);
+        pressure = P_cap + stiffness * excess;
+        return energy(P_cap) + P_cap * excess + 0.5 * stiffness * excess * excess;
+    }
+
+    double P;
+    if (!two_layers) {
+        P = -k1 * std::log1p(-d / h1);
+    } else {
+        const double tol = 1e-13 * (h1 + h2);
+        P = d / (h1 / k1 + h2 / k2);
+        for (int it = 0; it < 50 && std::abs(depth(P) - d) > tol; ++it) {
+            P -= (depth(P) - d) / slope(P);
+        }
+        if (!(std::abs(depth(P) - d) <= 1e-9 * (h1 + h2))) {
+            double lo = 0.0, hi = P_cap;
+            for (int it = 0; it < 200; ++it) {
+                P = 0.5 * (lo + hi);
+                if (depth(P) < d) { lo = P; } else { hi = P; }
+            }
+        }
+    }
+    pressure = P;
+    return energy(P);
+}
+
+} // namespace
 
 void Smith2018ArticularContactForce::
 extendAddToSystem(MultibodySystem& system) const
@@ -566,6 +663,11 @@ void Smith2018ArticularContactForce::computeMeshDynamics(
         EC = casting_mesh.getTriangleElasticModulus(i);
         vC = casting_mesh.getTrianglePoissonsRatio(i);
 
+        const bool linear = get_elastic_foundation_formulation() == "linear";
+        const double area = triangle_area(i);
+        const double d = triangle_proximity(i);
+        bool capped = false;
+
         //Compute pressure & energy using the lumped contact model
         if (get_use_lumped_contact_model()) {
             double E = (ET + EC) / 2;
@@ -574,59 +676,50 @@ void Smith2018ArticularContactForce::computeMeshDynamics(
 
             double K = (1 - v)*E / ((1 + v)*(1 - 2 * v));
 
-
-            if (get_elastic_foundation_formulation() == "linear") {
-                triangle_pressure(i) = K * triangle_proximity(i) / h;
-                triangle_energy(i) = 0.5 * triangle_area(i) * K *
-                    SimTK::square(triangle_proximity(i)) / h;
-                continue;
+            if (linear) {
+                triangle_pressure(i) = K * d / h;
+                triangle_energy(i) = 0.5 * area * K * SimTK::square(d) / h;
             }
-
-            if (get_elastic_foundation_formulation() == "nonlinear") {
-                triangle_pressure(i) = -K * log(1 - triangle_proximity(i) / h);
-                triangle_energy(i) = -triangle_area(i)* K * ((triangle_proximity(i) - h) *
-                    log(1 - triangle_proximity(i) / h) - triangle_proximity(i));
-                continue;
+            else {
+                triangle_energy(i) = area * nonlinearElasticFoundation(
+                    d, h, K, 0.0, 1.0, get_max_strain(),
+                    triangle_pressure(i), capped);
             }
         }
 
         //Compute pressure & energy using variable property model
+        else {
+            if (linear) {
+                double kT = ((1 - vT)*ET) / ((1 + vT)*(1 - 2 * vT)*hT);
+                double kC = ((1 - vC)*EC) / ((1 + vC)*(1 - 2 * vC)*hC);
 
-        //linear solution
-        double kT = ((1 - vT)*ET) / ((1 + vT)*(1 - 2 * vT)*hT);
-        double kC = ((1 - vC)*EC) / ((1 + vC)*(1 - 2 * vC)*hC);
+                triangle_pressure(i) = (kT*kC) / (kT + kC) * d;
 
-        double linearPressure = (kT*kC) / (kT + kC)*triangle_proximity(i);
+                double depthT = kC / (kT + kC) * d;
+                double depthC = kT / (kT + kC) * d;
 
-        if (get_elastic_foundation_formulation() == "linear") {
-            triangle_pressure(i) = linearPressure;
-
-            double depthT = kC / (kT + kC)*triangle_proximity(i);
-            double depthC = kT / (kT + kC)*triangle_proximity(i);
-
-            double energyC = 0.5 * triangle_area(i) * kC * SimTK::square(depthC);
-            double energyT = 0.5 * triangle_area(i) * kT * SimTK::square(depthT);
-            triangle_energy(i) = energyC + energyT;
-            continue;
+                double energyC = 0.5 * area * kC * SimTK::square(depthC);
+                double energyT = 0.5 * area * kT * SimTK::square(depthT);
+                triangle_energy(i) = energyC + energyT;
+            }
+            else {
+                // stiffness without the thickness (as in the lumped model)
+                double KT = ((1 - vT)*ET) / ((1 + vT)*(1 - 2 * vT));
+                double KC = ((1 - vC)*EC) / ((1 + vC)*(1 - 2 * vC));
+                triangle_energy(i) = area * nonlinearElasticFoundation(
+                    d, hC, KC, hT, KT, get_max_strain(),
+                    triangle_pressure(i), capped);
+            }
         }
 
-        //nonlinear solution
-        else{ //(get_elastic_foundation_formulation() == "nonlinear") 
-            double nonlinearPressure = 
-                calcTrianglePressureVariableNonlinearModel(
-                    triangle_proximity(i),hC,hT,EC,ET,vC,vT,linearPressure);
-
-            triangle_pressure(i) = nonlinearPressure;
-
-            double depthC = hC * (1 - exp(-nonlinearPressure / kC));
-            double depthT = hT * (1 - exp(-nonlinearPressure / kT));
-
-            double energyC = -triangle_area(i)* kC * 
-                ((depthC - hC)*log(1 - depthC / hC) - depthC);
-            double energyT = -triangle_area(i)* kT * 
-                ((depthT - hT)*log(1 - depthT / hT) - depthT);
-            triangle_energy(i) = energyC + energyT;
-            continue;
+        if (capped && !_max_strain_warning_issued) {
+            _max_strain_warning_issued = true;
+            log_warn("{}: the overlap of at least one triangle pair is above "
+                "max_strain ({}) of the layer thickness. The pressure is "
+                "continued linearly beyond that strain. This usually means "
+                "that the meshes are too deep in each other (check the "
+                "pose); this warning is shown once.",
+                getName(), get_max_strain());
         }
     }
 
@@ -663,71 +756,6 @@ void Smith2018ArticularContactForce::computeMeshDynamics(
     }
 
     return;
-}
-
-double Smith2018ArticularContactForce::
-    calcTrianglePressureVariableNonlinearModel(double proximity, 
-    double casting_thickness, double target_thickness,
-    double casting_E, double target_E, double casting_v, double target_v,
-    double init_guess) const {
-    
-    NonlinearContactParams cp;
-
-    cp.dc = proximity;
-    cp.h1 = casting_thickness;
-    cp.h2 = target_thickness;
-    double kC = (1 - casting_v)*casting_E / ((1 + casting_v)*(1 - 2 * casting_v));
-    double kT = (1 - target_v)*target_E / ((1 + target_v)*(1 - 2 * target_v));
-    cp.k1 = kC;
-    cp.k2 = kT;
-
-    int nEqn = 1;
-    int nVar = 1;
-    double x[1], fvec[1];
-
-    //solution params
-    double ftol = 1e-4, xtol = 1e-4, gtol = 0.0;
-    int maxfev = 500; //max iterations
-    double epsfcn = 0.0;
-    double diag[1];
-    int mode = 1; //variables scaled internally
-    double step_factor = 100;
-    int nprint = 0;
-    int info;
-    int num_func_calls;
-    double fjac[1];
-    int ldfjac = 1;
-    int ipvt[1];
-    double qtf[1];
-    double wa1[1], wa2[1], wa3[1], wa4[1];
-
-    //initial guess
-    x[0] = init_guess;
-
-    //Solve nonlinear equation
-    lmdif_C(calcNonlinearPressureResidual, nEqn, nVar, x, fvec,
-        ftol, xtol, gtol, maxfev, epsfcn, diag, mode, step_factor,
-        nprint, &info, &num_func_calls, fjac, ldfjac, ipvt, qtf,
-        wa1, wa2, wa3, wa4, (void*)&cp);
-
-    return x[0];
-}
-
-void Smith2018ArticularContactForce::calcNonlinearPressureResidual(
-    int nEqn, int nVar, double x[], double fvec[], int *flag2, void *ptr)
-{
-    NonlinearContactParams * cp = (NonlinearContactParams*)ptr;
-
-    double h1 = cp->h1;
-    double h2 = cp->h2;
-    double k1 = cp->k1;
-    double k2 = cp->k2;
-    double dc = cp->dc;
-
-    double P = x[0];
-
-    fvec[0] = h1*(1 - exp(-P / k1)) + h2*(1 - exp(-P / k2)) - dc;
-
 }
 
 void Smith2018ArticularContactForce::computeForce(const State& state,

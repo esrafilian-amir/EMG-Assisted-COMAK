@@ -160,6 +160,16 @@ void Smith2018ContactMesh::extendScale(
 
 void Smith2018ContactMesh::extendFinalizeFromProperties() {
     Super::extendFinalizeFromProperties();
+
+    // The elastic foundation stiffness (1-v)E/((1+v)(1-2v)) and the pressure
+    // depth relationship are not defined for these values
+    OPENSIM_THROW_IF_FRMOBJ(!(get_elastic_modulus() > 0.0), Exception,
+        "elastic_modulus must be greater than 0.");
+    OPENSIM_THROW_IF_FRMOBJ(!(get_poissons_ratio() >= 0.0 &&
+        get_poissons_ratio() < 0.5), Exception,
+        "poissons_ratio must be at least 0 and less than 0.5.");
+    OPENSIM_THROW_IF_FRMOBJ(!(get_thickness() > 0.0), Exception,
+        "thickness must be greater than 0.");
     if (!_mesh_is_cached) { initializeMesh(); }
 
     // Create Decorative Mesh
@@ -650,6 +660,12 @@ void Smith2018ContactMesh::initializeMesh() {
         SimTK::Vec3 v1 = _mesh.getVertexPosition(v1_i);
         SimTK::Vec3 v2 = _mesh.getVertexPosition(v2_i);
         SimTK::Vec3 v3 = _mesh.getVertexPosition(v3_i);
+
+        // Degenerate triangles give zero area and undefined normals
+        // (adopted from upstream opensim-jam-org/opensim-core 1f90450c6).
+        OPENSIM_THROW_IF_FRMOBJ(v1 == v2 || v2 == v3 || v3 == v1, Exception,
+            "Triangle (0-index) " + std::to_string(i) +
+            " has overlapping vertices.");
 
         // Compute Triangle Center
         _tri_center(i) = (v1 + v2 + v3) / 3.0;

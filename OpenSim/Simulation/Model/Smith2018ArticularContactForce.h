@@ -227,7 +227,19 @@ the local overlap depths of the two elastic layers in contact.
 
 This system of equations can be solved analytically if the linear pressure-
 depth relationship is used. If the non-linear relationship is used, the
-system of equations is solved using a numerical solver.
+system of equations is solved with a Newton iteration (a few iterations, started
+at the linear solution, which converges monotonically).
+
+The non-linear relationship is only defined for strains (overlap depth divided
+by the layer thickness) below one: the pressure goes to infinity when the
+overlap reaches the thickness. Above the strain max_strain of a layer (default
+0.8) the pressure is therefore continued linearly with the slope it has at
+max_strain. The pressure and the potential energy are then finite, continuous
+and have a continuous derivative for any overlap, and the potential energy is
+always the integral of the pressure over the depth. A strain above max_strain
+is not physical for cartilage and usually means that the meshes are too deep in
+each other, so a warning is shown once. The linear formulation is finite for any
+overlap and does not use max_strain.
 
 # Outputs
 
@@ -327,6 +339,14 @@ public:
         "Combine the thickness and the average material properties between "
         "the Smith2018ContactMeshes for both meshes and use Bei & Fregly 2003 "
         "lumped parameter Elastic Foundation model.")
+
+    OpenSim_DECLARE_PROPERTY(max_strain, double,
+        "The nonlinear elastic foundation formulation is only defined for "
+        "strains (overlap depth divided by layer thickness) below 1. Above "
+        "this strain of a layer, the pressure is continued linearly with the "
+        "slope it has at max_strain, so the pressure and the potential energy "
+        "stay finite, continuous and smooth for any overlap. Not used by the "
+        "linear formulation. Default value set to 0.8.")
 
     //=========================================================================
     // Connectors
@@ -943,6 +963,7 @@ public:
 
 protected:
     void extendAddToSystem(SimTK::MultibodySystem& system) const override;
+    void extendFinalizeFromProperties() override;
 
     void computeMeshProximity(const SimTK::State& state,
         const Smith2018ContactMesh& casting_mesh,
@@ -984,28 +1005,6 @@ protected:
 private:
     void setNull();
     void constructProperties();
-
-    double calcTrianglePressureVariableNonlinearModel(double proximity,
-        double casting_thickness, double target_thickness,
-        double casting_E, double target_E,
-        double casting_v, double target_v, double init_guess) const;
-
-    /*
-    * A utility function used by computeTriPressure for the function lmdif_C, which
-    * is used to solve the nonlinear equation for pressure.
-    *
-    * h1(1-exp(-P1/k1))+h2(1-exp(P1/k2))-dc = 0;
-    *
-    * @param nEqn The number of Equations (1)
-    * @param nVars The number of variables (1)
-    * @param q Array of values of the degrees of freedom
-    * @param resid Array of residuals to be calculated
-    * @param flag2 A status flag
-    * @param ptr Pointer to data structure containing values for h1, h2, k1, k2, dc
-    */
-    static void calcNonlinearPressureResidual(
-        int nEqn, int nVar, double q[], double resid[],
-        int *flag2, void *ptr);
 
     //=========================================================================
     // Member Variables
@@ -1068,10 +1067,6 @@ private:
     mutable CacheVariable<SimTK::Vector_<SimTK::Vec3>> _casting_regional_contact_forceCV;
     mutable CacheVariable<SimTK::Vector_<SimTK::Vec3>> _casting_regional_contact_momentCV;
 
-    struct NonlinearContactParams {
-        double h1, h2, k1, k2, dc;
-    };
-
     struct ContactStats
     {
         double contact_area;
@@ -1084,6 +1079,9 @@ private:
         SimTK::Vec3 contact_force;
         SimTK::Vec3 contact_moment;
     };
+
+    // the warning about overlaps above max_strain is shown once
+    mutable bool _max_strain_warning_issued = false;
 
     std::vector<std::string> _region_names;
     std::vector<std::string> _stat_names;

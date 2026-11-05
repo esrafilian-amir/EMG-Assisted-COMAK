@@ -18,6 +18,10 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
 - `COMAKTool.relax_acceleration_constraints` is `true`: the acceleration constraints get a penalized
   slack variable (`qp_slack_penalty`), so the optimization always has a solution.
 - `secondary_velocity_carryover_to_next_step` is 0.
+- `Smith2018ArticularContactForce.max_strain` (new, 0.8): see Fixes. The contact energy of the nonlinear
+  variable property model was about 230 times too small, so `contact_energy_weight` 1 of the EMG examples
+  acted like 0.004. With the correct energy the EMG examples use 0.1 (weight 1 dominated: peak joint
+  contact force -25%, secondary coordinates moved by 4 mm; 0.01 reproduces the old behaviour).
 
 ## Fixes
 
@@ -25,6 +29,17 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
 - Settle simulations: plateau stopping, unit handling, bounded loops.
 - Secondary constraint functions: spline point spacing, 0.8 patella multiplier removed.
 - Contact: OBB ray query returned the wrong triangle, parallel tolerance, force aggregation per body.
+- Nonlinear contact (`Smith2018ArticularContactForce`, `elastic_foundation_formulation` nonlinear):
+  the potential energy of the variable property model used the stiffness divided by the thickness (energy
+  and its COMAK gradient about 230 times too small); the lumped model gave NaN and the variable model a
+  wrong, finite pressure when the overlap reached the layer thickness. The pressure is now solved with a
+  Newton iteration (a few iterations, no tolerance noise), the energy is the closed form integral of the
+  pressure (`dE/dd = A P`), and above the strain `max_strain` (0.8) of a layer the pressure continues
+  linearly with the same slope, so pressure and energy are finite and smooth for any overlap (warning once).
+  Pressures below the cap are unchanged (1e-10 on the EMG walking frames).
+- Invalid contact inputs are errors: Poisson's ratio of 0.5 or more, elastic modulus or thickness of 0 or
+  less, an unknown `elastic_foundation_formulation`, `max_strain` outside (0, 1). A COMAK contact energy
+  derivative that is not finite is ignored with a warning.
 - Input kinematics checks and smoothing spline.
 
 ## New options

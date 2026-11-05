@@ -186,7 +186,9 @@ comak.set_ipopt_nlp_scaling_max_gradient(10000);
 comak.set_ipopt_nlp_scaling_min_value(1e-8);
 comak.set_ipopt_obj_scaling_factor(1);
 comak.set_activation_exponent(2);
-comak.set_contact_energy_weight(1);
+% the contact energy is a regularization towards low contact loads: 0.1 changes the muscle
+% activations by up to 0.1 and the secondary coordinates by about 1 mm, 1 means that it dominates
+comak.set_contact_energy_weight(0.1);
 comak.set_non_muscle_actuator_weight(1000);
 comak.set_model_assembly_accuracy(1e-12);
 comak.set_use_visualizer(true);

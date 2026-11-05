@@ -339,6 +339,15 @@ void ComakTarget::precomputeConstraintMatrix() {
                 (energy_plus - _initial_contact_energy) / _unit_udot_epsilon;
         }
 
+        // A contact energy that is not finite (e.g. a mesh pair that is too deep
+        // in each other) must not make the whole cost function not finite
+        if (!SimTK::isFinite(_secondary_coord_unit_energy(j))) {
+            log_warn("COMAKTool: the derivative of the contact energy with "
+                "respect to a secondary coordinate is not finite. It is set "
+                "to zero for this iteration.");
+            _secondary_coord_unit_energy(j) = 0.0;
+        }
+
         optim_coord.setValue(_state, init_value, true);
     }
     _model->realizeAcceleration(_state);
