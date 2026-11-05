@@ -1,8 +1,7 @@
-file(GLOB TEST_PROGS "test*.cpp")
+find_package(Catch2 REQUIRED
+        HINTS "${OPENSIM_DEPENDENCIES_DIR}/catch2")
 
 OpenSimCopySharedTestFiles(arm26.osim)
 
-OpenSimAddTests(
-    TESTPROGRAMS ${TEST_PROGS}
-    LINKLIBS osimSimulation osimActuators
-    )
+OpenSimAddTest(NAME testIterators
+        LINKLIBS osimSimulation osimActuators)

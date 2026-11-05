@@ -31,6 +31,7 @@
 
 #include "Logger.h"
 #include <climits>
+#include <filesystem>
 #include <limits>
 #include <math.h>
 #include <string>
@@ -39,7 +40,7 @@
 #if defined(__linux__) || defined(__APPLE__)
     #include <sys/stat.h>
     #include <sys/types.h>
-#elif defined(_MSC_VER)
+#elif defined(_MSC_VER) || defined(__MINGW32__)
     #include <direct.h>
 #else
     #include <unistd.h>
@@ -508,7 +509,7 @@ stod(const std::string& __str, std::size_t* __idx)
     iss >> result;
     if (iss.fail()) {
         result = std::numeric_limits<double>::quiet_NaN();
-        log_warn("Encountered non-numeric string value: {} ; parsed value:{}",__str, result);
+        log_debug("Encountered non-numeric string value: {} ; parsed value:{}",__str, result);
     }
     return result;
 }
@@ -520,12 +521,9 @@ stod(const std::string& __str, std::size_t* __idx)
 int IO::
 makeDir(const string &aDirName)
 {
-
-#if defined __linux__ || defined __APPLE__
-    return mkdir(aDirName.c_str(),S_IRWXU);
-#else
-    return _mkdir(aDirName.c_str());
-#endif
+    std::error_code error;
+    std::filesystem::create_directory(aDirName, error);
+    return error.value();
 }
 //_____________________________________________________________________________
 /**
@@ -535,13 +533,9 @@ makeDir(const string &aDirName)
 int IO::
 chDir(const string &aDirName)
 {
-
-#if defined __linux__ || defined __APPLE__
-    return chdir(aDirName.c_str()); 
-#else
-    return _chdir(aDirName.c_str());
-#endif
-
+    std::error_code error;
+    std::filesystem::current_path(aDirName, error);
+    return error.value();
 }
 //_____________________________________________________________________________
 /**
@@ -551,13 +545,7 @@ chDir(const string &aDirName)
 string IO::
 getCwd()
 {
-    char buffer[PATH_MAX];
-#if defined __linux__ || defined __APPLE__
-    auto ptr = getcwd(buffer, PATH_MAX); (void)ptr;
-#else
-    _getcwd(buffer, PATH_MAX);
-#endif
-    return string(buffer);
+    return std::filesystem::current_path().string();
 }
 
 //_____________________________________________________________________________

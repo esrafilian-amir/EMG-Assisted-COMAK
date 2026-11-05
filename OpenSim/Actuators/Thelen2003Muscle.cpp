@@ -32,7 +32,6 @@
 //=============================================================================
 using namespace std;
 using namespace OpenSim;
-using namespace SimTK;
 
 //=============================================================================
 // CONSTRUCTORS
@@ -350,22 +349,21 @@ void Thelen2003Muscle::computeInitialFiberEquilibrium(SimTK::State& s) const
         OPENSIM_THROW_FRMOBJ(MuscleCannotEquilibrate, x.what());
     }
 
-    switch(result.first) {
-
-    case StatusFromInitMuscleState::Success_Converged:
+    switch (result.first) {
+    case StatusFromInitMuscleState::Success_Converged: {
         setActuation(s, result.second["tendon_force"]);
         setFiberLength(s, result.second["fiber_length"]);
         break;
-
-    case StatusFromInitMuscleState::Warning_FiberAtLowerBound:
+    }
+    case StatusFromInitMuscleState::Warning_FiberAtLowerBound: {
         log_warn("Thelen2003Muscle initialization: '{}' is at its minimum "
                  "fiber length of {}.", getName(),
                 result.second["fiber_length"]);
         setActuation(s, result.second["tendon_force"]);
         setFiberLength(s, result.second["fiber_length"]);
         break;
-
-    case StatusFromInitMuscleState::Failure_MaxIterationsReached:
+    }
+    case StatusFromInitMuscleState::Failure_MaxIterationsReached: {
         // Report internal variables and throw exception.
         std::ostringstream ss;
         ss << "\n  Solution error " << abs(result.second["solution_error"])
@@ -375,6 +373,7 @@ void Thelen2003Muscle::computeInitialFiberEquilibrium(SimTK::State& s) const
            << "  Fiber length is " << result.second["fiber_length"] << "\n";
         OPENSIM_THROW_FRMOBJ(MuscleCannotEquilibrate, ss.str());
         break;
+    }
     }
 }
 
@@ -899,7 +898,7 @@ Thelen2003Muscle::initMuscleState(const SimTK::State& s,
             else {
                 // We've stagnated or hit a limit; assume we are hitting local
                 // minimum and attempt to approach from the other direction.
-                lce = lcePrev - sign(delta_lce)*SimTK::SqrtEps;
+                lce = lcePrev - SimTK::sign(delta_lce) * SimTK::SqrtEps;
                 // Force a break, which will update the derivatives of
                 // the muscle force and estimate of the fiber-velocity 
                 h = 0;

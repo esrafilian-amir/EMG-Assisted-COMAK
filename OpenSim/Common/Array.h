@@ -23,25 +23,41 @@
  * limitations under the License.                                             *
  * -------------------------------------------------------------------------- */
 
-/* Note: This code was originally developed by Realistic Dynamics Inc. 
- * Author: Frank C. Anderson 
+/* Note: This code was originally developed by Realistic Dynamics Inc.
+ * Author: Frank C. Anderson
  */
 
 #include "Assertion.h"
 #include "Exception.h"
-#include "osimCommonDLL.h"
 #include "Logger.h"
+#include "osimCommonDLL.h"
 
 #include <algorithm>
-#include <cstddef>
+#include <format>
+#include <initializer_list>
 #include <iostream>
 #include <iterator>
-#include <sstream>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
 namespace OpenSim {
+
+// Not intended for end users => private
+namespace detail {
+// backwards-compat hack: the original implementation allows for references
+// to booleans, which won't work if using std::vector<bool> specialization
+// Moved outside the template class to ensure linking works properly in VS 17.14
+// See issue (#4081) for details.
+class BoolLike final {
+public:
+    BoolLike(bool value_) : value{value_} {}
+    operator bool& () { return value; }
+    operator const bool& () const { return value; }
+private:
+    bool value;
+};
+}
 
 /**
  * A class for storing an array of values of type T.  The capacity of the class
@@ -54,11 +70,15 @@ template<class T>
 class Array {
 
 public:
-    Array(Array const&) = default;;
+    Array(Array const&) = default;
     Array(Array&&) noexcept = default;
     Array& operator=(Array const&) = default;
     Array& operator=(Array&&) noexcept = default;
     ~Array() noexcept = default;
+
+    Array(std::initializer_list<T> initList) :
+    _defaultValue{}, _storage(initList.begin(), initList.end())
+    {}
 
     explicit Array(T aDefaultValue = T(), int aSize = 0, int aCapacity = 1) :
         _defaultValue{std::move(aDefaultValue)}
@@ -124,10 +144,7 @@ public:
      */
     friend std::ostream& operator<<(std::ostream& out, const Array& rhs)
     {
-        for (auto const& el : rhs._storage) {
-            out << " " << el;
-        }
-        return out;
+        return out << std::format("{}", rhs);
     }
 
     /**
@@ -319,7 +336,7 @@ public:
      */
     int remove(int aIndex)
     {
-        OPENSIM_ASSERT(0 < aIndex && aIndex <= size() && "Array::remove received an out-of-bounds index");
+        OPENSIM_ASSERT(0 <= aIndex && aIndex < size() && "Array::remove received an out-of-bounds index");
         _storage.erase(_storage.begin() + aIndex);
         return size();
     }
@@ -570,19 +587,9 @@ public:
 private:
     T _defaultValue;
 
-    // backwards-compat hack: the original implementation allows for references
-    // to booleans, which won't work if using std::vector<bool> specialization
-    class BoolLike final {
-    public:
-        BoolLike(bool value_) : value{value_} {}
-        operator bool& () { return value; }
-        operator const bool& () const { return value; }
-    private:
-        bool value;
-    };
     using storage = std::conditional_t<
         std::is_same<T, bool>::value,
-        std::vector<BoolLike>,
+        std::vector<detail::BoolLike>,
         std::vector<T>
     >;
 
@@ -590,5 +597,27 @@ private:
 };
 
 }; //namespace
+
+#ifndef SWIG
+template<typename T>
+struct std::formatter<OpenSim::Array<T>> {
+    constexpr auto parse(std::format_parse_context& ctx) {
+        return _inner.parse(ctx);
+    }
+
+    // Format the vector by iterating through elements and applying the specifier
+    template<class FormatContext>
+    auto format(const OpenSim::Array<T>& ary, FormatContext& ctx) const {
+        auto out = ctx.out();
+        for (int i = 0; i < ary.size(); ++i) {
+            out = std::format_to(out, " ");
+            out = _inner.format(ary[i], ctx);
+        }
+        return out;
+    }
+private:
+    std::formatter<T> _inner;
+};
+#endif // SWIG
 
 #endif // OPENSIM_ARRAY_H_

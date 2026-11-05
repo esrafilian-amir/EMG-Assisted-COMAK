@@ -34,9 +34,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Tropter is off: its Windows dependency ADOL-C is a pre-built download from SourceForge that no longer exists (404),
-# and nothing here needs it (the contact, COMAK and joint mechanics code use CasADi, which stays on).
-
 env:
   # The branch that the scheduled (Monday) build checks out.
   SCHEDULED_REF: master_v2
@@ -44,7 +41,7 @@ env:
 jobs:
   windows2022:
     runs-on: windows-2022
-    name: Windows 2022
+    name: Windows
 
     steps:
     - uses: actions/checkout@v4
@@ -57,34 +54,39 @@ jobs:
       run: |
         (New-Object System.Net.WebClient).DownloadFile("https://github.com/doxygen/doxygen/releases/download/Release_1_12_0/doxygen-1.12.0.windows.x64.bin.zip", "doxygen.zip")
         7z x $env:GITHUB_WORKSPACE/doxygen.zip -odoxygen
-        echo "$env:GITHUB_WORKSPACE\\doxygen" >> $GITHUB_PATH
+        echo "$env:GITHUB_WORKSPACE\doxygen" >> $env:GITHUB_PATH
 
     - name: Install Python packages
       uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
+        python-version: '3.11'
 
     - name: Install numpy
       #Need numpy to use SWIG numpy typemaps.
-      run: python3 -m pip install numpy==1.25
+      run: |
+        python3 -m pip install numpy==2.0
+        python3 -m pip install wheel
+        python3 -m pip install build
+        pip install --upgrade pip setuptools wheel
+        pip install delvewheel
 
     - name: Install SWIG
       run: |
-        choco install swig --version 4.1.1 --yes --limit-output --allow-downgrade
+        choco install swig --version 4.4.1 --yes --limit-output --allow-downgrade
         swig -swiglib
 
     - name: Cache dependencies
       id: cache-dependencies
       uses: actions/cache@v4
       with:
-        path: ~/opensim_dependencies_install
+        path: build/dependencies/ci-msvc-windows-release/install
         # Every time a cache is created, it's stored with this key.
         # In subsequent runs, if the key matches the key of an existing cache,
         # then the cache is used. We chose for this key to depend on the
         # operating system and a hash of the hashes of all files in the
         # dependencies directory (non-recursive).
         # https://help.github.com/en/actions/automating-your-workflow-with-github-actions/caching-dependencies-to-speed-up-workflows#matching-a-cache-key
-        key: ${{ runner.os }}-dependencies-${{ hashFiles('dependencies/*') }}-tropter-off
+        key: ${{ runner.os }}-dependencies-${{ hashFiles('dependencies/*') }}
 
     - name: Build dependencies
       id: build-deps
@@ -96,7 +98,7 @@ jobs:
         # /W0 disables warnings.
         # https://msdn.microsoft.com/en-us/library/19z1t1wy.aspx
         # TODO: CMake provides /W3, which overrides our /W0
-        cmake -E env CXXFLAGS="/W0" cmake $env:GITHUB_WORKSPACE/dependencies -LAH -G"Visual Studio 17 2022" -A x64 -DCMAKE_INSTALL_PREFIX=~/opensim_dependencies_install -DSUPERBUILD_ezc3d=ON -DOPENSIM_WITH_TROPTER=OFF -DOPENSIM_WITH_CASADI=ON
+        cmake -E env CXXFLAGS="/W0" cmake $env:GITHUB_WORKSPACE/dependencies -LAH -G"Visual Studio 17 2022" -A x64 -DCMAKE_INSTALL_PREFIX=~/opensim_dependencies_install -DSUPERBUILD_ezc3d=ON -DOPENSIM_WITH_CASADI=ON
         # The errors of this build are also written to build_errors.log (see the next step).
         cmake --build . --config Release -- /maxcpucount:4 /fl1 '/flp1:logfile=build_errors.log;errorsonly'
 
@@ -127,7 +129,7 @@ jobs:
         # TODO: Can remove /WX when we use that in CMakeLists.txt.
         # Set the CXXFLAGS environment variable to turn warnings into errors.
         # Skip timing test section included by default.
-        cmake -E env CXXFLAGS="/WX -DSKIP_TIMING" cmake $env:GITHUB_WORKSPACE -LAH -G"Visual Studio 17 2022" -A x64 -DCMAKE_INSTALL_PREFIX=~/EMG-Assisted-COMAK-install -DOPENSIM_DEPENDENCIES_DIR=~/opensim_dependencies_install -DOPENSIM_C3D_PARSER=ezc3d -DOPENSIM_WITH_TROPTER=OFF -DOPENSIM_WITH_CASADI=on -DBUILD_PYTHON_WRAPPING=on -DBUILD_JAVA_WRAPPING=on -DPython3_ROOT_DIR=C:\hostedtoolcache\windows\Python\3.10.11\x64
+        cmake -E env CXXFLAGS="/WX -DSKIP_TIMING" cmake $env:GITHUB_WORKSPACE -LAH -G"Visual Studio 17 2022" -A x64 -DCMAKE_INSTALL_PREFIX=~/EMG-Assisted-COMAK-install -DOPENSIM_DEPENDENCIES_DIR=~/opensim_dependencies_install -DOPENSIM_C3D_PARSER=ezc3d -DOPENSIM_WITH_CASADI=on -DBUILD_PYTHON_WRAPPING=on -DBUILD_JAVA_WRAPPING=on -DPython3_ROOT_DIR=C:\hostedtoolcache\windows\Python\3.10.11\x64
         $env:match = cmake -L . | Select-String -Pattern OPENSIM_QUALIFIED_VERSION
         $version = $env:match.split('=')[1]
         echo $version
@@ -137,14 +139,13 @@ jobs:
     - name: Build EMG-Assisted-COMAK
       # Install now to avoid building bindings twice (TODO: issue when using Visual Studio 2019, is this an issue too in Visual Studio 2022?).
       run: |
-        chdir $env:GITHUB_WORKSPACE\\build
-        cmake --build . --config Release --target doxygen -- /maxcpucount:4
-        cmake --build . --config Release --target install -- /maxcpucount:4
+        cmake --build --preset ci-msvc-windows-release -j 4
+        cmake --build --preset ci-msvc-windows-release --target doxygen
+        cmake --build --preset ci-msvc-windows-release --target install
 
     - name: Test EMG-Assisted-COMAK
       run: |
-        chdir $env:GITHUB_WORKSPACE\\build
-        ctest --parallel 4 --output-on-failure --build-config Release -E Java_*
+        ctest --preset ci-msvc-windows-release -j 4 -E Java_.*
 
     - name: Install EMG-Assisted-COMAK
       # TODO: This is where we wish to do the installing, but it's done above for now.
@@ -154,7 +155,7 @@ jobs:
         Copy-Item -Path "~/EMG-Assisted-COMAK-install" -Destination "EMG-Assisted-COMAK-${{ steps.configure.outputs.version }}" -Recurse
         7z a "EMG-Assisted-COMAK-${{ steps.configure.outputs.version }}.zip" "EMG-Assisted-COMAK-${{ steps.configure.outputs.version }}"
 
-    - name: Test Python bindings
+    - name: Build wheel
       run: |
         echo "PYTHONPATH= $env:USERPROFILE/EMG-Assisted-COMAK-install/bin">> $GITHUB_ENV
         # Move to the installed location of the python package.
@@ -170,9 +171,9 @@ jobs:
         # Keep the build for two weeks (the default is 90 days).
         retention-days: 14
 
-  ubuntu22:
-    name: Ubuntu 22.04
-    runs-on: ubuntu-22.04
+  ubuntu24:
+    name: Ubuntu 24.04
+    runs-on: ubuntu-24.04
     # Not tried on Linux for this repository yet: a failure here does not make the whole run fail.
     # Remove this line when the Linux build passes.
     continue-on-error: true
@@ -209,7 +210,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/opensim_dependencies_install
-        key: ${{ runner.os }}-dependencies-${{ hashFiles('dependencies/*') }}-tropter-off
+        key: ${{ runner.os }}-dependencies-${{ hashFiles('dependencies/*') }}
 
     - name: Build dependencies
       # if: steps.cache-dependencies.outputs.cache-hit != 'true'
@@ -220,7 +221,6 @@ jobs:
         DEP_CMAKE_ARGS+=(-DCMAKE_INSTALL_PREFIX=~/opensim_dependencies_install)
         DEP_CMAKE_ARGS+=(-DCMAKE_BUILD_TYPE=Release)
         DEP_CMAKE_ARGS+=(-DSUPERBUILD_ezc3d=ON)
-        DEP_CMAKE_ARGS+=(-DOPENSIM_WITH_TROPTER=OFF)
         DEP_CMAKE_ARGS+=(-DOPENSIM_WITH_CASADI=ON)
         printf '%s\n' "${DEP_CMAKE_ARGS[@]}"
         cmake "${DEP_CMAKE_ARGS[@]}"
@@ -270,7 +270,7 @@ jobs:
         make --jobs 4 install
         cd $GITHUB_WORKSPACE
         mv $GITHUB_WORKSPACE/../EMG-Assisted-COMAK-install EMG-Assisted-COMAK-${{ steps.configure.outputs.version }}
-        zip --symlinks --recurse-paths --quiet EMG-Assisted-COMAK-${{ steps.configure.outputs.version }}-ubuntu22.zip EMG-Assisted-COMAK-${{ steps.configure.outputs.version }}
+        zip --symlinks --recurse-paths --quiet EMG-Assisted-COMAK-${{ steps.configure.outputs.version }}-ubuntu24.zip EMG-Assisted-COMAK-${{ steps.configure.outputs.version }}
         mv EMG-Assisted-COMAK-${{ steps.configure.outputs.version }} $GITHUB_WORKSPACE/../EMG-Assisted-COMAK-install
 
     - name: Test Python bindings
@@ -285,15 +285,15 @@ jobs:
       with:
         # The upload-artifact zipping does not preserve symlinks or executable
         # bits. So we zip ourselves, even though this causes a double-zip.
-        name: EMG-Assisted-COMAK-${{ steps.configure.outputs.version }}-ubuntu22-linux
-        path: EMG-Assisted-COMAK-${{ steps.configure.outputs.version }}-ubuntu22.zip
+        name: EMG-Assisted-COMAK-${{ steps.configure.outputs.version }}-ubuntu24-linux
+        path: EMG-Assisted-COMAK-${{ steps.configure.outputs.version }}-ubuntu24.zip
         retention-days: 14
 
   style:
     name: Style
 
     # Pinned: ubuntu-latest moves to Ubuntu 26 from 19 October 2026.
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     steps:
     - uses: actions/checkout@v4

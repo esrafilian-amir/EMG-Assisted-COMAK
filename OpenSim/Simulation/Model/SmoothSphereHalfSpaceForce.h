@@ -21,7 +21,7 @@
 
 #include "Force.h"
 #include "ContactHalfSpace.h"
-#include "ContactSphere.h"
+#include "ContactGeometry.h"
 #include <OpenSim/Common/Set.h>
 
 namespace OpenSim {
@@ -73,7 +73,7 @@ public:
     // PROPERTIES
     //=========================================================================
     OpenSim_DECLARE_PROPERTY(stiffness, double,
-            "The stiffness constant (i.e., plain strain modulus), "
+            "The stiffness constant (i.e., plane strain modulus), "
             "default is 1 (N/m^2)");
     OpenSim_DECLARE_PROPERTY(dissipation, double,
             "The dissipation coefficient, default is 0 (s/m).");

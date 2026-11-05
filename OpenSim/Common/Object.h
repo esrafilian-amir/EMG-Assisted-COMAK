@@ -36,10 +36,11 @@
 // INCLUDES
 
 #include "Assertion.h"
-#include "osimCommonDLL.h"
+#include "Property.h"
 #include "PropertySet.h"
 #include "PropertyTable.h"
-#include "Property.h"
+#include "osimCommonDLL.h"
+#include "Detail/JoinShim.h"
 
 #include <cstring>
 #include <map>
@@ -485,8 +486,8 @@ public:
     getRegisteredObjectsOfGivenType(ArrayPtrs<T>& rArray) {
         rArray.setSize(0);
         rArray.setMemoryOwner(false);
-        for(int i=0; i<_registeredTypes.getSize(); i++) {
-            T* obj = dynamic_cast<T*>(_registeredTypes[i]);
+        for(int i=0; i<_registeredTypes().getSize(); i++) {
+            T* obj = dynamic_cast<T*>(_registeredTypes()[i]);
             if (obj) rArray.append(obj);
         }
     }
@@ -874,22 +875,22 @@ private:
     // Each object type only appears once in this array. Renamed types usually
     // do not have separate registered objects; they are just used to locate 
     // one of the current ones.
-    static ArrayPtrs<Object>                    _registeredTypes;
+    static ArrayPtrs<Object>&                    _registeredTypes();
 
-    // Map from concrete object class name string to a default object of that 
-    // type kept in the above array of registered types. Renamed types are *not* 
-    // normally entered here; the names are mapped separately using the map 
+    // Map from concrete object class name string to a default object of that
+    // type kept in the above array of registered types. Renamed types are *not*
+    // normally entered here; the names are mapped separately using the map
     // below.
-    static std::map<std::string,Object*>        _mapTypesToDefaultObjects;
+    static std::map<std::string,Object*>&        _mapTypesToDefaultObjects();
 
     // Map types that have been renamed to their new names, which can
-    // then be used to find them in the default object map. This lets us 
+    // then be used to find them in the default object map. This lets us
     // recognize the old names while converting to the new ones internally
-    // so that they will be updated when written out. It also allows one 
+    // so that they will be updated when written out. It also allows one
     // to map one registered type to a different one programmatically, because
     // we'll look up the name in the rename table first prior to searching
     // the registered types list.
-    static std::map<std::string,std::string>    _renamedTypesMap;
+    static std::map<std::string,std::string>&    _renamedTypesMap();
 
     // Global flag to indicate if all registered objects are to be written in 
     // a "defaults" section.
@@ -1081,7 +1082,7 @@ void Object::checkPropertyValueIsInSet(
     for (int i = 0; i < p.size(); ++i) {
         const auto& value = p.getValue(i);
         if (set.find(value) == set.end()) {
-            std::string str = fmt::format("{}", fmt::join(set, ", "));
+            std::string str = std::format("{}", detail::join(set, ", "));
             OPENSIM_THROW_FRMOBJ(Exception,
                     "Property '{}' has invalid value {}; expected one of the "
                     "following: {}.", p.getName(), value, str);
@@ -1104,7 +1105,7 @@ void Object::checkPropertyValueIsInRangeOrSet(const Property<T>& p,
     for (int i = 0; i < p.size(); ++i) {
         const auto& value = p.getValue(i);
         if ((value < lower || value > upper) && set.find(value) == set.end()) {
-            std::string str = fmt::format("{}", fmt::join(set, ", "));
+            std::string str = std::format("{}", detail::join(set, ", "));
             OPENSIM_THROW_FRMOBJ(Exception,
                     "Property '{}' has invalid value {}; expected value to be "
                     "in range [{}, {}], or one of the following: {}.",
@@ -1400,25 +1401,19 @@ ObjectProperty<T>::readFromXMLElement
     int objectsFound = 0;
     SimTK::Xml::element_iterator iter = propertyElement.element_begin();
     for (; iter != propertyElement.element_end(); ++iter) {
-        const SimTK::String& objTypeTag = iter->getElementTag();
+        const std::string& objTypeTag = iter->getElementTag();
 
         const Object* registeredObj = 
             Object::getDefaultInstanceOfType(objTypeTag);
 
         if (!registeredObj) {
-            std::cerr 
-                << "Encountered unrecognized Object typename " 
-                << objTypeTag << " while reading property " << this->getName()
-                << ". There is no registered Object of this type; ignoring.\n";
-            continue;                        
+            log_error("Encountered unrecognized Object typename {} while reading property {}. There is no registered Object of this type. Ignoring.", objTypeTag, this->getName());
+            continue;
         }
 
         // Check that the object type found is derived from T.
         if (!dynamic_cast<const T*>(registeredObj)) {
-            std::cerr << "Object type " << objTypeTag  
-                        << " wrong for " << objectClassName
-                        << " property " << this->getName()
-                        << "; ignoring.\n";
+            log_error("Object type {} wrong for {} property {}. Ignoring.", objTypeTag, objectClassName, this->getName());
             continue;                        
         }
         ++objectsFound;
@@ -1437,16 +1432,18 @@ ObjectProperty<T>::readFromXMLElement
     }
 
     if (objectsFound < this->getMinListSize()) {
-        std::cerr << "Got " << objectsFound 
-                    << " object values for Property "
-                    << this->getName() << " but the minimum is " 
-                    << this->getMinListSize() << ". Continuing anyway.\n"; 
+        log_error("Got {} object values for Property {} but the minimum is {}. Continuing anyway.",
+            objectsFound ,
+            this->getName() ,
+            this->getMinListSize()
+        );
     }
     if (objectsFound > this->getMaxListSize()) {
-        std::cerr << "Got " << objectsFound
-                    << " object values for Property "
-                    << this->getName() << " but the maximum is " 
-                    << this->getMaxListSize() << ". Ignoring the rest.\n"; 
+        log_error("Got {} object values for Property {} but the maximum is {}. Ignoring the rest.",
+            objectsFound,
+            this->getName(),
+            this->getMaxListSize()
+        );
     }
 }
 

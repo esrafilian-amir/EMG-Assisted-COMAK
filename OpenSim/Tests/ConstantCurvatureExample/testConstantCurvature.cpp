@@ -28,13 +28,21 @@
  */
 
 #include "OpenSim/Actuators/SpringGeneralizedForce.h"
-#include "OpenSim/Auxiliary/auxiliaryTestFunctions.h"
-#include "OpenSim/Simulation/Model/CoordinateLimitForce.h"
+#include "OpenSim/Common/Reporter.h"
+#include "OpenSim/Simulation/Model/Model.h"
 #include "OpenSim/Simulation/Model/Geometry.h"
+#include "OpenSim/Simulation/SimbodyEngine/ConstantCurvatureJoint.h"
+#include "OpenSim/Simulation/SimulationUtilities.h"
+
+#include <tests/Testing.h>
+
+#include <catch2/catch_all.hpp>
+
 #include <string>
+
 // #define VISUALIZE
 
-#include "OpenSim/OpenSim.h"
+namespace {
 
 using namespace SimTK;
 using namespace OpenSim;
@@ -81,7 +89,7 @@ void testJacobians1() {
     Mat63 J = ConstantCurvatureJoint::getConstantCurveJacobian(q, d);
 
     Mat63 diffJ = J - expectedJacobian;
-    ASSERT(diffJ.norm() < 1e-9, __FILE__, __LINE__,
+    OPENSIM_ASSERT_ALWAYS(diffJ.norm() < 1e-9 &&
             "Jacobian didn't match expected value");
 
     ////////////////////////////////////////////////////////
@@ -120,7 +128,7 @@ void testJacobians1() {
             q, qDot, d);
 
     Mat63 diffJdot = Jdot - expectedJacobianTimeDeriv;
-    ASSERT(diffJdot.norm() < 1e-9, __FILE__, __LINE__,
+    OPENSIM_ASSERT_ALWAYS(diffJdot.norm() < 1e-9 &&
             "Jacobian time deriv didn't match expected value");
 }
 
@@ -166,7 +174,7 @@ void testJacobians2() {
     Mat63 J = ConstantCurvatureJoint::getConstantCurveJacobian(q, d);
 
     Mat63 diffJ = J - expectedJacobian;
-    ASSERT(diffJ.norm() < 1e-9, __FILE__, __LINE__,
+    OPENSIM_ASSERT_ALWAYS(diffJ.norm() < 1e-9 &&
             "Jacobian didn't match expected value");
 
     ////////////////////////////////////////////////////////
@@ -205,7 +213,7 @@ void testJacobians2() {
             q, qDot, d);
 
     Mat63 diffJdot = Jdot - expectedJacobianTimeDeriv;
-    ASSERT(diffJdot.norm() < 1e-9, __FILE__, __LINE__,
+    OPENSIM_ASSERT_ALWAYS(diffJdot.norm() < 1e-9 &&
             "Jacobian time deriv didn't match expected value");
 }
 
@@ -220,7 +228,9 @@ void testJacobians3() {
     (void)J; // keep compiler from complaining
 }
 
-int main() {
+}
+
+TEST_CASE("testConstantCurvature") {
     testJacobians1();
     testJacobians2();
     testJacobians3();
@@ -353,6 +363,4 @@ int main() {
 
     // Simulate.
     simulate(model, state, 20.0);
-
-    return 0;
-};
+}

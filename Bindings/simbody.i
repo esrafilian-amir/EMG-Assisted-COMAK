@@ -8,8 +8,38 @@
 
 %include <SWIGSimTK/Vec.h>
 
-// Vec3
 namespace SimTK {
+// Ignore invalid constructor combinations (e.g. Vec2 can only be constructed
+// from 2 elements, not 3; a Vec6 can only be constructed from 6 elements, not
+// 2; etc.)
+%ignore Vec<2>::Vec(const E&, const E&, const E&);
+%ignore Vec<2>::Vec(const E&, const E&, const E&, const E&);
+%ignore Vec<2>::Vec(const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<2>::Vec(const E&, const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<2>::Vec(const E&, const E&, const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<2>::Vec(const E&, const E&, const E&, const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<2>::Vec(const E&, const E&, const E&, const E&, const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<3>::Vec(const E&, const E&);
+%ignore Vec<3>::Vec(const E&, const E&, const E&, const E&);
+%ignore Vec<3>::Vec(const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<3>::Vec(const E&, const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<3>::Vec(const E&, const E&, const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<3>::Vec(const E&, const E&, const E&, const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<3>::Vec(const E&, const E&, const E&, const E&, const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<4>::Vec(const E&, const E&);
+%ignore Vec<4>::Vec(const E&, const E&, const E&);
+%ignore Vec<4>::Vec(const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<4>::Vec(const E&, const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<4>::Vec(const E&, const E&, const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<4>::Vec(const E&, const E&, const E&, const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<4>::Vec(const E&, const E&, const E&, const E&, const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<6>::Vec(const E&, const E&);
+%ignore Vec<6>::Vec(const E&, const E&, const E&);
+%ignore Vec<6>::Vec(const E&, const E&, const E&, const E&);
+%ignore Vec<6>::Vec(const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<6>::Vec(const E&, const E&, const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<6>::Vec(const E&, const E&, const E&, const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<6>::Vec(const E&, const E&, const E&, const E&, const E&, const E&, const E&, const E&, const E&);
 %template(Vec2) Vec<2>;
 %template(Vec3) Vec<3>;
 %template(Vec4) Vec<4>;
@@ -37,7 +67,7 @@ ADD_VEC_OPERATOR_METHODS(SimTK::Vec<6>)
 %include <SWIGSimTK/Mat.h>
 %include <SimTKcommon/SmallMatrix.h> // for typedefs like Mat33.
 namespace SimTK {
-%template(Mat33) Mat<3, 3>;
+%template(Mat33) Mat<3, 3, double>;
 }
 %include <SWIGSimTK/CoordinateAxis.h>
 %include <SWIGSimTK/UnitVec.h>
@@ -218,9 +248,18 @@ INSTANTIATE_MATRIXTYPES(Vec6)
 
 %include <SWIGSimTK/SpatialAlgebra.h>
 namespace SimTK {
+// Ignore invalid constructor combinations
+%ignore Vec<2, Vec3>::Vec(const E&, const E&, const E&);
+%ignore Vec<2, Vec3>::Vec(const E&, const E&, const E&, const E&);
+%ignore Vec<2, Vec3>::Vec(const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<2, Vec3>::Vec(const E&, const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<2, Vec3>::Vec(const E&, const E&, const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<2, Vec3>::Vec(const E&, const E&, const E&, const E&, const E&, const E&, const E&, const E&);
+%ignore Vec<2, Vec3>::Vec(const E&, const E&, const E&, const E&, const E&, const E&, const E&, const E&, const E&);
 %template(SpatialVec) Vec<2,   Vec3>;
 %template(VectorOfSpatialVec) Vector_<SpatialVec>;
 %template(MatrixOfSpatialVec) Matrix_<SpatialVec>;
+
 }
 
 %include <SWIGSimTK/Rotation.h>
@@ -305,7 +344,7 @@ namespace SimTK {
 %template(ArrayIndexInt) ArrayIndexTraits<int>;
 }
 
-%include <SWIGSimTK/PolygonalMesh.h>
+%include <SimTKcommon/internal/PolygonalMesh.h>
 %include <SWIGSimTK/DecorativeGeometry.h>
 
 
@@ -352,6 +391,12 @@ namespace SimTK {
         unsigned modifier = 0;
         $self->takeKeyHit(key, modifier);
         return key;
+    }
+}
+%extend PolygonalMesh {
+    void loadFile(const std::string& pathname) {
+    // SWIG cant handle SimTK::String despite autoconversion
+        $self->loadFile(pathname);
     }
 }
 }

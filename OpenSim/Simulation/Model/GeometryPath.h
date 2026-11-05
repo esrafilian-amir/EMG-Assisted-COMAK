@@ -158,9 +158,27 @@ public:
     void produceForces(const SimTK::State& state,
         double tension,
         ForceConsumer& forceConsumer) const override;
-    
-    bool isVisualPath() const override { return true; }
-    
+
+    bool isVisualPath() const override;
+
+    /**
+     * Find the list of paths to independent coordinates which fully determine
+     * the kinematic state of this path.
+     *
+     * `Scholz2015GeometryPath`'s concrete implementation of this method finds
+     * the joints lying between the frames associated with the path's origin and
+     * insertion points and returns the coordinate paths associated with these
+     * joints. Locked coordinates, prescribed coordinates, and coordinates
+     * dependent on other coordinates via a `CoordinateCouplerConstraint` are
+     * excluded from the list.
+     *
+     * @note This method uses several passes through the model's topology to
+     * form the list of coordinate paths, so avoid repeated calls in performance
+     * critical applications.
+     */
+    std::vector<ComponentPath>
+    findIndependentCoordinates(const SimTK::State&) const override;
+
     //--------------------------------------------------------------------------
     // COMPUTATIONS
     //--------------------------------------------------------------------------
@@ -193,17 +211,13 @@ protected:
     void extendInitStateFromProperties(SimTK::State& s) const override;
     void extendAddToSystem(SimTK::MultibodySystem& system) const override;
 
-    // Visual support GeometryPath drawing in SimTK visualizer.
-    void generateDecorations(
-            bool                                        fixed,
-            const ModelDisplayHints&                    hints,
-            const SimTK::State&                         state,
-            SimTK::Array_<SimTK::DecorativeGeometry>&   appendToThis) const
-            override;
-
     void extendFinalizeFromProperties() override;
 
 private:
+    void implForEachDecorativePathPoint(
+        const SimTK::State&,
+        const ModelDisplayHints&,
+        const std::function<void(const DecorativePathPoint&)>&) const override;
 
     void computePath(const SimTK::State& s ) const;
     void computeLengtheningSpeed(const SimTK::State& s) const;

@@ -46,14 +46,14 @@ template <typename FunctionType>
 std::unique_ptr<Function> createFunction(
         const SimTK::Vector& x, const SimTK::Vector& y) {
     OPENSIM_THROW_IF(x.size() != y.size(), Exception, "x.size() != y.size()");
-    return OpenSim::make_unique<FunctionType>(
+    return std::make_unique<FunctionType>(
             x.size(), x.getContiguousScalarData(), y.getContiguousScalarData());
 }
 template <>
 std::unique_ptr<Function> createFunction<GCVSpline>(
         const SimTK::Vector& x, const SimTK::Vector& y) {
     OPENSIM_THROW_IF(x.size() != y.size(), Exception, "x.size() != y.size()");
-    return OpenSim::make_unique<GCVSpline>(5, x.size(),
+    return std::make_unique<GCVSpline>(5, x.size(),
             x.getContiguousScalarData(), y.getContiguousScalarData());
 }
 } // anonymous namespace
@@ -94,7 +94,7 @@ void OpenSim::prescribeControlsToModel(
     for (auto& controller : model.updComponentList<InputController>()) {
         const auto& labels = controller.getInputControlLabels();
         for (const auto& label : labels) {
-            std::string inputControlName = fmt::format("{}/{}", 
+            std::string inputControlName = std::format("{}/{}",
                     controller.getAbsolutePathString(), label);
 
             const auto inputControl = 
@@ -433,7 +433,7 @@ TimeSeriesTable OpenSim::calcGeneralizedForces(Model model,
     for (int j = 0; j < static_cast<int>(coordinates.size()); ++j) {
         const auto& coordinate = coordinates[j];
         udots.updCol(j) = accelerationsTable.getDependentColumn(
-                fmt::format("{}|acceleration",
+                std::format("{}|acceleration",
                             coordinate->getAbsolutePathString()));
     }
 

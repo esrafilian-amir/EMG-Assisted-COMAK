@@ -60,12 +60,43 @@ public:
     static int findStateLabelIndex(
             const std::vector<std::string>& labels, const std::string& desired);
 
-    /// Lowpass filter the data in a TimeSeriesTable at a provided cutoff
-    /// frequency. If padData is true, then the data is first padded with pad()
-    /// using numRowsToPrependAndAppend = table.getNumRows() / 2.
-    /// The filtering is performed with Signal::LowpassIIR()
-    static void filterLowpass(TimeSeriesTable& table,
-            double cutoffFreq, bool padData = false);
+    /**
+     * @brief Applies a lowpass filter to the data in a TimeSeriesTable at a
+     * specified cutoff frequency.
+     *
+     * This function first checks if the provided cutoff frequency is
+     * non-negative. If the `padData` parameter is set to true, the data is
+     * mirror padded using the `pad()` function.
+     * The amount of padding is half the number of rows in the table on each side.
+     * In other words, using numRowsToPrependAndAppend = table.getNumRows() / 2.
+     * This will make the resulting data twice as long as the original and may 
+     * include "negative" time if the original independent (time) column began at 0.
+     *
+     * The function then verifies that the number of rows in the table is at
+     * least 4, as filtering requires a minimum amount of data. It retrieves the
+     * independent time column and checks if the time samples are uniformly
+     * spaced. If the time intervals are not uniform, the data is resampled to
+     * ensure consistent sampling before applying the lowpass filter. 
+     * See `CommonUtilities.h` for more information on how the uniform sampling 
+     * is calculated to determine if the data should be resampled.
+     *
+     * The filtering is performed using the `Signal::LowpassIIR()` method, which
+     * processes each dependent column of the table with the specified cutoff
+     * frequency and the determined sampling interval.
+     *
+     * @param table A reference to the TimeSeriesTable containing the data to be
+     * filtered.
+     * @param cutoffFreq The cutoff frequency for the lowpass filter. Must be
+     * non-negative.
+     * @param padData A boolean indicating whether to pad the data before
+     * filtering.
+     *
+     * @throws Exception if the cutoff frequency is negative, if the number of
+     * rows is less than 4, or if the time intervals are not suitable for
+     * resampling.
+     */
+    static void filterLowpass(
+            TimeSeriesTable& table, double cutoffFreq, bool padData = false);
 
     /// Pad each column by the number of rows specified. The padded data is
     /// obtained by reflecting and negating the data in the table.
@@ -103,6 +134,56 @@ public:
     // corresponding TimeSeriesTableVec3 of BodyFixedXYZ Euler angles
     static TimeSeriesTable_<SimTK::Vec3> convertRotationsToEulerAngles(
             const TimeSeriesTable_<SimTK::Rotation>& rotTable);
+
+    /// Utility to concatenate two TimeSeriesTables into a new table.
+    /// Requires that both tables contain elements of the same type and
+    /// have the same number of columns with the same labels. The initial
+    /// time point in the second table must be greater than the final
+    /// time in the first table.
+    template <typename T>
+    static TimeSeriesTable_<T> concatenate(
+        const TimeSeriesTable_<T>& firstTable,
+        const TimeSeriesTable_<T>& secondTable) {
+        // Check that both tables have the same number of columns with
+        // equal column labels. Verify that the combined time vectors will
+        // be monotonically increasing.
+        const auto& labels = firstTable.getColumnLabels();
+        const auto& times = firstTable.getIndependentColumn();
+        const auto& data = firstTable.getMatrix();
+
+        const auto& secondLabels = secondTable.getColumnLabels();
+        const auto& secondTimes = secondTable.getIndependentColumn();
+        const auto& secondData = secondTable.getMatrix();
+
+        OPENSIM_THROW_IF(labels.size() != secondLabels.size(), Exception,
+                "Cannot concatentate tables with inconsistent column labels.");
+        OPENSIM_THROW_IF(!(labels == secondLabels), Exception,
+                "Cannot concatentate tables with inconsistent column labels.");
+        OPENSIM_THROW_IF(data.ncol() != secondData.ncol(), Exception,
+                "Cannot concatentate tables of inconsistent number of "
+                "columns..");
+        OPENSIM_THROW_IF(times[times.size() - 1] > secondTimes[0], Exception,
+                "Expected the final time point of the second point to be "
+                "greater than the last time point of the first table, "
+                "but concatenating the tables "
+                "led to time vector that is not monotonically increasing.");
+
+        int nRows1 = firstTable.getNumRows();
+        int nRows2 = secondTable.getNumRows();
+        int nCols = firstTable.getNumColumns();
+        int nTotalRows = nRows1 + nRows2;
+
+        // Merge the time vectors.
+        std::vector<double> mergedTimes(times);
+        mergedTimes.insert(mergedTimes.end(), secondTimes.begin(), secondTimes.end());
+
+        // Merge the data.
+        SimTK::Matrix_<T> mergedMatrix(nTotalRows, nCols);
+        mergedMatrix.updBlock(0, 0, nRows1, nCols) = data;
+        mergedMatrix.updBlock(nRows1, 0, nRows2, nCols) = secondData;
+
+        return TimeSeriesTable_<T>(mergedTimes, mergedMatrix, labels);
+    }
 
 private:
     static int findStateLabelIndexInternal(const std::string* begin,
