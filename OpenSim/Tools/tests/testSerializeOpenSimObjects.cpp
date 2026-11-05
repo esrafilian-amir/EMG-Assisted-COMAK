@@ -131,6 +131,11 @@ TEST_CASE("Serialize OpenSim objects") {
             // Randomizing ControlSetController fails because it is
             // unable to load nonexistent file 'ABCXYZ'.
             continue;
+        } else if (dynamic_cast<Smith2018ContactMesh*>(clone)) {
+            // Randomizing Smith2018ContactMesh fails because it loads its mesh
+            // file when the properties are finalized and the file 'ABCXYZ'
+            // does not exist.
+            continue;
         } else if (dynamic_cast<StationDefinedFrame*>(clone)) {
             // Randomizing StationDefinedFrame sporadically fails with
             // exception message "failed to match original model".

@@ -194,12 +194,12 @@ TEST_CASE("testSmith2018NonlinearContact") {
         }
     }
 
-    SECTION("invalid properties are rejected") {
+    SECTION("invalid properties are rejected when the model is initialized") {
         DiskOnPlane test(true, "nonlinear");
         test.contact->set_elastic_foundation_formulation("nonlinaer");
-        CHECK_THROWS(test.model.finalizeFromProperties());
+        CHECK_THROWS(test.model.initSystem());
         test.contact->set_elastic_foundation_formulation("nonlinear");
         test.contact->set_max_strain(1.0);
-        CHECK_THROWS(test.model.finalizeFromProperties());
+        CHECK_THROWS(test.model.initSystem());
     }
 }

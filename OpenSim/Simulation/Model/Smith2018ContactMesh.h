@@ -301,6 +301,8 @@ private:
     void constructProperties();
 
     void extendFinalizeFromProperties() override;
+    // Checks the material properties (when the model is initialized)
+    void extendAddToSystem(SimTK::MultibodySystem& system) const override;
     void extendScale(const SimTK::State& s, const ScaleSet& scaleSet) override;
     void extendConnectToModel(Model& model) override;
 
