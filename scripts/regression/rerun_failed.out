@@ -1,0 +1,25 @@
+== python
+1/2 Test #126: python_tests .....................***Failed    9.59 sec
+2/2 Test #127: python_examples ..................   Passed  158.29 sec
+50% tests passed, 1 tests failed out of 2
+== testMocoImplicit
+1/1 Test #64: testMocoImplicit .................***Failed  548.90 sec
+0% tests passed, 1 tests failed out of 1
+== matlab (one at a time)
+ 1/15 Test #143: Matlab_TugOfWar_RelWithDebInfo ..................................   Passed   47.53 sec
+ 2/15 Test #144: Matlab_wiringInputsAndOutputsWithTableReporter_RelWithDebInfo ...   Passed   42.37 sec
+ 3/15 Test #145: Matlab_RunHopper_answers_RelWithDebInfo .........................   Passed   74.09 sec
+ 4/15 Test #146: Matlab_RunHopperWithDevice_answers_RelWithDebInfo ...............   Passed   55.80 sec
+ 5/15 Test #147: Matlab_ConnectorsInputsOutputs_RelWithDebInfo ...................***Failed  362.40 sec
+ 6/15 Test #148: Matlab_AccessSubcomponents_RelWithDebInfo .......................   Passed  279.75 sec
+ 7/15 Test #149: Matlab_Simbody_RelWithDebInfo ...................................   Passed   91.06 sec
+ 8/15 Test #150: Matlab_osimTableStruct_RelWithDebInfo ...........................***Failed  433.89 sec
+ 9/15 Test #151: Matlab_testOsimVec3_RelWithDebInfo ..............................***Failed  184.57 sec
+10/15 Test #152: Matlab_testOsimC3D_RelWithDebInfo ...............................***Failed  401.64 sec
+11/15 Test #153: Matlab_testOsimList2MatlabCell_RelWithDebInfo ...................***Failed  283.63 sec
+12/15 Test #154: Matlab_testWalkerScripts_RelWithDebInfo .........................***Failed  180.91 sec
+13/15 Test #155: Matlab_SlidingMass_RelWithDebInfo ...............................***Failed  180.39 sec
+14/15 Test #156: Matlab_MocoSWIGAdditionalInterface_RelWithDebInfo ...............***Failed  180.46 sec
+15/15 Test #157: Matlab_MocoWorkflow_RelWithDebInfo ..............................***Failed  180.60 sec
+40% tests passed, 9 tests failed out of 15
+all rerun done
