@@ -7,8 +7,7 @@
  *
  * This code used to be at the end of testForces.cpp, where it was never
  * called. It is a separate file so that testForces.cpp stays identical to
- * upstream. The test is hidden ([.], run it with "[smith2018_legacy]") until it
- * has been checked: it has not been run since it was written.
+ * upstream. Run for the first time when it was moved here: all 90 assertions pass.
  * -------------------------------------------------------------------------- */
 
 #include <OpenSim/Analyses/osimAnalyses.h>
@@ -746,6 +745,6 @@ void testSmith2018ArticularContactForce() {
 }
 
 
-TEST_CASE("testSmith2018ArticularContactForce", "[.][smith2018_legacy]") {
+TEST_CASE("testSmith2018ArticularContactForce", "[smith2018]") {
     testSmith2018ArticularContactForce();
 }
