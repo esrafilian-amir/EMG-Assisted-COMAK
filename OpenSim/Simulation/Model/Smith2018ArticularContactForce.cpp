@@ -794,8 +794,6 @@ void Smith2018ArticularContactForce::computeForce(const State& state,
     const Vector_<Vec3>& triangle_center = casting_mesh.getTriangleCenters();
 
     Transform T_casting_to_ground = casting_frame.getTransformInGround(state);
-    Transform T_casting_to_target =
-        casting_frame.findTransformBetween(state, target_frame);
 
     // Triangles without contact carry no force. The forces of all contacting
     // triangles are summed into one force and one couple on each body
