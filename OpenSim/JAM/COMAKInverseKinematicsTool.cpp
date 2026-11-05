@@ -427,7 +427,9 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
 
     //Initialize Model
     Model model = *_model.clone();
-    model.setUseVisualizer(get_use_visualizer());
+    // The visualizer is switched on just before the settling simulation
+    // (below). Opening it here as well only creates an empty first window.
+    model.setUseVisualizer(false);
     model.initSystem();
 
     for (Muscle& msl : model.updComponentList<Muscle>()) {
