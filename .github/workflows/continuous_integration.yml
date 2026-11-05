@@ -67,7 +67,7 @@ jobs:
         python3 -m pip install numpy==2.0
         python3 -m pip install wheel
         python3 -m pip install build
-        pip install --upgrade pip setuptools wheel
+        python3 -m pip install --upgrade pip setuptools wheel
         pip install delvewheel
 
     - name: Install SWIG
@@ -139,13 +139,13 @@ jobs:
     - name: Build EMG-Assisted-COMAK
       # Install now to avoid building bindings twice (TODO: issue when using Visual Studio 2019, is this an issue too in Visual Studio 2022?).
       run: |
-        cmake --build --preset ci-msvc-windows-release -j 4
-        cmake --build --preset ci-msvc-windows-release --target doxygen
-        cmake --build --preset ci-msvc-windows-release --target install
+        cmake --build $env:GITHUB_WORKSPACEbuild --config Release -j 4
+        cmake --build $env:GITHUB_WORKSPACEbuild --config Release --target doxygen
+        cmake --build $env:GITHUB_WORKSPACEbuild --config Release --target install
 
     - name: Test EMG-Assisted-COMAK
       run: |
-        ctest --preset ci-msvc-windows-release -j 4 -E Java_.*
+        ctest --test-dir $env:GITHUB_WORKSPACEbuild -C Release -j 4 -E Java_.*
 
     - name: Install EMG-Assisted-COMAK
       # TODO: This is where we wish to do the installing, but it's done above for now.
