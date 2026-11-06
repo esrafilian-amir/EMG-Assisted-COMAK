@@ -33,6 +33,9 @@
 #include <OpenSim/Common/GCVSpline.h>
 #include "Smith2018ArticularContactForce.h"
 #include "Smith2018ContactMesh.h"
+#include "Smith2018DistanceField.h"
+#include <map>
+#include <mutex>
 #include <cctype>
 #include <cmath>
 
@@ -67,6 +70,7 @@ Smith2018ArticularContactForce::Smith2018ArticularContactForce(
 
 void Smith2018ArticularContactForce::setNull()
 {
+    _distance_field_cache = std::make_shared<DistanceFieldCache>();
     setAuthors("Colin Smith");
     setReferences(
         "Smith, C. R., Won Choi, K., Negrut, D., & Thelen, D. G. (2018)."
@@ -82,6 +86,53 @@ void Smith2018ArticularContactForce::constructProperties()
     constructProperty_elastic_foundation_formulation("linear");
     constructProperty_use_lumped_contact_model(true);
     constructProperty_max_strain(0.8);
+    constructProperty_contact_method("ray_cast");
+    constructProperty_field_voxel_size(0.001);
+    constructProperty_field_edge_taper_width(0.003);
+}
+
+// Signed distance grids of the meshes used as target (contact_method
+// 'distance_field'), built on first use.
+struct Smith2018ArticularContactForce::DistanceFieldCache {
+    std::mutex mutex;
+    std::map<const Smith2018ContactMesh*,
+        std::shared_ptr<Smith2018DistanceField>> fields;
+    std::map<const Smith2018ContactMesh*, double> signatures;
+};
+
+const Smith2018DistanceField& Smith2018ArticularContactForce::getDistanceField(
+    const Smith2018ContactMesh& mesh) const
+{
+    std::lock_guard<std::mutex> lock(_distance_field_cache->mutex);
+    auto& slot = _distance_field_cache->fields[&mesh];
+    // rebuild if the mesh or the settings changed (the mesh object can be
+    // the same after a new mesh_file was set)
+    const SimTK::Vector_<SimTK::Vec3>& verts = mesh.getVertexLocations();
+    double signature = get_field_voxel_size() * 1e3 + get_max_proximity() * 1e5 +
+        get_field_edge_taper_width() * 1e7 +
+        verts.size() * 1e-3;
+    for (int k = 0; k < 8 && verts.size() > 0; ++k) {
+        const SimTK::Vec3& v = verts[(int)((long long)(verts.size() - 1) * k / 7)];
+        signature += (k + 1) * (v[0] * 1.3 + v[1] * 2.7 + v[2] * 5.1);
+    }
+    auto sig_it = _distance_field_cache->signatures.find(&mesh);
+    if (sig_it == _distance_field_cache->signatures.end() ||
+        sig_it->second != signature) {
+        slot.reset();
+        _distance_field_cache->signatures[&mesh] = signature;
+    }
+    if (!slot) {
+        slot = std::make_shared<Smith2018DistanceField>(
+            mesh.getVertexLocations(), mesh.getTriangleConnectivity(),
+            get_field_voxel_size(), std::max(get_max_proximity(), 0.0),
+            get_field_edge_taper_width());
+        log_info("{}: distance field of '{}' at {} m{}.",
+            getName(), mesh.getName(), slot->getVoxelSize(),
+            slot->isClosed() ? " (closed mesh)" :
+            " (open mesh, " + std::to_string(slot->getNumBoundaryEdges()) +
+            " free edges)");
+    }
+    return *slot;
 }
 
 void Smith2018ArticularContactForce::checkPropertyValues() const
@@ -91,6 +142,19 @@ void Smith2018ArticularContactForce::checkPropertyValues() const
         InvalidPropertyValue, getProperty_elastic_foundation_formulation().getName(),
         "elastic_foundation_formulation must be 'linear' or 'nonlinear', but "
         "it is '" + formulation + "'.");
+
+    OPENSIM_THROW_IF_FRMOBJ(get_contact_method() != "ray_cast" &&
+        get_contact_method() != "distance_field",
+        InvalidPropertyValue, getProperty_contact_method().getName(),
+        "contact_method must be 'ray_cast' or 'distance_field', but it is '" +
+        get_contact_method() + "'.");
+
+    OPENSIM_THROW_IF_FRMOBJ(!(get_field_voxel_size() > 0.0),
+        InvalidPropertyValue, getProperty_field_voxel_size().getName(),
+        "field_voxel_size must be greater than 0.");
+    OPENSIM_THROW_IF_FRMOBJ(!(get_field_edge_taper_width() >= 0.0),
+        InvalidPropertyValue, getProperty_field_edge_taper_width().getName(),
+        "field_edge_taper_width must be 0 or greater.");
 
     OPENSIM_THROW_IF_FRMOBJ(!(get_max_strain() > 0.0 && get_max_strain() < 1.0),
         InvalidPropertyValue, getProperty_max_strain().getName(),
@@ -478,6 +542,9 @@ void Smith2018ArticularContactForce::computeMeshProximity(
 
     //Collision Detection
     //-------------------
+    const Smith2018DistanceField* field =
+        (get_contact_method() == "distance_field") ?
+        &getDistanceField(target_mesh) : nullptr;
 
     //Loop through all triangles in casting mesh
     for (int i = 0; i < casting_mesh.getNumFaces(); ++i) {
@@ -487,6 +554,27 @@ void Smith2018ArticularContactForce::computeMeshProximity(
         SimTK::Vec3 origin = MeshCtoMeshT.shiftFrameStationToBase(tri_cen(i));
         SimTK::UnitVec3 direction(
             MeshCtoMeshT.xformFrameVecToBase(tri_nor(i)));
+
+        // Distance field: depth of the triangle center below the target
+        // surface, no ray
+        if (field) {
+            Smith2018DistanceField::Query q;
+            // the depth fades out at a free edge of the target (weight)
+            if (field->evaluate(origin, q) && q.weight > 0.0 &&
+                q.depth <= get_max_proximity() &&
+                q.depth * q.weight >= get_min_proximity()) {
+                const double depth = q.depth * q.weight;
+                target_tri[i] = q.triangle;
+                triangle_proximity(i) = depth;
+                nActiveTri++;
+                nDiffTri++;
+                if (depth > 0.0) { nContactingTri++; }
+            }
+            else {
+                target_tri[i] = -1;
+            }
+            continue;
+        }
 
         //If triangle was in contact in previous timestep, 
         //recheck same contact triangle and neighbors
@@ -660,6 +748,9 @@ void Smith2018ArticularContactForce::computeMeshDynamics(
             continue;
         }
 
+        if (target_tri[i] < 0 || target_tri[i] >= target_mesh.getNumFaces()) {
+            continue;
+        }
         //Material Properties
         hT = target_mesh.getTriangleThickness(target_tri[i]);
         ET = target_mesh.getTriangleElasticModulus(target_tri[i]);
@@ -729,16 +820,34 @@ void Smith2018ArticularContactForce::computeMeshDynamics(
         }
     }
 
-    //Compute Triangle Forces 
+    //Compute Triangle Forces
     //-----------------------
     const Vector_<UnitVec3>& triangle_normal = casting_mesh.getTriangleNormals();
 
     triangle_force.resize(casting_mesh.getNumFaces());
     triangle_force = Vec3(0.0);
 
+    const bool use_field = get_contact_method() == "distance_field";
+    const Smith2018DistanceField* field =
+        use_field ? &getDistanceField(target_mesh) : nullptr;
+    const Transform MeshCtoMeshT = casting_mesh.getMeshFrame().
+        findTransformBetween(state, target_mesh.getMeshFrame());
+    const Vector_<Vec3>& triangle_center = casting_mesh.getTriangleCenters();
+
     for (int i = 0; i < casting_mesh.getNumFaces(); ++i) {
+        if (field) {
+            // The force pushes the casting triangle out of the target along
+            // the gradient of the signed distance.
+            if (triangle_pressure(i) <= 0) { continue; }
+            Smith2018DistanceField::Query q;
+            if (!field->evaluate(MeshCtoMeshT.shiftFrameStationToBase(
+                    triangle_center(i)), q)) { continue; }
+            triangle_force(i) = MeshCtoMeshT.xformBaseVecToFrame(q.outward) *
+                (triangle_pressure(i) * triangle_area(i));
+            continue;
+        }
         for (int j = 0; j < 3; ++j) {
-            triangle_force(i)(j) = 
+            triangle_force(i)(j) =
                 triangle_pressure(i) * triangle_area(i) * -triangle_normal(i)(j);
         }
     }
@@ -856,7 +965,7 @@ void Smith2018ArticularContactForce::computeForce(const State& state,
 
         computeMeshDynamics(state, target_mesh, casting_mesh,
             target_triangle_force, target_triangle_pressure, target_triangle_energy);
-            
+
         /*setCacheVariableValue(state,
             "target.triangle.proximity", target_triangle_proximity);
 

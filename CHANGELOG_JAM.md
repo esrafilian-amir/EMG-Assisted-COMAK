@@ -41,9 +41,26 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
   less, an unknown `elastic_foundation_formulation`, `max_strain` outside (0, 1). A COMAK contact energy
   derivative that is not finite is ignored with a warning.
 - Input kinematics checks and smoothing spline.
+- `Smith2018ContactMesh`: a mesh file that was loaded again (a new `mesh_file` on the same object) kept the faces of
+  the old mesh in `getTriangleConnectivity()`.
 
 ## New options
 
+- `Smith2018ArticularContactForce.contact_method` (`ray_cast` default, or `distance_field`, EXPERIMENTAL) and
+  `field_voxel_size` (0.001 m): `distance_field` reads the depth of each casting triangle center below the
+  target surface from a signed distance grid of the target mesh (pseudo-normal sign, works for open and closed
+  meshes) and applies the force along the gradient of that field, so there are no ray misses and no dependence
+  on the casting normals. The grid is filled on demand (blocks of 8x8x8 nodes from a triangle hierarchy), so a large
+  mesh with a fine `field_voxel_size` costs only where the other mesh comes close. `field_edge_taper_width` (0.003 m)
+  fades the depth smoothly to zero at a free edge of an open target mesh, so a triangle that slides off the cartilage
+  edge does not lose its force abruptly; 0 gives no contact beside a free edge (like a ray that misses).
+- `Smith2018ContactMesh.thickness_smoothing_iterations` (default 0): smooths the variable thickness over the
+  neighboring triangles. The thickness measured with a ray to the back mesh jumps from triangle to triangle, and a
+  jump in thickness is a jump in the pressure. On the Atlas knee (`tf_contact` with variable thickness) the COMAK
+  inverse kinematics sweep stalled at about 1.8 to 1.9 s (corrector convergence failure, steps down to 1e-13): the
+  tibiofemoral contact was the cause (removing it, or giving the femoral cartilage a constant thickness, got past
+  it). With `contact_method` `distance_field`, `field_edge_taper_width` 0.006 and `thickness_smoothing_iterations` 30
+  on both cartilages, the whole sweep (-10 to 110 degrees) runs in 22 minutes with smooth secondary kinematics.
 - `COMAKInverseKinematicsTool.auto_close_visualizer` (default false): with `use_visualizer`, the windows of the
   settling simulation and of each sweep are closed 10 s after that simulation is done (without holding up the
   next one). The window of the inverse kinematics is not closed.

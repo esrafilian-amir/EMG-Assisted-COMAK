@@ -63,7 +63,8 @@ T2.3: cylinder twists (rotation around vertical axis)
 
 
 */
-void testSmith2018ArticularContactForce() {
+void testSmith2018ArticularContactForce(
+        const std::string& contact_method = "ray_cast") {
     Model model = Model();
     
     double gravity_acc = 9.8067;
@@ -137,6 +138,11 @@ void testSmith2018ArticularContactForce() {
     contact->set_max_proximity(0.2);
     contact->set_elastic_foundation_formulation("linear");
     contact->set_use_lumped_contact_model(true);
+    contact->set_contact_method(contact_method);
+    contact->set_field_voxel_size(0.002); // large plane mesh
+    // no fade at the free edges, so that the field gives the same pressures
+    // as the ray cast
+    contact->set_field_edge_taper_width(0.0);
     model.addForce(contact);
 
     //model.setUseVisualizer(true);
@@ -747,4 +753,9 @@ void testSmith2018ArticularContactForce() {
 
 TEST_CASE("testSmith2018ArticularContactForce", "[smith2018]") {
     testSmith2018ArticularContactForce();
+}
+
+// Same tests with the signed distance field (experimental).
+TEST_CASE("testSmith2018ArticularContactForceDistanceField", "[smith2018_field]") {
+    testSmith2018ArticularContactForce("distance_field");
 }

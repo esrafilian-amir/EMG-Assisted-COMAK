@@ -26,6 +26,9 @@
 
 #include "OpenSim/Simulation/Model/Force.h"
 #include "Smith2018ContactMesh.h"
+#include <memory>
+
+namespace OpenSim { class Smith2018DistanceField; }
 
 
 namespace OpenSim {
@@ -313,6 +316,7 @@ class OSIMSIMULATION_API Smith2018ArticularContactForce : public Force {
     OpenSim_DECLARE_CONCRETE_OBJECT(Smith2018ArticularContactForce, Force)
 
     struct ContactStats;
+    struct DistanceFieldCache;
 
 public:
     //=========================================================================
@@ -347,6 +351,30 @@ public:
         "slope it has at max_strain, so the pressure and the potential energy "
         "stay finite, continuous and smooth for any overlap. Not used by the "
         "linear formulation. Default value set to 0.8.")
+
+    OpenSim_DECLARE_PROPERTY(contact_method, std::string,
+        "How the overlap of the meshes is found: 'ray_cast' (a ray along the "
+        "casting triangle normal, the original method) or 'distance_field' "
+        "(EXPERIMENTAL: the depth of the casting triangle centers below the "
+        "target surface is read from a signed distance grid of the target "
+        "mesh, and the force acts along the gradient of that field). The "
+        "distance field has no dependence on the casting normals and no "
+        "ray misses, and works with open and closed target meshes. Default "
+        "value set to 'ray_cast'.")
+
+    OpenSim_DECLARE_PROPERTY(field_voxel_size, double,
+        "Grid spacing in meters of the signed distance grid used by "
+        "contact_method 'distance_field'. Smaller is more accurate but needs "
+        "more memory and time to build (cubic). Default value set to 0.001.")
+
+    OpenSim_DECLARE_PROPERTY(field_edge_taper_width, double,
+        "Width in meters of the smooth fade-out of the contact at a free edge "
+        "of the target mesh, used by contact_method 'distance_field': the "
+        "depth of a casting triangle is multiplied by a weight that goes "
+        "smoothly from 1 (this far or more from the edge) to 0 (at the edge). "
+        "Without it, a triangle that slides off the edge of the cartilage "
+        "loses its force abruptly, which makes the integrator fail. 0 turns "
+        "the fade off. Default value set to 0.003.")
 
     //=========================================================================
     // Connectors
@@ -1087,6 +1115,12 @@ private:
     mutable bool _max_strain_warning_issued = false;
 
     std::vector<std::string> _region_names;
+    // Signed distance grids by mesh (contact_method distance_field); built
+    // on first use.
+    mutable std::shared_ptr<DistanceFieldCache> _distance_field_cache;
+    const Smith2018DistanceField& getDistanceField(
+        const Smith2018ContactMesh& mesh) const;
+
     std::vector<std::string> _stat_names;
     std::vector<std::string> _stat_names_vec3;
     std::vector<std::string> _mesh_data_names;

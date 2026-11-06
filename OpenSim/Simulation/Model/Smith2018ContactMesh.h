@@ -144,6 +144,17 @@ class OSIMSIMULATION_API Smith2018ContactMesh : public ContactGeometry {
         "Maximum thickness threshold for elastic layer [m] when "
         "calculating variable thickness for each triangle.")
 
+    OpenSim_DECLARE_PROPERTY(thickness_smoothing_iterations, int,
+        "Number of smoothing passes of the variable thickness over the "
+        "neighboring triangles (each pass replaces the thickness of a "
+        "triangle by the average of itself and its edge neighbors). The "
+        "thickness measured with a ray from each triangle to the "
+        "mesh_back_file differs from triangle to triangle, and a jump in "
+        "thickness is a jump in the contact pressure, which can make the "
+        "integrator of a simulation take extremely small steps. Smoothing "
+        "removes the jumps. 0 uses the thickness as measured. Only used "
+        "if use_variable_thickness is true. The default value is 0.")
+
     OpenSim_DECLARE_PROPERTY(scale_factors, SimTK::Vec3,
         "[x,y,z] scale factors applied to vertex locations of the"
         " mesh_file and mesh_back_file meshes.")

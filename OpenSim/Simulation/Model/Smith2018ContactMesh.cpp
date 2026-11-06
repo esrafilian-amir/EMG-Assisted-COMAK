@@ -146,6 +146,7 @@ void Smith2018ContactMesh::constructProperties() {
     constructProperty_mesh_back_file("");
     constructProperty_min_thickness(0.001);
     constructProperty_max_thickness(0.01);
+    constructProperty_thickness_smoothing_iterations(0);
     constructProperty_scale_factors(SimTK::Vec3(1.0));
 }
 
@@ -624,6 +625,8 @@ void Smith2018ContactMesh::initializeMesh() {
         _num_vertices = _mesh.getNumVertices();
         _num_faces = _mesh.getNumFaces();
 
+        // (a mesh that is loaded again must not keep the old faces)
+        _faces.clear();
         for (int f = 0; f < _num_faces; ++f) {
             std::vector<int> face_vertex(3);
             for (int j = 0; j < 3; ++j) {
@@ -836,6 +839,22 @@ void Smith2018ContactMesh::computeVariableThickness() {
             depth = min_thickness;
         }
         _tri_thickness(i) = depth;
+    }
+
+    // Smooth the thickness over the neighboring triangles
+    const int nTri = _mesh.getNumFaces();
+    for (int it = 0; it < get_thickness_smoothing_iterations(); ++it) {
+        SimTK::Vector smoothed(nTri);
+        for (int i = 0; i < nTri; ++i) {
+            double sum = _tri_thickness(i);
+            int n = 1;
+            for (int nb : _tri_neighbors[i]) {
+                sum += _tri_thickness(nb);
+                ++n;
+            }
+            smoothed(i) = sum / n;
+        }
+        _tri_thickness = smoothed;
     }
 }
 
