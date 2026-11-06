@@ -158,6 +158,8 @@ jobs:
     - name: Build wheel
       run: |
         echo "PYTHONPATH= $env:USERPROFILE/EMG-Assisted-COMAK-install/bin">> $GITHUB_ENV
+        # CasADi loads its plugins (casadi_nlpsol_ipopt.dll and the ipopt DLLs next to it) with a plain LoadLibrary: the install bin must be on the PATH.
+        $env:PATH = "$env:USERPROFILEMG-Assisted-COMAK-installbin;$env:PATH"
         # Move to the installed location of the python package.
         cd ~/EMG-Assisted-COMAK-install/sdk/python
         # Run python tests.
