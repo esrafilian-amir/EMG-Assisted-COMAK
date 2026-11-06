@@ -293,7 +293,7 @@ jobs:
 
   macos:
     name: macOS (Apple Silicon)
-    runs-on: macos-14
+    runs-on: macos-15
     # Not tried on macOS for this repository yet: a failure here does not make the whole run fail.
     # Remove this line when the macOS build passes.
     continue-on-error: true
