@@ -318,6 +318,8 @@ private:
     void extendConnectToModel(Model& model) override;
 
     void initializeMesh();
+    // the properties that the mesh data and the triangle thickness depend on
+    std::string meshDataKey() const;
     std::string findMeshFile(const std::string& file);
 
     void createObbTree(OBBTreeNode& node, const SimTK::PolygonalMesh& mesh,
@@ -356,6 +358,7 @@ private:
     bool _init_mesh_from_file;
     bool _mesh_is_cached;
     std::string _cached_mesh_file;
+    std::string _cached_mesh_data_key;
     
     
     

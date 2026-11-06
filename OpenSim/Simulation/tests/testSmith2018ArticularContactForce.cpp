@@ -759,3 +759,64 @@ TEST_CASE("testSmith2018ArticularContactForce", "[smith2018]") {
 TEST_CASE("testSmith2018ArticularContactForceDistanceField", "[smith2018_field]") {
     testSmith2018ArticularContactForce("distance_field");
 }
+
+// The variable thickness measured with a ray to the back mesh jumps from
+// triangle to triangle; thickness_smoothing_iterations averages it over the
+// neighboring triangles. Also checks that changing the property of a loaded
+// mesh takes effect.
+TEST_CASE("testSmith2018ContactMeshThicknessSmoothing", "[smith2018_mesh]") {
+    Model model;
+    OpenSim::Body* body = new OpenSim::Body("b", 1.0, SimTK::Vec3(0),
+        SimTK::Inertia::brick(0.05, 0.05, 0.05));
+    model.addBody(body);
+    model.addJoint(new WeldJoint("g_b", model.getGround(), *body));
+
+    Smith2018ContactMesh* mesh = new Smith2018ContactMesh(
+        "cartilage", "half_sphere_10cm_radius.stl", *body);
+    mesh->set_use_variable_thickness(true);
+    mesh->set_mesh_back_file("x_z_disk_10cm_radius.stl");
+    mesh->set_min_thickness(0.001);
+    mesh->set_max_thickness(0.1);
+    model.addContactGeometry(mesh);
+    model.finalizeFromProperties();
+
+    auto variation = [&]() {
+        double sum = 0;
+        for (int i = 0; i < mesh->getNumFaces(); ++i) {
+            for (int nb : mesh->getNeighborTris(i)) {
+                sum += std::abs(mesh->getTriangleThickness(i) -
+                                mesh->getTriangleThickness(nb));
+            }
+        }
+        return sum;
+    };
+    auto in_range = [&]() {
+        for (int i = 0; i < mesh->getNumFaces(); ++i) {
+            const double h = mesh->getTriangleThickness(i);
+            if (h < 0.001 - 1e-12 || h > 0.1 + 1e-12) { return false; }
+        }
+        return true;
+    };
+
+    const double v0 = variation();
+    CHECK(in_range());
+    CHECK(v0 > 0.0); // the thickness varies
+
+    // a property changed after the mesh was loaded takes effect
+    mesh->set_thickness_smoothing_iterations(5);
+    model.finalizeFromProperties();
+    const double v5 = variation();
+    CHECK(in_range());
+    CHECK(v5 < v0);
+
+    mesh->set_thickness_smoothing_iterations(20);
+    model.finalizeFromProperties();
+    const double v20 = variation();
+    CHECK(in_range());
+    CHECK(v20 < v5);
+
+    // back to the measured thickness
+    mesh->set_thickness_smoothing_iterations(0);
+    model.finalizeFromProperties();
+    CHECK(variation() == Catch::Approx(v0).epsilon(1e-9));
+}

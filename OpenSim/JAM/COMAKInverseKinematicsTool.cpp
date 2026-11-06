@@ -927,7 +927,28 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
         for (int i = 0; i <= nSteps; ++i) {
 
             visualizer_closer.closeDue();
-            sweep_timestepper.stepTo(sweep_start + i*sweep_dt);
+            try {
+                sweep_timestepper.stepTo(sweep_start + i*sweep_dt);
+            }
+            catch (const std::exception&) {
+                // Keep the last output state and the state at which the
+                // integrator failed, to find out what the contact or ligament
+                // forces do there.
+                try {
+                    StatesTrajectory failed;
+                    failed.append(state);
+                    failed.append(sweep_timestepper.getState());
+                    const std::string path = get_results_directory() +
+                            "/sweep_integrator_failure_states.sto";
+                    STOFileAdapter::write(failed.exportToTable(model), path);
+                    log_error("The sweep integrator failed at t = {}. The "
+                              "last output state and the state at the "
+                              "failure are in {}.",
+                              sweep_timestepper.getState().getTime(), path);
+                }
+                catch (...) {}
+                throw;
+            }
             state = sweep_timestepper.getState();
 
             if (record && get_print_secondary_constraint_sim_results()) {

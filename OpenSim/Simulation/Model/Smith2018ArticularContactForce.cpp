@@ -809,6 +809,21 @@ void Smith2018ArticularContactForce::computeMeshDynamics(
             }
         }
 
+        // A triangle deeper than max_proximity has no contact: its force
+        // drops to zero abruptly, which can stop a simulation (the
+        // integrator takes steps of 1e-13). Warn when a triangle gets close.
+        if (!_max_proximity_warning_issued &&
+            d > 0.8 * get_max_proximity()) {
+            _max_proximity_warning_issued = true;
+            log_warn("{}: the penetration of at least one triangle ({} m) "
+                "reached 80% of max_proximity ({} m). A triangle deeper than "
+                "max_proximity gets no contact: its force drops to zero "
+                "abruptly, which can stop a simulation (the integrator takes "
+                "extremely small steps). Increase max_proximity, e.g. to "
+                "several times the layer thickness; this warning is shown "
+                "once.", getName(), d, get_max_proximity());
+        }
+
         if (capped && !_max_strain_warning_issued) {
             _max_strain_warning_issued = true;
             log_warn("{}: the overlap of at least one triangle pair is above "

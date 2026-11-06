@@ -42,7 +42,19 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
   derivative that is not finite is ignored with a warning.
 - Input kinematics checks and smoothing spline.
 - `Smith2018ContactMesh`: a mesh file that was loaded again (a new `mesh_file` on the same object) kept the faces of
-  the old mesh in `getTriangleConnectivity()`.
+  the old mesh in `getTriangleConnectivity()`. A property of the thickness or the material (`thickness`,
+  `elastic_modulus`, `poissons_ratio`, `use_variable_thickness`, `mesh_back_file`, `min_thickness`, `max_thickness`,
+  `thickness_smoothing_iterations`, `scale_factors`) that was changed after the model was loaded did not change the
+  triangle values (they were only computed when the mesh file changed); it does now.
+- `Smith2018ArticularContactForce` warns once when the penetration of a triangle reaches 80% of `max_proximity`:
+  a triangle deeper than `max_proximity` has no contact, so its force drops to zero abruptly, which can stop a
+  simulation (the integrator takes steps of 1e-13). This stalled the COMAK inverse kinematics sweep of a knee model
+  with a patella bone contact with `max_proximity` 0.5 mm; 1 mm or more (5 mm recommended) lets it run.
+- `COMAKInverseKinematicsTool` writes `sweep_integrator_failure_states.sto` (the last output state and the state at the
+  failure) to the results folder when the sweep integrator fails. `scripts/contact_tuning` has the tools to find which
+  force has a jump there, and `scripts/contact_tuning/RESULTS.md` the walking trial comparison of the contact settings
+  (thickness smoothing up to 12 iterations, distance field voxel up to 1 mm, taper up to 4 mm stay within 5% of the
+  default contact force and pressure) and the recommended settings.
 
 ## New options
 

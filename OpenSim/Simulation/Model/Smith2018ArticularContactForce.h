@@ -1113,6 +1113,7 @@ private:
 
     // the warning about overlaps above max_strain is shown once
     mutable bool _max_strain_warning_issued = false;
+    mutable bool _max_proximity_warning_issued = false;
 
     std::vector<std::string> _region_names;
     // Signed distance grids by mesh (contact_method distance_field); built

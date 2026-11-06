@@ -21,6 +21,7 @@
  * -------------------------------------------------------------------------- */
 
 #include "Smith2018ContactMesh.h"
+#include <sstream>
 #include <OpenSim/Common/PropertyStr.h>
 
 #include "OpenSim/Common/Object.h"
@@ -167,7 +168,10 @@ void Smith2018ContactMesh::extendFinalizeFromProperties() {
 
     // Create Decorative Mesh
     if (!isObjectUpToDateWithProperties()) {
-        if (get_mesh_file() != _cached_mesh_file) { initializeMesh(); }
+        // (also when a property of the triangle thickness or material was
+        // changed after the mesh was loaded)
+        if (get_mesh_file() != _cached_mesh_file ||
+            meshDataKey() != _cached_mesh_data_key) { initializeMesh(); }
         //_decorative_mesh.reset(
         //  new SimTK::DecorativeMeshFile(_full_mesh_file_path.c_str()));
         _decorative_mesh.reset(new SimTK::DecorativeMesh(getPolygonalMesh()));
@@ -607,9 +611,24 @@ void Smith2018ContactMesh::computeRegions() {
     }
 }
 
+std::string Smith2018ContactMesh::meshDataKey() const {
+    std::ostringstream key;
+    key.precision(17);
+    key << get_use_variable_thickness() << '|' << get_thickness() << '|'
+        << get_elastic_modulus() << '|' << get_poissons_ratio() << '|'
+        << get_thickness_smoothing_iterations() << '|'
+        << get_scale_factors() << '|';
+    if (get_use_variable_thickness()) {
+        key << get_mesh_back_file() << '|' << get_min_thickness() << '|'
+            << get_max_thickness();
+    }
+    return key.str();
+}
+
 void Smith2018ContactMesh::initializeMesh() {
     _mesh_is_cached = true;
     _cached_mesh_file = get_mesh_file();
+    _cached_mesh_data_key = meshDataKey();
     _mesh.clear();
     _mesh_back.clear();
 
