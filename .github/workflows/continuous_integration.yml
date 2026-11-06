@@ -291,6 +291,42 @@ jobs:
         path: EMG-Assisted-COMAK-${{ steps.configure.outputs.version }}-ubuntu24.zip
         retention-days: 14
 
+  publish:
+    name: Publish the rolling release
+    # One release, called "latest", that is replaced after every successful build of master_v2 (push, Monday schedule or a
+    # manual run on master_v2). Pull requests, tags and other branches never publish.
+    needs: [windows2022, ubuntu24]
+    if: >-
+      ${{ (github.event_name == 'push' && github.ref == 'refs/heads/master_v2')
+      || github.event_name == 'schedule'
+      || (github.event_name == 'workflow_dispatch' && inputs.ref == 'master_v2') }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+    - name: Download the builds
+      uses: actions/download-artifact@v4
+      with:
+        pattern: EMG-Assisted-COMAK-*
+        path: dist
+
+    - name: Replace the "latest" release
+      env:
+        GH_TOKEN: ${{ github.token }}
+        GH_REPO: ${{ github.repository }}
+      run: |
+        win_zip=$(ls dist/*win2022/*.zip)
+        linux_zip=$(ls dist/*ubuntu24-linux/*.zip)
+        cp "$win_zip" EMG-Assisted-COMAK-windows.zip
+        cp "$linux_zip" EMG-Assisted-COMAK-ubuntu24.zip
+        sha=$(gh api repos/$GH_REPO/commits/master_v2 --jq .sha)
+        built=$(basename "$linux_zip" -ubuntu24.zip)
+        gh release delete latest --cleanup-tag --yes || true
+        gh release create latest EMG-Assisted-COMAK-windows.zip EMG-Assisted-COMAK-ubuntu24.zip \
+          --target master_v2 --latest \
+          --title "Latest build of master_v2" \
+          --notes "Automatic build of master_v2 (commit $sha, $built), Release configuration, replaced after every successful build. Windows: Visual Studio 2022. Linux: Ubuntu 24.04."
+
   style:
     name: Style
 
