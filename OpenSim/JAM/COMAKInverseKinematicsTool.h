@@ -280,6 +280,13 @@ public:
         "secondary_constraint_sim and inverse kinematics."
         "The default value is false.")
 
+    OpenSim_DECLARE_PROPERTY(auto_close_visualizer, bool,
+        "Close the visualizer window of the settling simulation and of each "
+        "sweep simulation 10 seconds after that simulation is done (the "
+        "window of the inverse kinematics is not closed). Only used if "
+        "use_visualizer is true. "
+        "The default value is false.")
+
     OpenSim_DECLARE_PROPERTY(verbose, int,
                             "Controling output detail.")
 

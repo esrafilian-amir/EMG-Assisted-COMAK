@@ -44,6 +44,9 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
 
 ## New options
 
+- `COMAKInverseKinematicsTool.auto_close_visualizer` (default false): with `use_visualizer`, the windows of the
+  settling simulation and of each sweep are closed 10 s after that simulation is done (without holding up the
+  next one). The window of the inverse kinematics is not closed.
 - `enforce_secondary_coordinate_range` in `COMAKTool` and `COMAKInverseKinematicsTool`.
 - `jacobian_recompute_interval` (values above 1 diverge on these models), `ignore_secondary_speed_term`,
   `normalize_constraint_rows`, `secondary_step_penalty_weight`.
