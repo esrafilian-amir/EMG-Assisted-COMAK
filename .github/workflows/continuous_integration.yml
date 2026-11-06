@@ -291,11 +291,126 @@ jobs:
         path: EMG-Assisted-COMAK-${{ steps.configure.outputs.version }}-ubuntu24.zip
         retention-days: 14
 
+  macos:
+    name: macOS (Apple Silicon)
+    runs-on: macos-14
+    # Not tried on macOS for this repository yet: a failure here does not make the whole run fail.
+    # Remove this line when the macOS build passes.
+    continue-on-error: true
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ (github.event_name == 'schedule' && env.SCHEDULED_REF) || github.event.inputs.ref || '' }}
+
+    - name: Install Python packages
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install Numpy
+      run: |
+        python3 -m pip install --upgrade pip
+        python3 -m pip install numpy==1.25 wheel setuptools
+
+    - name: Install Homebrew packages
+      # gcc provides gfortran (needed to build Ipopt and its dependencies); bison is needed to build SWIG.
+      run: |
+        brew install pkgconf autoconf libtool automake wget pcre2 bison gcc
+
+    - name: Install SWIG
+      run: |
+        mkdir ~/swig-source && cd ~/swig-source
+        wget https://github.com/swig/swig/archive/refs/tags/v4.4.1.tar.gz
+        tar xzf v4.4.1.tar.gz && cd swig-4.4.1
+        sh autogen.sh && BISON="$(brew --prefix bison)/bin/bison" ./configure --prefix=$HOME/swig --disable-ccache
+        make && make -j4 install
+
+    - name: Build dependencies
+      run: |
+        mkdir $GITHUB_WORKSPACE/../build_deps
+        cd $GITHUB_WORKSPACE/../build_deps
+        DEP_CMAKE_ARGS=($GITHUB_WORKSPACE/dependencies -LAH)
+        DEP_CMAKE_ARGS+=(-DCMAKE_INSTALL_PREFIX=~/opensim_dependencies_install)
+        DEP_CMAKE_ARGS+=(-DCMAKE_BUILD_TYPE=Release)
+        DEP_CMAKE_ARGS+=(-DSUPERBUILD_ezc3d=ON)
+        DEP_CMAKE_ARGS+=(-DOPENSIM_WITH_CASADI=ON)
+        printf '%s\n' "${DEP_CMAKE_ARGS[@]}"
+        cmake "${DEP_CMAKE_ARGS[@]}"
+        make --jobs 4
+
+    - name: Upload the dependency build logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-dependency-build-logs
+        path: |
+          ${{ github.workspace }}/../build_deps/**/*-err.log
+          ${{ github.workspace }}/../build_deps/**/*-out.log
+        retention-days: 7
+
+    - name: Configure EMG-Assisted-COMAK
+      id: configure
+      run: |
+        mkdir $GITHUB_WORKSPACE/../build
+        cd $GITHUB_WORKSPACE/../build
+        OSIM_CMAKE_ARGS=($GITHUB_WORKSPACE -LAH)
+        OSIM_CMAKE_ARGS+=(-DCMAKE_INSTALL_PREFIX=$GITHUB_WORKSPACE/../EMG-Assisted-COMAK-install)
+        OSIM_CMAKE_ARGS+=(-DCMAKE_BUILD_TYPE=Release)
+        OSIM_CMAKE_ARGS+=(-DOPENSIM_DEPENDENCIES_DIR=~/opensim_dependencies_install)
+        OSIM_CMAKE_ARGS+=(-DOPENSIM_C3D_PARSER=ezc3d)
+        # No Java bindings on macOS for now.
+        OSIM_CMAKE_ARGS+=(-DBUILD_PYTHON_WRAPPING=on -DBUILD_JAVA_WRAPPING=off)
+        OSIM_CMAKE_ARGS+=(-DSWIG_DIR=~/swig/share/swig)
+        OSIM_CMAKE_ARGS+=(-DSWIG_EXECUTABLE=~/swig/bin/swig)
+        OSIM_CMAKE_ARGS+=(-DOPENSIM_INSTALL_UNIX_FHS=OFF)
+        OSIM_CMAKE_ARGS+=(-DOPENSIM_WITH_CASADI=on)
+        OSIM_CMAKE_ARGS+=(-DCMAKE_OSX_ARCHITECTURES=arm64)
+        printf '%s\n' "${OSIM_CMAKE_ARGS[@]}"
+        cmake "${OSIM_CMAKE_ARGS[@]}"
+        VERSION=`cmake -L . | grep OPENSIM_QUALIFIED_VERSION | cut -d "=" -f2`
+        echo $VERSION
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Build EMG-Assisted-COMAK
+      run: |
+        cd $GITHUB_WORKSPACE/../build
+        make --jobs 4
+
+    - name: Test EMG-Assisted-COMAK
+      run: |
+        cd $GITHUB_WORKSPACE/../build
+        export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:$HOME/opensim_dependencies_install/simbody/lib
+        ctest --parallel 4 --output-on-failure
+
+    - name: Install EMG-Assisted-COMAK
+      run: |
+        cd $GITHUB_WORKSPACE/../build
+        make --jobs 4 install
+        cd $GITHUB_WORKSPACE
+        mv $GITHUB_WORKSPACE/../EMG-Assisted-COMAK-install EMG-Assisted-COMAK-${{ steps.configure.outputs.version }}
+        zip --symlinks --recurse-paths --quiet EMG-Assisted-COMAK-${{ steps.configure.outputs.version }}-macos-arm64.zip EMG-Assisted-COMAK-${{ steps.configure.outputs.version }}
+        mv EMG-Assisted-COMAK-${{ steps.configure.outputs.version }} $GITHUB_WORKSPACE/../EMG-Assisted-COMAK-install
+
+    - name: Test Python bindings
+      run: |
+        export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:$HOME/opensim_dependencies_install/simbody/lib
+        cd $GITHUB_WORKSPACE/../EMG-Assisted-COMAK-install/sdk/Python
+        python3 -m unittest discover --start-directory opensim/tests --verbose
+
+    - name: Upload EMG-Assisted-COMAK
+      uses: actions/upload-artifact@v4
+      with:
+        name: EMG-Assisted-COMAK-${{ steps.configure.outputs.version }}-macos-arm64
+        path: EMG-Assisted-COMAK-${{ steps.configure.outputs.version }}-macos-arm64.zip
+        retention-days: 14
+
   publish:
     name: Publish the rolling release
     # One release, called "latest", that is replaced after every successful build of master_v2 (push, Monday schedule or a
     # manual run on master_v2). Pull requests, tags and other branches never publish.
-    needs: [windows2022, ubuntu24]
+    needs: [windows2022, ubuntu24, macos]
     if: >-
       ${{ (github.event_name == 'push' && github.ref == 'refs/heads/master_v2')
       || github.event_name == 'schedule'
@@ -322,7 +437,13 @@ jobs:
         sha=$(gh api repos/$GH_REPO/commits/master_v2 --jq .sha)
         built=$(basename "$linux_zip" -ubuntu24.zip)
         gh release delete latest --cleanup-tag --yes || true
-        gh release create latest EMG-Assisted-COMAK-windows.zip EMG-Assisted-COMAK-ubuntu24.zip \
+        files="EMG-Assisted-COMAK-windows.zip EMG-Assisted-COMAK-ubuntu24.zip"
+        # The macOS build is optional: it is published only when it passed.
+        if ls dist/*macos-arm64/*.zip >/dev/null 2>&1; then
+          cp dist/*macos-arm64/*.zip EMG-Assisted-COMAK-macos-arm64.zip
+          files="$files EMG-Assisted-COMAK-macos-arm64.zip"
+        fi
+        gh release create latest $files \
           --target master_v2 --latest \
           --title "Latest build of master_v2" \
           --notes "Automatic build of master_v2 (commit $sha, $built), Release configuration, replaced after every successful build. Windows: Visual Studio 2022. Linux: Ubuntu 24.04."
