@@ -445,7 +445,7 @@ jobs:
         fi
         gh release create latest $files \
           --target master_v2 --latest \
-          --title "Latest build of EMG-Assisted COMAK (OpenSim 4.6)" \
+          --title "Latest build of EMG-Assisted COMAK v2.0 (OpenSim 4.6)" \
           --notes "Automatic build of EMG-Assisted COMAK on OpenSim 4.6 (commit $sha, $built), Release configuration, replaced after every successful build. Windows: Visual Studio 2022. Linux: Ubuntu 24.04. macOS: Apple Silicon."
 
   style:
