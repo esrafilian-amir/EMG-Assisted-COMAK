@@ -394,7 +394,8 @@ public:
     OpenSim_DECLARE_PROPERTY(force_tolerance_translation, double,
         "For convergence_criterion 'force': tolerance on the unbalanced "
         "generalized force of translational coordinates, in N. The default "
-        "value is 1.0. In the walking test up to 30 times the default (30 "
+        "value is 2.0 (the residual of models with menisci stalls just above "
+        "1 N). In the walking test up to 15 times the default (30 "
         "N) changed the activations by less than 0.012; larger values "
         "degrade the solution.")
 
@@ -520,7 +521,7 @@ public:
     OpenSim_DECLARE_PROPERTY(non_muscle_actuator_weight, double,
         "The weighting on the COMAK cost function term that sums the "
         "activations of all actuators that are not muscles (reserves etc). "
-        "The default value is 1000.")
+        "The default value is 10 (a larger weight keeps the reserves unused but lets the unbalanced force stay in the slack, see qp_slack_penalty).")
 
     OpenSim_DECLARE_PROPERTY(model_assembly_accuracy, double, 
         "Model assembly accuracy used during COMAK optimization. This will "

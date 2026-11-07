@@ -93,3 +93,9 @@ contact-mesh code. Regression scripts live in `scripts/regression/`.
 - Unit tests for the new code (mapping parser, upgrade of a version 0 XML, SettleMonitor, passive and
   tendon consistency); `testJAMComak.cpp` only builds the IK setup.
 - Meniscus: settle zig-zag of the vertical translation (about 10 um), not fixed.
+- Reserve actuator weight (`non_muscle_actuator_weight`): test a lower weight (10 instead of 1000, and 100) on the
+  drop jumps. DJ1 with menisci stalled right after the first landing (t = 1.52-1.55 s) because the hip flexion
+  moment stayed 37-300 N*m unbalanced: with the reserves expensive and the slack cheap (penalty 100) the
+  optimizer leaves the residual instead of using the reserves. Check that the reserve force used stays small
+  (a cheap reserve can hide a real lack of muscle capacity), that all frames converge, and the effect on the
+  activations and joint contact forces; then decide the default and the examples.

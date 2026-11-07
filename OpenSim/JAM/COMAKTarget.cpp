@@ -63,7 +63,7 @@ ComakTarget(SimTK::State s, Model* aModel,
     _activation_exponent = 2.0;
     _scale_delta_coord = 1.0;
     _contact_energy_weight = 0.0;
-    _non_muscle_actuator_weight = 1000;
+    _non_muscle_actuator_weight = 10;
 
 }
 

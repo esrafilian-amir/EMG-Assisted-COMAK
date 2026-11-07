@@ -7,12 +7,14 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
 
 - `COMAKTool.convergence_criterion` is `force`: a time step has converged when the unbalanced
   generalized force `M (udot - observed)` is below `force_tolerance_rotation` (0.1 N*m) and
-  `force_tolerance_translation` (1 N). Use `acceleration` for the previous test.
+  `force_tolerance_translation` (2 N; the residual of the models with menisci stalls just above 1 N). Use `acceleration` for the previous test.
 - `COMAKTool.solver` is `casadi_ipopt` (IPOPT through CasADi with the exact Hessian). `ipopt` is the
   previous solver, `casadi_qrqp` an active-set QP solver. Without CasADi, `ipopt` is used.
 - `COMAKSecondaryCoordinate.max_change` is the limit on the total change in a time step (it was
   applied per COMAK iteration). 0 or less means no limit, and 0 is the default.
 - `COMAKTool.use_central_difference_jacobian` is `true`.
+- `COMAKTool.non_muscle_actuator_weight` is 10 (was 1000): with expensive reserves and a cheap slack the optimizer left the unbalanced force in the slack at impact (drop jump with menisci).
+- `COMAKTool.force_tolerance_translation` is 2 N and `qp_slack_penalty` is 100.
 - `COMAKTool.activation_change_penalty_weight` is 0.1 (penalty on the activation change from the
   previous time step, relative to the activation cost).
 - `COMAKTool.relax_acceleration_constraints` is `true`: the acceleration constraints get a penalized

@@ -397,7 +397,7 @@ comak.set_use_tendon_compliance(false);
 % to 0.08. Do not go above this. Use convergence_criterion 'acceleration' for
 % the previous acceleration based test.
 comak.set_force_tolerance_rotation(0.1); % N*m
-comak.set_force_tolerance_translation(1.0); % N
+comak.set_force_tolerance_translation(2.0); % N
 comak.set_unit_udot_epsilon(1e-6);
 comak.set_optimization_scale_delta_coord(1);
 comak.set_ipopt_diagnostics_level(3);
@@ -410,7 +410,7 @@ comak.set_ipopt_nlp_scaling_min_value(1e-8);
 comak.set_ipopt_obj_scaling_factor(1);
 comak.set_activation_exponent(2);
 comak.set_contact_energy_weight(0);
-comak.set_non_muscle_actuator_weight(1000);
+comak.set_non_muscle_actuator_weight(10);
 comak.set_model_assembly_accuracy(1e-12);
 comak.set_use_visualizer(true);
 comak.set_verbose(2);

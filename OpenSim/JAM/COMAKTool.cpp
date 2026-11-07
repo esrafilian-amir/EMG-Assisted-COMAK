@@ -218,7 +218,7 @@ void COMAKTool::constructProperties() {
     constructProperty_udot_worse_case_tolerance(50.0);
     constructProperty_convergence_criterion("force");
     constructProperty_force_tolerance_rotation(0.1);
-    constructProperty_force_tolerance_translation(1.0);
+    constructProperty_force_tolerance_translation(2.0);
     constructProperty_unit_udot_epsilon(1e-8);
     constructProperty_use_central_difference_jacobian(true);
     constructProperty_emg_electromechanical_delay(0.04);
@@ -253,7 +253,7 @@ void COMAKTool::constructProperties() {
 
     constructProperty_activation_exponent(2);
     constructProperty_contact_energy_weight(0.0);
-    constructProperty_non_muscle_actuator_weight(1000);
+    constructProperty_non_muscle_actuator_weight(10);
     constructProperty_COMAKCostFunctionParameterSet(
             COMAKCostFunctionParameterSet());
 

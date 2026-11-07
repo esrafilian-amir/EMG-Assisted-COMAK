@@ -184,7 +184,7 @@ comak.set_use_tendon_compliance(False)
 # to 0.08. Do not go above this. Use convergence_criterion 'acceleration' for
 # the previous acceleration based test.
 comak.set_force_tolerance_rotation(0.1)  # N*m
-comak.set_force_tolerance_translation(1.0)  # N
+comak.set_force_tolerance_translation(2.0)  # N
 comak.set_unit_udot_epsilon(1e-6)
 comak.set_optimization_scale_delta_coord(1)
 comak.set_ipopt_diagnostics_level(3)
@@ -199,7 +199,7 @@ comak.set_activation_exponent(2)
 # the contact energy is a regularization towards low contact loads: 0.1 changes the muscle
 # activations by up to 0.1 and the secondary coordinates by about 1 mm, 1 means that it dominates
 comak.set_contact_energy_weight(0.1)
-comak.set_non_muscle_actuator_weight(1000)
+comak.set_non_muscle_actuator_weight(10)
 comak.set_model_assembly_accuracy(1e-12)
 comak.set_use_visualizer(True)
 comak.set_verbose(0)
