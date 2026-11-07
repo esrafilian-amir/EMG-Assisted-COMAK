@@ -50,6 +50,16 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
   a triangle deeper than `max_proximity` has no contact, so its force drops to zero abruptly, which can stop a
   simulation (the integrator takes steps of 1e-13). This stalled the COMAK inverse kinematics sweep of a knee model
   with a patella bone contact with `max_proximity` 0.5 mm; 1 mm or more (5 mm recommended) lets it run.
+- `Smith2018ArticularContactForce` `distance_field`: the grid cache is now kept per contact force and mesh. The copies of a
+  force (as read from XML) share one cache object, and two contacts with the same target mesh but a different
+  `max_proximity` (the femur cartilage in `tf_contact` and in the femur-meniscus contacts) rebuilt the grid at every call.
+- Recommended contact settings (`scripts/contact_tuning/RESULTS.md`; the ray cast is not the ground truth, so the criterion
+  was 10% of the default result): `distance_field` (voxel 1 mm, edge taper 3 mm) for the cartilage pairs `tf_contact` and
+  `pf_contact` with `thickness_smoothing_iterations` 10. End to end (IK sweep + COMAK, walking and walking with menisci,
+  linear and nonlinear contact) the contact force, maximum pressure and center of pressure stay within 10% of the default
+  (the center of pressure within 1% of the contact patch on average), all frames converge, and the IK sweep is 1.4 to 3.7
+  times faster. The tuned models are `lenhart2015_contact_tuned.osim`, `smith2019_contact_tuned.osim` and
+  `smith2019_contact_tuned_nonlinear.osim`.
 - `COMAKInverseKinematicsTool` writes `sweep_integrator_failure_states.sto` (the last output state and the state at the
   failure) to the results folder when the sweep integrator fails. `scripts/contact_tuning` has the tools to find which
   force has a jump there, and `scripts/contact_tuning/RESULTS.md` the walking trial comparison of the contact settings

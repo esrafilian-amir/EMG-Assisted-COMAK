@@ -42,7 +42,7 @@ for i in range(fs.getSize()):
     f = fs.get(i)
     if f.getConcreteClassName() == "Smith2018ArticularContactForce":
         c = osim.Smith2018ArticularContactForce.safeDownCast(f)
-        c.set_contact_method(method)
+        c.set_contact_method(method if (not opts.get("sdfonly") or c.getName() in opts["sdfonly"].split(",")) else "ray_cast")
         c.set_field_voxel_size(voxel)
         c.set_field_edge_taper_width(taper)
         if "formulation" in opts:
@@ -59,7 +59,7 @@ n = traj.getSize()
 
 res = {"opts": opts, "time": [], "contacts": {}}
 for c in contacts:
-    res["contacts"][c.getName()] = {"force": [], "max_pressure": [],
+    res["contacts"][c.getName()] = {"force": [], "cop": [], "max_pressure": [],
                                     "mean_pressure": [], "area": []}
 for k in range(n):
     s = traj.get(k)
@@ -69,6 +69,8 @@ for k in range(n):
         d = res["contacts"][c.getName()]
         fv = osim.OutputVec3.safeDownCast(c.getOutput("casting_total_contact_force")).getValue(s)
         d["force"].append([fv.get(0), fv.get(1), fv.get(2)])
+        cv = osim.OutputVec3.safeDownCast(c.getOutput("casting_total_center_of_pressure")).getValue(s)
+        d["cop"].append([cv.get(0), cv.get(1), cv.get(2)])
         d["max_pressure"].append(osim.OutputDouble.safeDownCast(c.getOutput("casting_total_max_pressure")).getValue(s))
         d["mean_pressure"].append(osim.OutputDouble.safeDownCast(c.getOutput("casting_total_mean_pressure")).getValue(s))
         d["area"].append(osim.OutputDouble.safeDownCast(c.getOutput("casting_total_contact_area")).getValue(s))

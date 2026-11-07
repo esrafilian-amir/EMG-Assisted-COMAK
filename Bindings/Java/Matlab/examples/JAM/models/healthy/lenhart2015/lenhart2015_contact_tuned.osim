@@ -13277,6 +13277,9 @@
 					<min_proximity>0</min_proximity>
 					<!--The maximum proximity that is valid between contacting meshes to limit the search distance along the casting_mesh normal ray used for collision detection.Default value set to 0.01 meters.-->
 					<max_proximity>0.02</max_proximity>
+<contact_method>distance_field</contact_method>
+<field_voxel_size>0.001</field_voxel_size>
+<field_edge_taper_width>0.003</field_edge_taper_width>
 					<!--Formulation for depth-pressure relationship: 'linear' or 'nonlinear'. Default value set to 'linear'.-->
 					<elastic_foundation_formulation>nonlinear</elastic_foundation_formulation>
 					<!--Combine the thickness and the average material properties between the Smith2018ContactMeshes for both meshes and use Bei & Fregly 2003 lumped parameter Elastic Foundation model.-->
@@ -13295,6 +13298,9 @@
 					<min_proximity>0</min_proximity>
 					<!--The maximum proximity that is valid between contacting meshes to limit the search distance along the casting_mesh normal ray used for collision detection.Default value set to 0.01 meters.-->
 					<max_proximity>0.02</max_proximity>
+<contact_method>distance_field</contact_method>
+<field_voxel_size>0.001</field_voxel_size>
+<field_edge_taper_width>0.003</field_edge_taper_width>
 					<!--Formulation for depth-pressure relationship: 'linear' or 'nonlinear'. Default value set to 'linear'.-->
 					<elastic_foundation_formulation>nonlinear</elastic_foundation_formulation>
 					<!--Combine the thickness and the average material properties between the Smith2018ContactMeshes for both meshes and use Bei & Fregly 2003 lumped parameter Elastic Foundation model.-->

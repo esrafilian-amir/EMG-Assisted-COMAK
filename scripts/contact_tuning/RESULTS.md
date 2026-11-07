@@ -1,24 +1,60 @@
 # Contact settings: how far can they be changed, and the Atlas sweep stall
 
 Measured with the scripts in this folder (RelWithDebInfo build, OpenSim 4.6 JAM, Python bindings).
+The ray cast is not the ground truth, so the criterion is 10% of the default result (ray cast, no smoothing); the 5% results are listed too.
+Metrics: trial peak and RMS error of the contact force and of the maximum pressure, and the center of pressure (distance to the default
+one in the frames above 10% of the peak force, as % of the contact patch diameter, and in mm).
 
 ## Recommended contact settings
 
-| model | setting | value | why |
-|---|---|---|---|
-| any model with variable thickness cartilage | `Smith2018ContactMesh.thickness_smoothing_iterations` | 10 (limit 12) | peak force within 1.6%, peak pressure within 3.9% of the unsmoothed result in the walking trial; IK sweep and COMAK converge (walking and meniscus models) |
-| any | `Smith2018ArticularContactForce.max_proximity` | larger than the deepest penetration expected, several times the layer thickness (cartilage 20 mm is fine; a bone backstop contact: 5 mm or more) | a triangle deeper than `max_proximity` gets no contact: the force drops to zero abruptly. This stalled the Atlas sweep (see below) |
-| any | `contact_method` | `ray_cast` (default) | `distance_field` differs by about 4% in peak force even with a fine grid, and moves the equilibrium of COMAK enough to leave the 5% (peak pressure 6.5%); it is also 8 to 11% off for the meniscus contacts |
-| optional (cartilage pairs only) | `contact_method` `distance_field`, `field_voxel_size` | 0.001 or smaller (limit: 1 mm) | smoother force (derivative disagreement 2.0% against 4.6% at the 95th percentile), 2 to 3 times faster IK sweep |
-| optional | `field_edge_taper_width` | 0.003 (limit 0.004) | |
+| setting | value | why |
+|---|---|---|
+| `Smith2018ContactMesh.thickness_smoothing_iterations` (variable thickness cartilage) | 10 (within 5% up to 12, within 10% up to 30) | removes the triangle to triangle jumps of the measured thickness; peak force within 1.6%, peak pressure within 3.9%, center of pressure within 1.0% of the patch |
+| `contact_method` of the cartilage pairs (`tf_contact`, `pf_contact`) | `distance_field`, `field_voxel_size` 0.001 (within 10% up to 2 mm), `field_edge_taper_width` 0.003 (within 10% up to 6 mm) | smoother force, no ray misses, IK sweep 3.7 times faster in the walking model (176 s instead of 651 s; the whole pipeline takes 6 min instead of 16 min), 1.4 to 1.5 times faster in the meniscus models; end to end within 10% (below) |
+| `contact_method` of the meniscus contacts | `ray_cast` (the distance field also works end to end within 10% in the nonlinear model, but a frame can have a center of pressure error of 12% of the patch and 8 to 11% force error at the same states) | |
+| `Smith2018ArticularContactForce.max_proximity` | larger than the deepest penetration expected, several times the layer thickness (cartilage 20 mm; a bone backstop contact 5 mm or more) | a triangle deeper than `max_proximity` gets no contact: the force drops to zero abruptly. This stalled the Atlas sweep (below) |
 
 ## Models saved with the recommended settings (next to the originals, other file name)
 
-- `models/healthy/lenhart2015/lenhart2015_contact_tuned.osim`: `thickness_smoothing_iterations` 10 on the three cartilage meshes
-  (nothing else changed; checked with the walking trial above).
-- `models/healthy/smith2019/smith2019_contact_tuned.osim` (menisci): same, on the three variable thickness cartilage meshes
-  (the meniscus meshes have a constant thickness). Checked with the meniscus walking trial.
+- `models/healthy/lenhart2015/lenhart2015_contact_tuned.osim`: smoothing 10 on the three cartilage meshes, `distance_field` (voxel 1 mm, taper 3 mm) in `tf_contact` and `pf_contact`.
+- `models/healthy/smith2019/smith2019_contact_tuned.osim` (menisci, linear contact as shipped): the same; the four meniscus contacts stay ray cast.
+- `models/healthy/smith2019/smith2019_contact_tuned_nonlinear.osim`: the same with `elastic_foundation_formulation` nonlinear in all six contacts.
 - `OpenSim_Model_Atlas/Unscaled_Model_contact_tuned.osim`: `max_proximity` of `pf_bone_contact` 0.005 instead of 0.0005 (the sweep runs, see below).
+
+## End to end: whole pipeline (IK sweep + COMAK) with the tuned settings against the default
+
+Each model is run with the default contact and with the tuned settings; the contact outputs of the tuned run are compared with
+the default run (peak / RMS error in %, center of pressure mean as % of the patch). All frames converged in every run.
+
+| model | default | tuned | force | max pressure | center of pressure |
+|---|---|---|---|---|---|
+| walking, lenhart2015 (nonlinear, 2 contacts) | IK 651 s, COMAK 306 s | IK 176 s, COMAK 187 s | 3.5 / 2.2 (`tf`), 2.1 / 1.0 (`pf`) | 6.5 / 3.8, 5.3 / 2.8 | 0.9%, 1.0% (0.23 mm, 0.14 mm) |
+| walking with menisci, smith2019 (linear, 6 contacts) | IK 1325 s, COMAK 467 s | IK 881 s, COMAK 323 s | at most 4.3 / 3.0 (all six) | at most 3.0 / 2.6 | |
+| walking with menisci, nonlinear, distance field on all six, smoothing 10 | IK 1164 s, COMAK 372 s | IK 589 s, COMAK 294 s | at most 6.3 / 3.4 | at most 6.5 / 3.6 | mean at most 3.7% (0.52 mm), worst frame 12.2% |
+| walking with menisci, nonlinear, distance field on the cartilage pairs only, smoothing 10 | IK 1164 s, COMAK 372 s | IK 863 s, COMAK 329 s | 2.5 / 1.6 (`tf`), 1.3 / 0.6 (`pf`), menisci at most 4.7 | at most 5.6 | mean at most 2.9% |
+| walking with menisci, nonlinear, ray cast with smoothing 10 | IK 1164 s, COMAK 372 s | IK 1144 s, COMAK 374 s | at most 0.6 / 0.5 | at most 2.6 | at most 0.5% |
+
+## Nonlinear contact with menisci (smith2019 with `elastic_foundation_formulation` nonlinear in all six contacts)
+
+Same states (default run of the nonlinear model), peak / RMS errors in %:
+
+| setting | tf force | pf force | meniscus forces (max) | max pressure (max over contacts) | center of pressure mean (max over contacts) | within 5% / 10% |
+|---|---|---|---|---|---|---|
+| smoothing 10 | 0.3 / 0.4 | 2.0 / 0.8 | 0.6 | 3.3 | 0.2% | yes / yes |
+| smoothing 20 | 0.7 / 0.7 | 3.7 / 1.4 | 1.0 | 6.3 | 0.4% | no / yes |
+| smoothing 30 | 1.0 / 1.1 | 5.2 / 2.0 | 1.4 | 8.8 | 0.6% | no / yes |
+| distance field, cartilage pairs only | 4.1 / 2.2 | 4.9 / 2.0 | 0 (ray cast) | 2.0 | 0.6% | yes / yes |
+| distance field, cartilage pairs only + smoothing 10 | 3.8 / 1.9 | 3.1 / 1.3 | 0.6 | 2.2 | 0.8% | yes / yes |
+| distance field, all six contacts | 4.1 / 2.2 | 4.9 / 2.0 | 4.0 to 10.8 | 2.0 | 10.9% (tibia, medial meniscus), 1.6 mm | no / no |
+
+The distance field of the meniscus contacts has a cache per contact force object: two contacts with the same target mesh and a different
+`max_proximity` (`tf_contact` 0.02 and the femur-meniscus contacts 0.01 share the femur cartilage) used to rebuild the field at every call.
+
+## Center of pressure (walking trial, lenhart2015, same states)
+
+The center of pressure of the workable settings stays within 1.1% of the contact patch diameter on average (at most 0.3 mm):
+smoothing up to 30: 0.1 to 0.8% (0.05 to 0.10 mm); distance field voxel 1 mm: 0.2% (`tf`), 0.6% (`pf`); voxel 2 mm: 2.4% (`pf`, 0.31 mm);
+voxel 3 mm: 4.7% (0.60 mm); taper 10 mm: 1.0% (`tf`); taper 20 mm: 5.3% (1.4 mm).
 
 ## Walking trial (exampleWalking, lenhart2015, 1.28 to 1.91 s, 63 frames)
 
@@ -65,7 +101,7 @@ End to end (IK sweep + COMAK with the setting, peak force / peak pressure error,
 
 The unchanged model converges all 63 frames (IK sweep 22 min, COMAK 7.8 min). With smoothing 10 it also does (22 min, 7.5 min).
 Replay on the same states, smoothing 10: all six contacts within 3% (peak force and pressure), end to end within 1.4%.
-The distance field is not suitable for the meniscus contacts: 8.6 to 10.9% peak force error.
+With the distance field in the four meniscus contacts too (replay on the same states, linear model) the peak force is off by 3.8 to 10.9%; end to end (nonlinear model, above) it stays within 10%. The meniscus contacts are therefore left on the ray cast in the saved models.
 
 ## Atlas knee sweep stall
 

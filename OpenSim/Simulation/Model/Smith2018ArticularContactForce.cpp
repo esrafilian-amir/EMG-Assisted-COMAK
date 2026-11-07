@@ -95,16 +95,20 @@ void Smith2018ArticularContactForce::constructProperties()
 // 'distance_field'), built on first use.
 struct Smith2018ArticularContactForce::DistanceFieldCache {
     std::mutex mutex;
-    std::map<const Smith2018ContactMesh*,
-        std::shared_ptr<Smith2018DistanceField>> fields;
-    std::map<const Smith2018ContactMesh*, double> signatures;
+    // keyed by the contact force object and the mesh: the cache is shared by
+    // the copies of a force (as read from XML), and two forces can have the
+    // same target mesh with different max_proximity
+    typedef std::pair<const void*, const Smith2018ContactMesh*> Key;
+    std::map<Key, std::shared_ptr<Smith2018DistanceField>> fields;
+    std::map<Key, double> signatures;
 };
 
 const Smith2018DistanceField& Smith2018ArticularContactForce::getDistanceField(
     const Smith2018ContactMesh& mesh) const
 {
     std::lock_guard<std::mutex> lock(_distance_field_cache->mutex);
-    auto& slot = _distance_field_cache->fields[&mesh];
+    const DistanceFieldCache::Key key(this, &mesh);
+    auto& slot = _distance_field_cache->fields[key];
     // rebuild if the mesh or the settings changed (the mesh object can be
     // the same after a new mesh_file was set)
     const SimTK::Vector_<SimTK::Vec3>& verts = mesh.getVertexLocations();
@@ -115,11 +119,11 @@ const Smith2018DistanceField& Smith2018ArticularContactForce::getDistanceField(
         const SimTK::Vec3& v = verts[(int)((long long)(verts.size() - 1) * k / 7)];
         signature += (k + 1) * (v[0] * 1.3 + v[1] * 2.7 + v[2] * 5.1);
     }
-    auto sig_it = _distance_field_cache->signatures.find(&mesh);
+    auto sig_it = _distance_field_cache->signatures.find(key);
     if (sig_it == _distance_field_cache->signatures.end() ||
         sig_it->second != signature) {
         slot.reset();
-        _distance_field_cache->signatures[&mesh] = signature;
+        _distance_field_cache->signatures[key] = signature;
     }
     if (!slot) {
         slot = std::make_shared<Smith2018DistanceField>(
