@@ -176,3 +176,8 @@ discontinuities above are.
 - `runvar.sh variants.txt <model> <states> <outdir> [n]`: many variants in parallel.
 - `fdtest.py`, `rough.py`: finite difference smoothness of the contact force along a motion.
 - `lineprobe.py`: all force elements along the line between two states (for `sweep_integrator_failure_states.sto`).
+
+The example `exampleContactModels` (python: `Bindings/Python/examples/JAM/exampleContactModels`, MATLAB:
+`Bindings/Java/Matlab/examples/JAM/exampleContactModels`) runs the original and the tuned models (COMAK, joint mechanics with the
+contact vtp files), analyzes the contact outputs of every frame and writes the pdf report; it uses the same replay and comparison as
+the scripts above.
