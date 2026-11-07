@@ -56,6 +56,51 @@ The center of pressure of the workable settings stays within 1.1% of the contact
 smoothing up to 30: 0.1 to 0.8% (0.05 to 0.10 mm); distance field voxel 1 mm: 0.2% (`tf`), 0.6% (`pf`); voxel 2 mm: 2.4% (`pf`, 0.31 mm);
 voxel 3 mm: 4.7% (0.60 mm); taper 10 mm: 1.0% (`tf`); taper 20 mm: 5.3% (1.4 mm).
 
+## Thickness smoothing: what it does
+
+`Smith2018ContactMesh.thickness_smoothing_iterations` smooths the variable thickness (measured with a ray from each triangle to the
+back mesh) once, when the mesh is loaded. It is graph-Laplacian smoothing of a scalar on the triangle adjacency graph:
+
+- one iteration replaces the thickness of triangle *i* by the plain average of itself and its edge-adjacent triangles
+  (h_i <- (h_i + sum of h_j) / (1 + n_i); an interior triangle has n_i = 3 neighbors, so it moves 3/4 of the way to the neighbor mean);
+- a Jacobi iteration with uniform weights (not area or cotangent weighted); the blur radius grows about with the square root of the
+  number of iterations, measured in triangles;
+- the geometry of the mesh does not change;
+- every new value is an average, so the thickness never leaves the range of the measured values (min_thickness to max_thickness);
+  the mean thickness is almost preserved (1.964 mm before, 1.968 mm after 100 iterations);
+- there is no feature preservation: thin and thick spots are blended with their surroundings.
+
+Effect on the femur cartilage thickness (lenhart2015, 29,782 triangles):
+
+| Iterations | Std (mm) | Max (mm) | Mean change per triangle (mm) | Share at the 1 mm minimum |
+|---|---|---|---|---|
+| 0 | 0.765 | 5.02 | 0 | 23% |
+| 1 | 0.762 | 4.98 | 0.011 | 20% |
+| 5 | 0.751 | 4.83 | 0.026 | 11% |
+| 10 | 0.738 | 4.68 | 0.041 | 7% |
+| 30 | 0.698 | 4.33 | 0.087 | 1% |
+| 100 | 0.598 | 3.75 | 0.186 | 0% |
+
+Smoothing mostly removes the clamping at 1 mm, which is where the measured thickness was zero or the ray missed. It also trims the thick
+tail.
+
+Effect on contact, signed change in the trial peak (walking states, ray cast, versus no smoothing):
+
+| Iterations | tf force | tf max pressure | pf force | pf max pressure |
+|---|---|---|---|---|
+| 1 | +0.08% | -0.02% | +0.16% | +0.52% |
+| 5 | +0.48% | +0.96% | +0.81% | +2.36% |
+| 10 | +0.97% | +1.93% | +1.59% | +3.93% |
+| 20 | +1.89% | +3.60% | +3.13% | +6.62% |
+| 30 | +2.74% | +5.18% | +4.62% | +8.96% |
+| 50 | +4.36% | +8.31% | +7.43% | +13.22% |
+| 100 | +7.99% | +15.46% | +13.64% | +21.75% |
+
+Per iteration: about +0.1% of the peak force and +0.2% of the peak pressure for `tf`, +0.15% and +0.5% for `pf`; the effect grows about
+linearly with the number of iterations and flattens slightly at high counts. Smoothing raises the pressure; the reason was not
+isolated (a guess: the thinnest layers, which reach the strain cap, disappear). The end to end result with 10 iterations (IK sweep +
+COMAK) stays within 3.4% (see the end to end table above).
+
 ## Walking trial (exampleWalking, lenhart2015, 1.28 to 1.91 s, 63 frames)
 
 Reference: default settings (ray cast, no smoothing), states of the COMAK run. Peaks: `tf_contact` 3091 N and 11.05 MPa,
