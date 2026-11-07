@@ -48,7 +48,7 @@ namespace {
 
 // Draws the ground reaction forces of the external loads in the visualizer: a
 // line from the center of pressure, meters_per_bw long per body weight (total
-// mass times gravity), as a green arrow starting at the center of pressure.
+// mass times gravity), as a purple arrow starting at the center of pressure.
 class GroundReactionDecorator : public SimTK::DecorationGenerator {
 public:
     GroundReactionDecorator(const Model& model, double meters_per_bw)
@@ -81,12 +81,30 @@ public:
             }
             if (f.norm() < 1e-6 * bw) { ++k; continue; }
             const SimTK::Vec3 tip = p + f * (_meters_per_bw / bw);
-            const SimTK::Vec3 color(0.1, 0.75, 0.2); // green
+            const SimTK::Vec3 color(0.6, 0.15, 0.8); // purple
             const double length = (tip - p).norm();
-            SimTK::DecorativeArrow arrow(p, tip, std::min(0.08, 0.3 * length));
-            arrow.setColor(color);
-            arrow.setLineThickness(4);
-            geometry.push_back(arrow);
+            // shaft (line) and arrow head (cone) at the tip
+            const double head = std::min(0.08, 0.3 * length);
+            const SimTK::UnitVec3 dir((tip - p) / length);
+            SimTK::DecorativeLine shaft(p, tip - dir * head);
+            shaft.setColor(color);
+            shaft.setLineThickness(5);
+            geometry.push_back(shaft);
+            // the head: lines from the tip to a circle around the shaft
+            const SimTK::Vec3 helper = std::abs(dir[0]) < 0.9
+                    ? SimTK::Vec3(1, 0, 0) : SimTK::Vec3(0, 1, 0);
+            const SimTK::Vec3 u = SimTK::UnitVec3(SimTK::cross(dir, helper));
+            const SimTK::Vec3 w = SimTK::cross(dir, u);
+            const SimTK::Vec3 base = tip - dir * head;
+            for (int b = 0; b < 8; ++b) {
+                const double a = b * SimTK::Pi / 4.0;
+                const SimTK::Vec3 rim = base +
+                        (0.35 * head) * (std::cos(a) * u + std::sin(a) * w);
+                SimTK::DecorativeLine barb(tip, rim);
+                barb.setColor(color);
+                barb.setLineThickness(5);
+                geometry.push_back(barb);
+            }
             ++k;
         }
     }
@@ -94,6 +112,35 @@ public:
 private:
     const Model& _model;
     double _meters_per_bw;
+};
+
+// Solver information as screen text in the visualizer: one line per row, the
+// label and the value in aligned columns.
+struct SolverInfo {
+    std::vector<std::pair<std::string, std::string>> rows;
+};
+
+class SolverInfoDecorator : public SimTK::DecorationGenerator {
+public:
+    SolverInfoDecorator(std::shared_ptr<SolverInfo> info, double scale)
+        : _info(info), _scale(scale) {}
+
+    void generateDecorations(const SimTK::State&,
+            SimTK::Array_<SimTK::DecorativeGeometry>& geometry) override {
+        for (const auto& row : _info->rows) {
+            std::string label = row.first;
+            if (label.size() < 12) { label.append(12 - label.size(), ' '); }
+            SimTK::DecorativeText text(label + row.second);
+            text.setIsScreenText(true);
+            text.setScaleFactors(SimTK::Vec3(_scale));
+            text.setColor(SimTK::Vec3(0.15, 0.15, 0.15));
+            geometry.push_back(text);
+        }
+    }
+
+private:
+    std::shared_ptr<SolverInfo> _info;
+    double _scale;
 };
 
 VisualizerCloser* visualizerCloserOf(const std::shared_ptr<void>& slot) {
@@ -181,6 +228,7 @@ void COMAKTool::constructProperties() {
     constructProperty_step_penalty_rotation_length(0.05);
     constructProperty_secondary_velocity_carryover_to_next_step(0.0);
     constructProperty_max_cutback_levels(4);
+    constructProperty_cutback_start_residual(0.0);
     constructProperty_cutback_factor(2.0);
     constructProperty_cutback_easy_steps_to_grow(2);
     constructProperty_cutback_easy_iterations(3);
@@ -191,7 +239,9 @@ void COMAKTool::constructProperties() {
 
     constructProperty_solver("casadi_ipopt");
     constructProperty_relax_acceleration_constraints(true);
-    constructProperty_qp_slack_penalty(1e4);
+    constructProperty_qp_slack_penalty(100);
+    constructProperty_qp_slack_penalty_min(0.0);
+    constructProperty_qp_slack_penalty_reduction_factor(10.0);
     constructProperty_ipopt_diagnostics_level(0);
     constructProperty_ipopt_max_iterations(500);
     constructProperty_ipopt_convergence_tolerance(1e-4);
@@ -218,6 +268,7 @@ void COMAKTool::constructProperties() {
     constructProperty_auto_close_visualizer(false);
     constructProperty_show_grf_in_visualizer(true);
     constructProperty_visualizer_grf_scale(0.8);
+    constructProperty_show_solver_info_in_visualizer(true);
 
     constructProperty_AnalysisSet(AnalysisSet());
     // Amir
@@ -1144,6 +1195,7 @@ void COMAKTool::performCOMAK() {
 
     // Visualizer Settings
     SimTK::Visualizer* viz = NULL;
+    std::shared_ptr<SolverInfo> solver_info = std::make_shared<SolverInfo>();
     if (get_use_visualizer()) {
         viz = &_model.updVisualizer().updSimbodyVisualizer();
         viz->setBackgroundColor(SimTK::White);
@@ -1153,6 +1205,10 @@ void COMAKTool::performCOMAK() {
             // (owned by the visualizer; it reads the external loads of _model)
             viz->addDecorationGenerator(new GroundReactionDecorator(
                     _model, get_visualizer_grf_scale()));
+        }
+        if (get_show_solver_info_in_visualizer()) {
+            viz->addDecorationGenerator(
+                    new SolverInfoDecorator(solver_info, 2.0 / 3.0));
         }
     }
 
@@ -1194,6 +1250,10 @@ void COMAKTool::performCOMAK() {
 
     _consecutive_bad_frame = 0;
     int frame_num = 0;
+    const double dt_frame_for_title = _dt;
+    int cutback_level_now = 0; // 0: the full time step
+    bool contact_info_failed = false; // the contact force rows of the visualizer
+    double slack_penalty_now = get_qp_slack_penalty(); // reduced when a time step does not converge
     // columns of the linearization, kept for jacobian_recompute_interval > 1
     SimTK::Matrix jac_msl, jac_non_muscle, jac_coord, jac_speed;
     SimTK::Vector jac_energy;
@@ -1222,6 +1282,7 @@ void COMAKTool::performCOMAK() {
         int step_converged = 0;
         int step_iters = 0;
         double step_error = 0.0;
+        double step_first_residual = 0.0; // of the first iteration
 
         // One COMAK solution at time cur_t from the state of the last
         // converged step. With final_attempt false it returns false, leaving
@@ -1401,7 +1462,7 @@ void COMAKTool::performCOMAK() {
             }
             target.setReferenceValues(secondary_reference);
             target.setRelaxConstraints(get_relax_acceleration_constraints(),
-                    get_qp_slack_penalty());
+                    slack_penalty_now);
             if (frames_done > 0) {
                 SimTK::Vector previous_activations(_n_muscles);
                 for (int m = 0; m < _n_muscles; ++m) {
@@ -1557,7 +1618,7 @@ void COMAKTool::performCOMAK() {
                 const bool qp_ok = solveCasadiQP(
                         solver_name.substr(strlen("casadi_")), hdiag, g, A,
                         rhs, lower, upper, _optim_parameters,
-                        get_qp_slack_penalty(), x_qp, max_slack, qp_status);
+                        slack_penalty_now, x_qp, max_slack, qp_status);
                 if (qp_ok) {
                     // report solutions outside the bounds
                     double max_violation = 0.0;
@@ -1866,6 +1927,95 @@ void COMAKTool::performCOMAK() {
                     max_udot_error, max_udot_coord);
             iter_max_udot_error(iter) = max_udot_error;
             iter_max_udot_coord[iter] = max_udot_coord;
+            if (iter == 0) { step_first_residual = max_udot_error; }
+
+            // Solver information in the scene of the visualizer
+            if (viz && get_use_visualizer() && get_show_solver_info_in_visualizer()) {
+                // The same information as aligned columns in the scene
+                char v[96];
+                solver_info->rows.clear();
+                solver_info->rows.emplace_back("Frame",
+                        std::to_string(frame_num) + " / " +
+                                std::to_string(_n_out_frames));
+                std::snprintf(v, sizeof(v), "%.4f s%s", _dt,
+                        cutback_level_now > 0 ? ("  (cutback " + std::to_string(cutback_level_now) + "/" + std::to_string(get_max_cutback_levels()) + ")").c_str() : "");
+                solver_info->rows.emplace_back("Time step", v);
+                solver_info->rows.emplace_back("Iteration",
+                        std::to_string(n_iter) + " / " +
+                                std::to_string(get_max_iterations()));
+                std::snprintf(v, sizeof(v), "%.2f x tol", max_udot_error);
+                solver_info->rows.emplace_back("Residual", v);
+                solver_info->rows.emplace_back("Coordinate", max_udot_coord);
+                solver_info->rows.emplace_back("Status",
+                        max_udot_error < get_udot_tolerance() ? "converged"
+                                                              : "iterating");
+                // Contact forces (N): medial and lateral tibial plateau (sum
+                // of the non-overlapping tibia regions) and patellofemoral
+                SimTK::Vec3 medial(0), lateral(0);
+                double patella = 0.0;
+                bool have_tibia = false, have_patella = false;
+                auto lower = [](std::string s) {
+                    for (auto& ch : s) { ch = (char)std::tolower(ch); }
+                    return s;
+                };
+                if (!contact_info_failed) try {
+                for (const auto& cf : _model.getComponentList<
+                                 Smith2018ArticularContactForce>()) {
+                    const auto& cast = cf.getSocket<Smith2018ContactMesh>(
+                            "casting_mesh").getConnectee();
+                    const auto& targ = cf.getSocket<Smith2018ContactMesh>(
+                            "target_mesh").getConnectee();
+                    const std::string cn = lower(cast.getName());
+                    const std::string tn = lower(targ.getName());
+                    if (cn.find("patella") != std::string::npos ||
+                            tn.find("patella") != std::string::npos) {
+                        patella += cf.getOutputValue<SimTK::Vec3>(
+                                state, "casting_total_contact_force").norm();
+                        have_patella = true;
+                        continue;
+                    }
+                    const bool tibia_cast = cn.find("tibia") != std::string::npos;
+                    const bool tibia_target = tn.find("tibia") != std::string::npos;
+                    // (the target regional force cache is not available during COMAK)
+                    if (!tibia_cast || tibia_target) { continue; }
+                    const SimTK::Vector_<SimTK::Vec3> regional = tibia_cast
+                            ? cf.getOutputValue<SimTK::Vector_<SimTK::Vec3>>(
+                                      state, "casting_regional_contact_force")
+                            : cf.getOutputValue<SimTK::Vector_<SimTK::Vec3>>(
+                                      state, "target_regional_contact_force");
+                    const std::vector<std::string>& names =
+                            (tibia_cast ? cast : targ).getRegionalNames();
+                    const int n = std::min((int)names.size(), 12);
+                    for (int r = 0; r < n && r < regional.size(); ++r) {
+                        if (names[r].rfind("medial", 0) == 0) {
+                            medial += regional[r];
+                        } else if (names[r].rfind("lateral", 0) == 0) {
+                            lateral += regional[r];
+                        }
+                    }
+                    have_tibia = true;
+                }
+                } catch (const std::exception& ex) {
+                    have_tibia = have_patella = false;
+                    contact_info_failed = true;
+                    log_warn("Contact forces not shown in the visualizer: {}",
+                            ex.what());
+                } catch (...) {
+                    have_tibia = have_patella = false;
+                    contact_info_failed = true;
+                }
+                if (have_tibia) {
+                    std::snprintf(v, sizeof(v), "%.0f N", medial.norm());
+                    solver_info->rows.emplace_back("Medial tibia contact force", v);
+                    std::snprintf(v, sizeof(v), "%.0f N", lateral.norm());
+                    solver_info->rows.emplace_back("Lateral tibia contact force", v);
+                }
+                if (have_patella) {
+                    std::snprintf(v, sizeof(v), "%.0f N", patella);
+                    solver_info->rows.emplace_back("Patella contact force", v);
+                }
+                viz->drawFrameNow(state);
+            }
 
             // Check for convergence
             if (max_udot_error < get_udot_tolerance()) {
@@ -2018,9 +2168,44 @@ void COMAKTool::performCOMAK() {
         const int max_levels = std::max(0, get_max_cutback_levels());
         const bool can_cut = max_levels > 0 && frames_done > 0 && i > 0;
         const double dt_full = _dt;
+        // The first time step starts from the settled pose, which can be far
+        // from the equilibrium of the trial's first frame: no trust region
+        const SimTK::Vector saved_max_change = _secondary_coord_max_change;
+        if (frames_done == 0) { _secondary_coord_max_change = 0; }
         Snapshot frame_start_snapshot = take_snapshot();
+        // Adaptive slack penalty: start large, reduce it when the step does
+        // not converge, down to qp_slack_penalty_min
+        const double penalty_start = get_qp_slack_penalty();
+        const double penalty_min = get_qp_slack_penalty_min();
+        const double penalty_factor =
+                std::max(1.01, get_qp_slack_penalty_reduction_factor());
+        const bool can_reduce = penalty_min > 0 && penalty_min < penalty_start;
+        slack_penalty_now = penalty_start;
         bool solved = solve_step(_time[i], frame_q, frame_u, frame_udot,
-                !can_cut);
+                !(can_cut || can_reduce));
+        while (!solved && can_reduce &&
+                slack_penalty_now > penalty_min * 1.0001) {
+            slack_penalty_now = std::max(penalty_min,
+                    slack_penalty_now / penalty_factor);
+            log_info("No convergence: the slack penalty is reduced to {}.",
+                    slack_penalty_now);
+            restore_snapshot(frame_start_snapshot);
+            const bool last = slack_penalty_now <= penalty_min * 1.0001 &&
+                    !can_cut;
+            solved = solve_step(_time[i], frame_q, frame_u, frame_udot, last);
+        }
+
+        // preemptive cutback: converged, but from a poor start
+        bool preemptive = false;
+        if (solved && can_cut && get_cutback_start_residual() > 0 &&
+                get_convergence_criterion() == "force" &&
+                step_first_residual > get_cutback_start_residual()) {
+            preemptive = true;
+            solved = false;
+            log_info("The residual at the start of this time step is {} times "
+                     "its tolerance (limit {}): cutback.", step_first_residual,
+                    get_cutback_start_residual());
+        }
 
         if (!solved && can_cut) {
             // Cutback: from the last converged step to this time in smaller
@@ -2060,6 +2245,7 @@ void COMAKTool::performCOMAK() {
                 n_sub++;
                 log_info("Cutback sub-step to time {} (step {}, level {})",
                         t_next, _dt, level);
+                cutback_level_now = level;
                 if (solve_step(t_next, sub_q, sub_u, sub_udot, false)) {
                     t = t_next;
                     good = take_snapshot();
@@ -2082,6 +2268,7 @@ void COMAKTool::performCOMAK() {
                 }
             }
             _dt = dt_full;
+            cutback_level_now = 0;
             if (gave_up) {
                 log_warn("Time {}: the cutback did not converge at the "
                          "smallest step (level {}). Solving the full step "
@@ -2098,6 +2285,7 @@ void COMAKTool::performCOMAK() {
             }
         }
         _dt = dt_full;
+        _secondary_coord_max_change = saved_max_change;
 
         SimTK::RowVector convergence_metrics(3);
         convergence_metrics(0) = step_converged;
@@ -2134,7 +2322,7 @@ void COMAKTool::performCOMAK() {
 
     // auto_close_visualizer: the window of COMAK closes after the delay
     if (_visualizer_closer && get_use_visualizer()) {
-        visualizerCloserOf(_visualizer_closer)->closeLater(_model);
+        visualizerCloserOf(_visualizer_closer)->closeLater(_model, "Running COMAK for: " + get_coordinates_file());
     }
 
     // Print Convergence Summary
@@ -2393,7 +2581,7 @@ SimTK::Vector COMAKTool::equilibriateSecondaryCoordinates() {
         SimTK::Visualizer& viz =
                 settle_model.updVisualizer().updSimbodyVisualizer();
         viz.setBackgroundColor(SimTK::White);
-        viz.setWindowTitle("Settling for COMAK for: " + get_coordinates_file());
+        viz.setWindowTitle("COMAK settling for: " + get_coordinates_file());
         viz.setShowSimTime(true);
     }
 
@@ -2548,7 +2736,7 @@ SimTK::Vector COMAKTool::equilibriateSecondaryCoordinates() {
     // auto_close_visualizer: the window of the settling simulation closes
     // after the delay (while COMAK runs)
     if (_visualizer_closer && get_use_visualizer()) {
-        visualizerCloserOf(_visualizer_closer)->closeLater(settle_model);
+        visualizerCloserOf(_visualizer_closer)->closeLater(settle_model, "COMAK settling for: " + get_coordinates_file());
     }
     return secondary_q;
 }

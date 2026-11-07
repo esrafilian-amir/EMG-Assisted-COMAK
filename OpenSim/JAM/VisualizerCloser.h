@@ -12,6 +12,8 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <string>
 #include <set>
 #include <thread>
 #include <vector>
@@ -90,7 +92,7 @@ public:
 
     // The simulation that used the model's current window is done: close it
     // after the delay.
-    void closeLater(Model& model) {
+    void closeLater(Model& model, const std::string& title = "") {
         if (!_enabled || !model.hasVisualizer()) {
             log_debug("auto_close_visualizer: nothing to close (enabled {}, "
                     "model has a visualizer {}).", _enabled,
@@ -104,7 +106,8 @@ public:
             if (_known_processes.insert(id).second) { process_id = id; }
         }
         _pending.push_back({model.updVisualizer().updSimbodyVisualizer(),
-                Clock::now() + _delay, process_id});
+                Clock::now() + _delay, process_id, title, -1});
+        updateCountdown(_pending.back(), Clock::now());
         log_info("auto_close_visualizer: this window closes in {} s.",
                 std::chrono::duration<double>(_delay).count());
     }
@@ -118,6 +121,7 @@ public:
                 close(*it);
                 it = _pending.erase(it);
             } else {
+                updateCountdown(*it, now);
                 ++it;
             }
         }
@@ -125,8 +129,10 @@ public:
 
     // Wait until the delay of every waiting window has passed, then close it.
     void waitAndCloseAll() {
-        for (const Pending& p : _pending) { std::this_thread::sleep_until(p.due); }
-        closeAll();
+        while (!_pending.empty()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+            closeDue();
+        }
     }
 
 private:
@@ -134,7 +140,20 @@ private:
         SimTK::Visualizer viz;
         Clock::time_point due;
         unsigned long process_id;
+        std::string title;   // window title, with the countdown appended
+        int shown_seconds;   // seconds last shown in the title
     };
+
+    // Countdown in the title bar of the waiting window (once per second)
+    void updateCountdown(Pending& p, Clock::time_point now) {
+        if (p.title.empty()) { return; }
+        const int left = (int)std::ceil(
+                std::chrono::duration<double>(p.due - now).count());
+        if (left == p.shown_seconds) { return; }
+        p.shown_seconds = left;
+        p.viz.setWindowTitle(p.title + "  |  closing in " +
+                std::to_string(left) + " s");
+    }
 
     // Visualizer::shutdown() did not close the window with the visualizer
     // that is installed here, so the process of the window is ended as well

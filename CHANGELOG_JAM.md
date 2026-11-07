@@ -16,7 +16,7 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
 - `COMAKTool.activation_change_penalty_weight` is 0.1 (penalty on the activation change from the
   previous time step, relative to the activation cost).
 - `COMAKTool.relax_acceleration_constraints` is `true`: the acceleration constraints get a penalized
-  slack variable (`qp_slack_penalty`), so the optimization always has a solution.
+  slack variable (`qp_slack_penalty`, default 100), so the optimization always has a solution.
 - `secondary_velocity_carryover_to_next_step` is 0.
 - `Smith2018ArticularContactForce.max_strain` (new, 0.8): see Fixes. The contact energy of the nonlinear
   variable property model was about 230 times too small, so `contact_energy_weight` 1 of the EMG examples

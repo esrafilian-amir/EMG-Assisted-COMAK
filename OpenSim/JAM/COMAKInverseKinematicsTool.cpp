@@ -639,7 +639,7 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
     }
 
     // The settling window is done (the sweep opens its own window)
-    visualizer_closer.closeLater(model);
+    visualizer_closer.closeLater(model, "Settling: " + get_model_file());
 
     SimTK::Vector settled_secondary_values(_secondary_coord_path.getSize());
     SimTK::Vector settled_secondary_speeds(_secondary_coord_path.getSize());
@@ -843,7 +843,7 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
             if (get_verbose() > 0) printDebugInfo(model, state);
         }
         // this sweep is done
-        visualizer_closer.closeLater(model);
+        visualizer_closer.closeLater(model, "Sweeping: " + get_model_file());
         return q_table;
     };
 

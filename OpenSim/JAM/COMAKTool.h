@@ -321,6 +321,9 @@ public:
         "changed them by less than 0.03. The default value is 0.1. Use 0 for "
         "no penalty.")
 
+    OpenSim_DECLARE_PROPERTY(show_solver_info_in_visualizer, bool,
+        "Show the frame, time, time step, iteration and force residual in the "
+        "title bar of the visualizer window. The default value is true.")
     OpenSim_DECLARE_PROPERTY(max_cutback_levels, int,
         "Automatic time step cutback, as in Abaqus. When a time step does not "
         "converge, it is solved again from the previous converged time step "
@@ -331,6 +334,13 @@ public:
         "smoothing spline and the ground reactions with their time "
         "functions. The results stay on the original time steps. Use 0 for "
         "no cutback. The default value is 4.")
+    OpenSim_DECLARE_PROPERTY(cutback_start_residual, double,
+        "Cutback before a failure: when the force residual of the first "
+        "iteration of a time step (the start from the previous step) is "
+        "larger than this many times its tolerance, the step is solved again "
+        "in smaller sub-steps, even though it converged. A residual that "
+        "grows from step to step is the sign of a coming divergence. Use 0 "
+        "for no preemptive cutback (the default value).")
     OpenSim_DECLARE_PROPERTY(cutback_factor, double,
         "Factor that divides the time step in a cutback and multiplies it "
         "when the step grows back. The default value is 2.")
@@ -430,7 +440,18 @@ public:
         "is relaxed, see relax_acceleration_constraints: in (rad/s^2 or "
         "m/s^2)^2 for ipopt, and for rows scaled to a largest entry of 1 for "
         "casadi_qrqp. A larger weight keeps the constraints tighter. The "
-        "default value is 1e4.")
+        "default value is 100.")
+
+    OpenSim_DECLARE_PROPERTY(qp_slack_penalty_min, double,
+        "Adaptive qp_slack_penalty: every time step starts with "
+        "qp_slack_penalty (large, tight constraints). When the step does not "
+        "converge, it is solved again with the penalty divided by "
+        "qp_slack_penalty_reduction_factor, down to this value. A value of 0 "
+        "or at least qp_slack_penalty keeps the penalty constant (the "
+        "default value is 0).")
+    OpenSim_DECLARE_PROPERTY(qp_slack_penalty_reduction_factor, double,
+        "Factor that divides qp_slack_penalty in a step that did not "
+        "converge. The default value is 10.")
 
     OpenSim_DECLARE_PROPERTY(ipopt_diagnostics_level, int,
         "Set the verbosity of the IPOPT optimizer must be within 0-12. "
