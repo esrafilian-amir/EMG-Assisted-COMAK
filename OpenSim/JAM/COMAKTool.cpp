@@ -22,7 +22,9 @@
 #include <cstring>
 #include <memory>
 #include "JAMUtilities.h"
+#include "VisualizerCloser.h"
 #include <OpenSim/Analyses/ForceReporter.h>
+#include <OpenSim/Simulation/Model/ExternalForce.h>
 #include <cmath>
 #include "OpenSim/Actuators/CoordinateActuator.h"
 #include "OpenSim/Common/Constant.h"
@@ -41,6 +43,64 @@ using namespace OpenSim;
 
 namespace { bool isDefaultDesiredActivation(const COMAKCostFunctionParameter& p); }
 using namespace SimTK;
+
+namespace {
+
+// Draws the ground reaction forces of the external loads in the visualizer: a
+// line from the center of pressure, meters_per_bw long per body weight (total
+// mass times gravity), as a green arrow starting at the center of pressure.
+class GroundReactionDecorator : public SimTK::DecorationGenerator {
+public:
+    GroundReactionDecorator(const Model& model, double meters_per_bw)
+        : _model(model), _meters_per_bw(meters_per_bw) {}
+
+    void generateDecorations(const SimTK::State& state,
+            SimTK::Array_<SimTK::DecorativeGeometry>& geometry) override {
+        const double bw = _model.getTotalMass(state) *
+                          _model.getGravity().norm();
+        if (!(bw > 0.0)) { return; }
+        const double t = state.getTime();
+        const Ground& ground = _model.getGround();
+        int k = 0;
+        for (const ExternalForce& ef : _model.getComponentList<ExternalForce>()) {
+            SimTK::Vec3 f, p;
+            try {
+                f = ef.getForceAtTime(t);
+                p = ef.getPointAtTime(t);
+            } catch (...) { continue; }
+            // express the force and the point in ground
+            if (ef.getForceExpressedInBodyName() != "ground") {
+                const PhysicalFrame& fb = _model.getComponent<PhysicalFrame>(
+                        ef.getForceExpressedInBodyName());
+                f = fb.expressVectorInAnotherFrame(state, f, ground);
+            }
+            if (ef.getPointExpressedInBodyName() != "ground") {
+                const PhysicalFrame& pb = _model.getComponent<PhysicalFrame>(
+                        ef.getPointExpressedInBodyName());
+                p = pb.findStationLocationInAnotherFrame(state, p, ground);
+            }
+            if (f.norm() < 1e-6 * bw) { ++k; continue; }
+            const SimTK::Vec3 tip = p + f * (_meters_per_bw / bw);
+            const SimTK::Vec3 color(0.1, 0.75, 0.2); // green
+            const double length = (tip - p).norm();
+            SimTK::DecorativeArrow arrow(p, tip, std::min(0.08, 0.3 * length));
+            arrow.setColor(color);
+            arrow.setLineThickness(4);
+            geometry.push_back(arrow);
+            ++k;
+        }
+    }
+
+private:
+    const Model& _model;
+    double _meters_per_bw;
+};
+
+VisualizerCloser* visualizerCloserOf(const std::shared_ptr<void>& slot) {
+    return static_cast<VisualizerCloser*>(slot.get());
+}
+
+} // namespace
 
 COMAKTool::COMAKTool() {
     constructProperties();
@@ -120,6 +180,10 @@ void COMAKTool::constructProperties() {
     constructProperty_secondary_step_penalty_weight(0.0);
     constructProperty_step_penalty_rotation_length(0.05);
     constructProperty_secondary_velocity_carryover_to_next_step(0.0);
+    constructProperty_max_cutback_levels(4);
+    constructProperty_cutback_factor(2.0);
+    constructProperty_cutback_easy_steps_to_grow(2);
+    constructProperty_cutback_easy_iterations(3);
     constructProperty_jacobian_recompute_interval(1);
     constructProperty_activation_change_penalty_weight(0.1);
     constructProperty_enforce_secondary_coordinate_range(false);
@@ -151,6 +215,9 @@ void COMAKTool::constructProperties() {
     constructProperty_model_assembly_accuracy(1e-12);
     constructProperty_geometry_folder("");
     constructProperty_use_visualizer(false);
+    constructProperty_auto_close_visualizer(false);
+    constructProperty_show_grf_in_visualizer(true);
+    constructProperty_visualizer_grf_scale(0.8);
 
     constructProperty_AnalysisSet(AnalysisSet());
     // Amir
@@ -350,11 +417,20 @@ bool COMAKTool::run() {
             logOldSetupNotice("COMAKTool", _upgrade_changes, _setup_upgraded);
         }
 
+        // auto_close_visualizer: closes the windows of the settling simulation
+        // and of COMAK a fixed time after they are done
+        _visualizer_closer = std::make_shared<VisualizerCloser>(
+                get_use_visualizer() && get_auto_close_visualizer(),
+                kAutoCloseVisualizerDelay);
+
         performCOMAK();
         bool joint_mechanics_ok = true;
         if (get_run_joint_mechanics()) {
             joint_mechanics_ok = performJointMechanics();
         }
+        // the remaining time of the last windows
+        visualizerCloserOf(_visualizer_closer)->waitAndCloseAll();
+        _visualizer_closer.reset();
 
         const long long elapsed = stopwatch.getElapsedTimeInNs();
 
@@ -368,9 +444,11 @@ bool COMAKTool::run() {
 
     catch (const std::exception& x) {
         log_error("COMAKTool::run() caught an exception: \n {}", x.what());
+        _visualizer_closer.reset();     // (closes the windows)
         cwd.restore();
     } catch (...) { // e.g. may get InterruptedException
         log_error("COMAKTool::run() caught an exception.");
+        _visualizer_closer.reset();
         cwd.restore();
     }
 
@@ -1070,7 +1148,12 @@ void COMAKTool::performCOMAK() {
         viz = &_model.updVisualizer().updSimbodyVisualizer();
         viz->setBackgroundColor(SimTK::White);
         viz->setShowSimTime(true);
-        viz->setWindowTitle("Runing COMAK for: " + get_model_file());
+        viz->setWindowTitle("Running COMAK for: " + get_coordinates_file());
+        if (get_show_grf_in_visualizer()) {
+            // (owned by the visualizer; it reads the external loads of _model)
+            viz->addDecorationGenerator(new GroundReactionDecorator(
+                    _model, get_visualizer_grf_scale()));
+        }
     }
 
     // Setup Results Storage
@@ -1132,11 +1215,25 @@ void COMAKTool::performCOMAK() {
         if (_time[i] < get_start_time()) { continue; }
         if (_time[i] > get_stop_time()) { break; };
 
-        // Set Time
-        state.setTime(_time[i]);
-
         log_info("Frame: {} / {}", ++frame_num, _n_out_frames);
         log_info("Time: {}", _time[i]);
+
+        // Outputs of solve_step
+        int step_converged = 0;
+        int step_iters = 0;
+        double step_error = 0.0;
+
+        // One COMAK solution at time cur_t from the state of the last
+        // converged step. With final_attempt false it returns false, leaving
+        // the failure to the caller (cutback), instead of recording a bad
+        // frame.
+        auto solve_step = [&](double cur_t, const SimTK::Vector& cur_q,
+                                  const SimTK::Vector& cur_u,
+                                  const SimTK::Vector& cur_udot,
+                                  bool final_attempt) -> bool {
+        // Set Time
+        state.setTime(cur_t);
+
         // Print EMGs
         if (_emg_active && get_verbose()>0) {
             // Check Cost Function Parameters
@@ -1150,18 +1247,18 @@ void COMAKTool::performCOMAK() {
                     log_debug("{:<20} {:<20} {:<20} {:<20} {:<20} {:<20}",
                             msl.getName(),
                             _cost_muscle_weights.get(m).calcValue(
-                                    SimTK::Vector(1, _time[i])),
+                                    SimTK::Vector(1, cur_t)),
 
                             _emg_gamma_weight[m], // Amir
 
                             _cost_muscle_desired_act.get(m).calcValue(
-                                    SimTK::Vector(1, _time[i])),
+                                    SimTK::Vector(1, cur_t)),
 
                             _cost_muscle_act_lower_bound.get(m).calcValue(
-                                    SimTK::Vector(1, _time[i])),
+                                    SimTK::Vector(1, cur_t)),
 
                             _cost_muscle_act_upper_bound.get(m).calcValue(
-                                    SimTK::Vector(1, _time[i])));
+                                    SimTK::Vector(1, cur_t)));
                 }
                 m++;
             }
@@ -1171,8 +1268,8 @@ void COMAKTool::performCOMAK() {
             Coordinate& coord =
                     _model.updComponent<Coordinate>(_primary_coord_path[j]);
 
-            coord.setValue(state, _q_matrix(i, _primary_coord_index[j]), false);
-            coord.setSpeedValue(state, _u_matrix(i, _primary_coord_index[j]));
+            coord.setValue(state, cur_q[_primary_coord_index[j]], false);
+            coord.setSpeedValue(state, cur_u[_primary_coord_index[j]]);
         }
 
         // Project Secondary values based on speeds
@@ -1235,7 +1332,7 @@ void COMAKTool::performCOMAK() {
             log_info("---------------------------------------"
                      "---------------------------------------");
             log_info("Frame: {} \t Time: {} \t Iteration: {}", frame_num,
-                    _time[i], n_iter);
+                    cur_t, n_iter);
 
             log_info("---------------------------------------"
                      "---------------------------------------");
@@ -1256,11 +1353,11 @@ void COMAKTool::performCOMAK() {
                 if (_muscle_path.findIndex(msl.getAbsolutePathString()) < 0) { continue; }
                 msl.set_min_control(
                         _cost_muscle_act_lower_bound.get(m).calcValue(
-                                SimTK::Vector(1, _time[i])));
+                                SimTK::Vector(1, cur_t)));
 
                 msl.set_max_control(
                         _cost_muscle_act_upper_bound.get(m).calcValue(
-                                SimTK::Vector(1, _time[i])));
+                                SimTK::Vector(1, cur_t)));
                 m++;
             }
             // Amir ->
@@ -1279,7 +1376,7 @@ void COMAKTool::performCOMAK() {
                 updatemusclemaxforce(_model.updWorkingState());
             }
             //->Amir
-            ComakTarget target = ComakTarget(state, &_model, ~_udot_matrix[i],
+            ComakTarget target = ComakTarget(state, &_model, cur_udot,
                     _optim_parameters, _dt, get_unit_udot_epsilon(),
                     _primary_coord_path, _secondary_coord_path, _muscle_path,
                     _non_muscle_actuator_path, _secondary_coord_max_change);
@@ -1332,7 +1429,7 @@ void COMAKTool::performCOMAK() {
             SimTK::Vector msl_weight(_n_muscles);
             for (int m = 0; m < _n_muscles; ++m) {
                 msl_weight(m) = _cost_muscle_weights.get(m).calcValue(
-                        SimTK::Vector(1, _time[i]));
+                        SimTK::Vector(1, cur_t));
             }
             target.setCostFunctionWeight(msl_weight);
 
@@ -1343,7 +1440,7 @@ void COMAKTool::performCOMAK() {
             }
             for (int m = 0; m < _n_muscles; ++m) {
                 desired_act(m) = _cost_muscle_desired_act.get(m).calcValue(
-                        SimTK::Vector(1, _time[i]));
+                        SimTK::Vector(1, cur_t));
                 // The activation cannot exceed 1: an EMG value above 1 (not
                 // normalised to the maximum) is set to 1.
                 if (desired_act(m) > 1.0) {
@@ -1351,7 +1448,7 @@ void COMAKTool::performCOMAK() {
                         log_warn("The desired activation of {} is {} at time "
                                  "{}: above 1 (EMG not normalised?). Values "
                                  "above 1 are set to 1.",
-                                _muscle_path[m], desired_act(m), _time[i]);
+                                _muscle_path[m], desired_act(m), cur_t);
                         _desired_act_clamp_warned[m] = true;
                     }
                     desired_act(m) = 1.0;
@@ -1652,7 +1749,7 @@ void COMAKTool::performCOMAK() {
                     observed_udot = 0.0;
                 } else {
                     // Accelerations from spline fit to IK joint angles
-                    observed_udot = _udot_matrix(i, k);
+                    observed_udot = cur_udot[k];
                 }
 
                 // Difference between simulated and observed accelerations:
@@ -1802,6 +1899,11 @@ void COMAKTool::performCOMAK() {
             }
         }
         // print COMAK report for this iteration
+        if (max_udot_error > get_udot_tolerance() && !final_attempt) {
+            log_info("COMAK failed to converge in this step (cutback).");
+            step_iters = n_iter;
+            return false;
+        }
         if (max_udot_error > get_udot_tolerance()) {
 
             log_info("COMAK failed to converge.");
@@ -1839,7 +1941,7 @@ void COMAKTool::performCOMAK() {
                 }
                 setStateFromComakParameters(state, reset_parameters);
 
-                state.setTime(_time[i]);
+                state.setTime(cur_t);
 
                 log_info("########################## No iteration has max udot error less than "
                          "worst case tolerance ({}). ##########################",
@@ -1851,7 +1953,7 @@ void COMAKTool::performCOMAK() {
 
             // Save data about failed convergence
             _bad_frames.push_back(i);
-            _bad_times.push_back(_time[i]);
+            _bad_times.push_back(cur_t);
             _bad_udot_errors.push_back(min_val);
             _bad_udot_coord.push_back(bad_coord);
 
@@ -1862,11 +1964,9 @@ void COMAKTool::performCOMAK() {
             frame_converged = 1;
         }
 
-        SimTK::RowVector convergence_metrics(3);
-        convergence_metrics(0) = frame_converged;
-        convergence_metrics(1) = n_iter;
-        convergence_metrics(2) = min_max_udot_error;
-        _convergence.appendRow(_time[i], convergence_metrics);
+        step_converged = frame_converged;
+        step_iters = n_iter;
+        step_error = min_max_udot_error;
 
         // Store Solution
         _model.realizeAcceleration(state);
@@ -1879,6 +1979,131 @@ void COMAKTool::performCOMAK() {
             _prev_secondary_value(m) = coord.getValue(state);
         }
         frames_done++;
+        return frame_converged == 1;
+        }; // END solve_step
+
+        // Kinematics of this time step
+        const int n_coord_all = (int)_q_matrix.ncol();
+        SimTK::Vector frame_q(n_coord_all), frame_u(n_coord_all),
+                frame_udot(n_coord_all);
+        for (int c = 0; c < n_coord_all; ++c) {
+            frame_q[c] = _q_matrix(i, c);
+            frame_u[c] = _u_matrix(i, c);
+            frame_udot[c] = _udot_matrix(i, c);
+        }
+
+        struct Snapshot {
+            SimTK::State state;
+            SimTK::Vector parameters, prev_parameters, prev_secondary;
+            SimTK::State prev_state;
+            int consecutive_bad, frames_done;
+        };
+        auto take_snapshot = [&]() {
+            return Snapshot{state, _optim_parameters, _prev_parameters,
+                    _prev_secondary_value, _prev_state,
+                    _consecutive_bad_frame, frames_done};
+        };
+        auto restore_snapshot = [&](const Snapshot& s) {
+            state = s.state;
+            _optim_parameters = s.parameters;
+            _prev_parameters = s.prev_parameters;
+            _prev_secondary_value = s.prev_secondary;
+            _prev_state = s.prev_state;
+            _consecutive_bad_frame = s.consecutive_bad;
+            frames_done = s.frames_done;
+            jac_msl = SimTK::Matrix(); // force a new linearization
+            jac_age = 0;
+        };
+
+        const int max_levels = std::max(0, get_max_cutback_levels());
+        const bool can_cut = max_levels > 0 && frames_done > 0 && i > 0;
+        const double dt_full = _dt;
+        Snapshot frame_start_snapshot = take_snapshot();
+        bool solved = solve_step(_time[i], frame_q, frame_u, frame_udot,
+                !can_cut);
+
+        if (!solved && can_cut) {
+            // Cutback: from the last converged step to this time in smaller
+            // sub-steps that grow again when they converge easily.
+            const double factor = std::max(1.01, get_cutback_factor());
+            const double t_end = _time[i];
+            double t = _time[i - 1];
+            int level = 1;
+            int easy = 0;
+            int n_sub = 0;
+            int deepest = 1;
+            bool gave_up = false;
+            restore_snapshot(frame_start_snapshot);
+            Snapshot good = take_snapshot();
+            log_warn("Time {}: no convergence, cutback of the time step "
+                     "(factor {}, up to {} levels).", t_end, factor,
+                    max_levels);
+            SimTK::Vector sub_q(n_coord_all), sub_u(n_coord_all),
+                    sub_udot(n_coord_all);
+            while (t < t_end - 1e-9 * dt_full) {
+                const double h = dt_full / std::pow(factor, level);
+                double t_next = t + h;
+                if (t_next > t_end - 1e-6 * dt_full) { t_next = t_end; }
+                _dt = t_next - t;
+                if (t_next == t_end) {
+                    sub_q = frame_q; sub_u = frame_u; sub_udot = frame_udot;
+                } else {
+                    SimTK::Vector x(1, t_next);
+                    const std::vector<int> d1 = {0};
+                    const std::vector<int> d2 = {0, 0};
+                    for (int c = 0; c < n_coord_all; ++c) {
+                        sub_q[c] = _kin_splines[c]->calcValue(x);
+                        sub_u[c] = _kin_splines[c]->calcDerivative(d1, x);
+                        sub_udot[c] = _kin_splines[c]->calcDerivative(d2, x);
+                    }
+                }
+                n_sub++;
+                log_info("Cutback sub-step to time {} (step {}, level {})",
+                        t_next, _dt, level);
+                if (solve_step(t_next, sub_q, sub_u, sub_udot, false)) {
+                    t = t_next;
+                    good = take_snapshot();
+                    if (step_iters <= get_cutback_easy_iterations()) {
+                        easy++;
+                    } else {
+                        easy = 0;
+                    }
+                    if (easy >= get_cutback_easy_steps_to_grow() &&
+                            level > 0) {
+                        level--;
+                        easy = 0;
+                    }
+                } else {
+                    restore_snapshot(good);
+                    easy = 0;
+                    if (level >= max_levels) { gave_up = true; break; }
+                    level++;
+                    deepest = std::max(deepest, level);
+                }
+            }
+            _dt = dt_full;
+            if (gave_up) {
+                log_warn("Time {}: the cutback did not converge at the "
+                         "smallest step (level {}). Solving the full step "
+                         "with the standard handling of a bad frame.", t_end,
+                        max_levels);
+                restore_snapshot(frame_start_snapshot);
+                solved = solve_step(_time[i], frame_q, frame_u, frame_udot,
+                        true);
+            } else {
+                solved = true;
+                log_info("Cutback converged: {} sub-steps, deepest level {}.",
+                        n_sub, deepest);
+                _n_cutback_frames++;
+            }
+        }
+        _dt = dt_full;
+
+        SimTK::RowVector convergence_metrics(3);
+        convergence_metrics(0) = step_converged;
+        convergence_metrics(1) = step_iters;
+        convergence_metrics(2) = step_error;
+        _convergence.appendRow(_time[i], convergence_metrics);
 
         // Save the results
         recordResultsStorage(state, i);
@@ -1902,12 +2127,24 @@ void COMAKTool::performCOMAK() {
                 msl.overrideActuation(state, true);
             }
         }
+
+        // auto_close_visualizer: the window of the settling simulation
+        if (_visualizer_closer) { visualizerCloserOf(_visualizer_closer)->closeDue(); }
     } // END of COMAK timestep
+
+    // auto_close_visualizer: the window of COMAK closes after the delay
+    if (_visualizer_closer && get_use_visualizer()) {
+        visualizerCloserOf(_visualizer_closer)->closeLater(_model);
+    }
 
     // Print Convergence Summary
     log_info("Convergence Summary:");
     log_info("--------------------");
 
+    if (_n_cutback_frames > 0) {
+        log_info("{} time steps converged after a cutback of the time step.",
+                _n_cutback_frames);
+    }
     if (_bad_frames.empty()) {
         log_info("All frames converged!");
     } else {
@@ -2156,7 +2393,7 @@ SimTK::Vector COMAKTool::equilibriateSecondaryCoordinates() {
         SimTK::Visualizer& viz =
                 settle_model.updVisualizer().updSimbodyVisualizer();
         viz.setBackgroundColor(SimTK::White);
-        viz.setWindowTitle("Settling for COMAK for: " + get_model_file());
+        viz.setWindowTitle("Settling for COMAK for: " + get_coordinates_file());
         viz.setShowSimTime(true);
     }
 
@@ -2306,6 +2543,12 @@ SimTK::Vector COMAKTool::equilibriateSecondaryCoordinates() {
                 settle_model.updComponent<Coordinate>(_secondary_coord_path[i]);
 
         secondary_q(i) = coord.getValue(state);
+    }
+
+    // auto_close_visualizer: the window of the settling simulation closes
+    // after the delay (while COMAK runs)
+    if (_visualizer_closer && get_use_visualizer()) {
+        visualizerCloserOf(_visualizer_closer)->closeLater(settle_model);
     }
     return secondary_q;
 }
@@ -2470,6 +2713,7 @@ void COMAKTool::extractKinematicsFromFile() {
     _u_matrix = 0;
     _udot_matrix = 0;
 
+    _kin_splines.clear();
     int j = 0;
     for (const Coordinate& coord : _model.getComponentList<Coordinate>()) {
 
@@ -2489,7 +2733,7 @@ void COMAKTool::extractKinematicsFromFile() {
         // GCVSpline q_spline;
         // q_spline.setDegree(5);
 
-        std::unique_ptr<Function> q_spline;
+        std::shared_ptr<Function> q_spline;
         if (get_smooth_input_kinematics()) {
             SimTK::Vector q_data(_n_frames);
             for (int i = 0; i < _n_frames; ++i) { q_data[i] = _q_matrix(i, j); }
@@ -2523,6 +2767,7 @@ void COMAKTool::extractKinematicsFromFile() {
             std::vector<int> udot_order = {0, 0};
             _udot_matrix(i, j) = q_spline->calcDerivative(udot_order, x);
         }
+        _kin_splines.push_back(q_spline);
         j++;
     }
 

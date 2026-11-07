@@ -23,6 +23,17 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
   acted like 0.004. With the correct energy the EMG examples use 0.1 (weight 1 dominated: peak joint
   contact force -25%, secondary coordinates moved by 4 mm; 0.01 reproduces the old behaviour).
 
+## Added
+
+- `COMAKTool` automatic time step cutback (like Abaqus): `max_cutback_levels` (4, 0 = off),
+  `cutback_factor` (2), `cutback_easy_steps_to_grow` (2), `cutback_easy_iterations` (3). A time step that
+  does not converge is solved again from the previous converged step in sub-steps of dt/factor (down to
+  factor^levels); coordinates come from their smoothing spline, ground reactions from their time functions;
+  the step grows back after easy sub-steps. Results stay on the original time steps.
+- Visualizer: `auto_close_visualizer` also for COMAK (settle and COMAK windows close 10 s after they end),
+  no blank window from the inverse kinematics tool, ground reaction vectors at the center of pressure
+  (`show_grf_in_visualizer`, `visualizer_grf_scale` 0.8 m per body weight).
+
 ## Fixes
 
 - Reserve actuator bounds and gradient, non-finite results, fallback to the previous time step.

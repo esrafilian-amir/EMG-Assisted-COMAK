@@ -24,6 +24,7 @@
 #include <OpenSim/Simulation/Model/ForceSet.h>
 #include <OpenSim/Simulation/Model/AnalysisSet.h>
 #include <OpenSim/Simulation/StatesTrajectory.h>
+#include <memory>
 
 #include "COMAKSettingsSet.h"
 #include "JointMechanicsTool.h"
@@ -320,6 +321,27 @@ public:
         "changed them by less than 0.03. The default value is 0.1. Use 0 for "
         "no penalty.")
 
+    OpenSim_DECLARE_PROPERTY(max_cutback_levels, int,
+        "Automatic time step cutback, as in Abaqus. When a time step does not "
+        "converge, it is solved again from the previous converged time step "
+        "with the step divided by cutback_factor, and again, up to this many "
+        "times (the smallest step is dt / cutback_factor^levels). Consecutive "
+        "easy sub-steps increase the step again by the same factor, up to "
+        "the original step. The coordinates are interpolated with their "
+        "smoothing spline and the ground reactions with their time "
+        "functions. The results stay on the original time steps. Use 0 for "
+        "no cutback. The default value is 4.")
+    OpenSim_DECLARE_PROPERTY(cutback_factor, double,
+        "Factor that divides the time step in a cutback and multiplies it "
+        "when the step grows back. The default value is 2.")
+    OpenSim_DECLARE_PROPERTY(cutback_easy_steps_to_grow, int,
+        "Number of consecutive sub-steps that converge within "
+        "cutback_easy_iterations before the step is increased by "
+        "cutback_factor. The default value is 2.")
+    OpenSim_DECLARE_PROPERTY(cutback_easy_iterations, int,
+        "A sub-step that converges in at most this many iterations is easy. "
+        "The default value is 3.")
+
     OpenSim_DECLARE_PROPERTY(jacobian_recompute_interval, int,
         "Number of COMAK iterations that share one linearization of the "
         "accelerations: the columns of the constraint Jacobian are "
@@ -539,6 +561,22 @@ public:
         "Use SimTK visualizer to display simulations in progress. "
         "The default value is false.")
 
+    OpenSim_DECLARE_PROPERTY(auto_close_visualizer, bool,
+        "With use_visualizer, close the window of the settling simulation "
+        "and the window of COMAK 10 s after that simulation is done "
+        "(the next simulation is not held up). The default value is false.")
+
+    OpenSim_DECLARE_PROPERTY(show_grf_in_visualizer, bool,
+        "With use_visualizer, draw the ground reaction forces of the external "
+        "loads in the COMAK window: a line from the center of pressure, "
+        "visualizer_grf_scale meters long per body weight, with a dot at its "
+        "tip. The default value is true.")
+
+    OpenSim_DECLARE_PROPERTY(visualizer_grf_scale, double,
+        "Length in meters of the ground reaction force line per body weight "
+        "(total mass times gravity) in the visualizer. The default value is "
+        "0.8.")
+
     OpenSim_DECLARE_UNNAMED_PROPERTY(AnalysisSet,"Analyses to be performed"
         "throughout the COMAK simulation.")
     // Amir
@@ -582,6 +620,9 @@ public:
     COMAKTool(const std::string file);
 
 private:
+    // closes the visualizer windows after a delay (auto_close_visualizer); a VisualizerCloser
+    mutable std::shared_ptr<void> _visualizer_closer;
+
     void constructProperties();
     void updateModelForces();
     SimTK::State initialize();
@@ -674,6 +715,7 @@ private:
     int _start_frame;
     Array<double> _time;
     double _dt;
+    int _n_cutback_frames = 0;
     int _consecutive_bad_frame;
     std::vector<int> _bad_frames;
     std::vector<double> _bad_times;
@@ -682,6 +724,8 @@ private:
 
     SimTK::Matrix _q_matrix;
     SimTK::Matrix _u_matrix;
+    // fitted function of each coordinate (in model order), for the cutback
+    std::vector<std::shared_ptr<OpenSim::Function>> _kin_splines;
     SimTK::Matrix _udot_matrix;
     ExternalLoads _external_loads;
 
