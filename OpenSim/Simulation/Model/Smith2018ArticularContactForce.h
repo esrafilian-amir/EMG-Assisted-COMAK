@@ -353,14 +353,14 @@ public:
         "linear formulation. Default value set to 0.8.")
 
     OpenSim_DECLARE_PROPERTY(contact_method, std::string,
-        "How the overlap of the meshes is found: 'ray_cast' (a ray along the "
-        "casting triangle normal, the original method) or 'distance_field' "
-        "(EXPERIMENTAL: the depth of the casting triangle centers below the "
-        "target surface is read from a signed distance grid of the target "
-        "mesh, and the force acts along the gradient of that field). The "
-        "distance field has no dependence on the casting normals and no "
-        "ray misses, and works with open and closed target meshes. Default "
-        "value set to 'ray_cast'.")
+        "How the overlap of the meshes is found: 'distance_field' (the depth "
+        "of the casting triangle centers below the target surface is read "
+        "from a signed distance grid of the target mesh, and the force acts "
+        "along the gradient of that field) or 'ray_cast' (a ray along the "
+        "casting triangle normal, the original method). The distance field "
+        "has no dependence on the casting normals and no ray misses, and "
+        "works with open and closed target meshes. Default value set to "
+        "'distance_field'.")
 
     OpenSim_DECLARE_PROPERTY(field_voxel_size, double,
         "Grid spacing in meters of the signed distance grid used by "

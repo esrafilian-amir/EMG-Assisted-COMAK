@@ -86,7 +86,7 @@ void Smith2018ArticularContactForce::constructProperties()
     constructProperty_elastic_foundation_formulation("linear");
     constructProperty_use_lumped_contact_model(true);
     constructProperty_max_strain(0.8);
-    constructProperty_contact_method("ray_cast");
+    constructProperty_contact_method("distance_field");
     constructProperty_field_voxel_size(0.001);
     constructProperty_field_edge_taper_width(0.003);
 }

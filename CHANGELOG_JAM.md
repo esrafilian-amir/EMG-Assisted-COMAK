@@ -5,6 +5,7 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
 
 ## Behaviour changes (defaults)
 
+- `Smith2018ArticularContactForce.contact_method` now defaults to `distance_field` (was `ray_cast`) for every model that does not set it; set `ray_cast` in the model (or `set_contact_method("ray_cast")`) to get the original ray method. Results of such models change by about 0.5 %.
 - `COMAKTool.convergence_criterion` is `force`: a time step has converged when the unbalanced
   generalized force `M (udot - observed)` is below `force_tolerance_rotation` (0.1 N*m) and
   `force_tolerance_translation` (2 N; the residual of the models with menisci stalls just above 1 N). Use `acceleration` for the previous test.
@@ -81,7 +82,7 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
 
 ## New options
 
-- `Smith2018ArticularContactForce.contact_method` (`ray_cast` default, or `distance_field`, EXPERIMENTAL) and
+- `Smith2018ArticularContactForce.contact_method` (`distance_field` default, or `ray_cast`, the original ray method) and
   `field_voxel_size` (0.001 m): `distance_field` reads the depth of each casting triangle center below the
   target surface from a signed distance grid of the target mesh (pseudo-normal sign, works for open and closed
   meshes) and applies the force along the gradient of that field, so there are no ray misses and no dependence
