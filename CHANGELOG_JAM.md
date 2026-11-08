@@ -27,6 +27,8 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
   contact force -25%, secondary coordinates moved by 4 mm; 0.01 reproduces the old behaviour).
 
 ## Added
+- New model `models/healthy/lenhart2015_Left_Knee/lenhart2015_Left_fixed.osim` (with `_contact_tuned`, `_reserve_actuators.xml`, `build_lenhart2015_Left_fixed.py` and `check_symmetry_lenhart2015_Left_fixed.py`): a left only knee that is the exact mirror of the right knee of `lenhart2015.osim` (checked element by element and by sweeping frames, ligaments and contact). The older `lenhart2015_Left.osim` is NOT a mirror (patella frame 8 mm off, patellofemoral contact force about 100 % different) and is kept only for compatibility; use `lenhart2015_Left_fixed.osim`.
+
 
 - `COMAKTool` automatic time step cutback (like Abaqus): `max_cutback_levels` (4, 0 = off),
   `cutback_factor` (2), `cutback_easy_steps_to_grow` (2), `cutback_easy_iterations` (3). A time step that
