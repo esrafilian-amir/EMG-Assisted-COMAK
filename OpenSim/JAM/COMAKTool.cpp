@@ -1649,6 +1649,7 @@ void COMAKTool::performCOMAK() {
                              "up to {}", max_slack);
                 }
             }
+            bool optimizer_failed = false;
             if (!qp_done) {
             SimTK::OptimizerAlgorithm algorithm = SimTK::InteriorPoint;
             SimTK::Optimizer optimizer(target, algorithm);
@@ -1723,8 +1724,66 @@ void COMAKTool::performCOMAK() {
             }
             catch (const SimTK::Exception::Base& ex) {
                 log_error("COMAK Optimization failed: {}", ex.getMessage());
+                optimizer_failed = true;
             }
             } // END ipopt
+
+            // A failed optimization ("Diverging iterates", "Restoration
+            // failed", "Maximum iterations exceeded") returns its last
+            // iterate, which can be far outside the bounds (values of 1e13 in
+            // the secondary coordinates were seen). Applied to the model, such
+            // a pose makes the contact evaluations take gigabytes of memory
+            // and minutes per call. The values are checked here: small
+            // violations of a bound are clamped; a failed solution that is
+            // far outside the bounds, or a secondary coordinate step that is
+            // not physical, is discarded.
+            {
+                double* lo = nullptr;
+                double* up = nullptr;
+                target.getParameterLimits(&lo, &up);
+                const double max_secondary_step = 1.0; // rad or m
+                bool far_outside = false;
+                int worst = -1;
+                double worst_violation = 0.0;
+                for (int p = 0; p < _n_parameters; ++p) {
+                    if (!SimTK::isFinite(_optim_parameters[p])) { continue; }
+                    double violation = 0.0;
+                    if (lo && _optim_parameters[p] < lo[p]) {
+                        violation = (lo[p] - _optim_parameters[p]) /
+                                (1.0 + std::abs(lo[p]));
+                    }
+                    if (up && _optim_parameters[p] > up[p]) {
+                        violation = std::max(violation, (_optim_parameters[p] - up[p]) /
+                                (1.0 + std::abs(up[p])));
+                    }
+                    if (violation > worst_violation) {
+                        worst_violation = violation;
+                        worst = p;
+                    }
+                    if (p >= _n_actuators &&
+                            std::abs(_optim_parameters[p] *
+                                    get_optimization_scale_delta_coord()) >
+                                    max_secondary_step) {
+                        far_outside = true;
+                        worst = p;
+                    }
+                }
+                if (worst_violation > 1e-3) { far_outside = true; }
+                if (far_outside) {
+                    log_warn("The {} result is outside the bounds ({}: {}). "
+                             "The parameters of the previous iteration are "
+                             "used.", qp_done ? "QP" : "optimization",
+                            worst >= 0 ? _optim_parameter_names[worst] : "",
+                            worst >= 0 ? _optim_parameters[worst] : 0.0);
+                    _optim_parameters = parameters_before_optimization;
+                } else if (lo && up) {
+                    for (int p = 0; p < _n_parameters; ++p) {
+                        if (!SimTK::isFinite(_optim_parameters[p])) { continue; }
+                        _optim_parameters[p] = std::min(std::max(_optim_parameters[p], lo[p]),
+                                up[p]);
+                    }
+                }
+            }
 
             seconds_optimizer += std::chrono::duration<double>(
                     std::chrono::steady_clock::now() - optimizer_start).count();

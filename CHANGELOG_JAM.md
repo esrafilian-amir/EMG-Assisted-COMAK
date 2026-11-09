@@ -41,6 +41,7 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
 
 ## Fixes
 
+- `COMAKTool`: the result of a failed optimization (IPOPT "Diverging iterates", "Restoration failed", "Maximum iterations exceeded") is checked before it is applied. It returned its last iterate, with values of 1e13 in the secondary coordinates, and the contact model evaluated at such a pose took several GB of memory and minutes per call (one trial of the Grand Challenge data grew past 12 GB). Values slightly outside the bounds are clamped; a result far outside the bounds (or a secondary coordinate step above 1 rad / 1 m) is discarded and the parameters of the previous iteration are used (a warning is logged).
 - Reserve actuator bounds and gradient, non-finite results, fallback to the previous time step.
 - Settle simulations: plateau stopping, unit handling, bounded loops.
 - Secondary constraint functions: spline point spacing, 0.8 patella multiplier removed.
