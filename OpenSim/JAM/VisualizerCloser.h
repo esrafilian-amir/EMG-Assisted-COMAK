@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <exception>
 #include <string>
 #include <set>
 #include <thread>
@@ -112,6 +113,19 @@ public:
                 std::chrono::duration<double>(_delay).count());
     }
 
+    // Close the model's current window at once (a simulation that failed, so
+    // closeLater() was never called for its window).
+    void closeNow(Model& model) {
+        if (!_enabled || !model.hasVisualizer()) { return; }
+        unsigned long process_id = 0;
+        for (unsigned long id : visualizerChildProcesses()) {
+            if (_known_processes.insert(id).second) { process_id = id; }
+        }
+        Pending p{model.updVisualizer().updSimbodyVisualizer(), Clock::now(),
+                process_id, "", -1};
+        close(p);
+    }
+
     // Close the windows whose delay has passed (call from the running loops).
     void closeDue() {
         if (_pending.empty()) { return; }
@@ -173,6 +187,29 @@ private:
     std::set<unsigned long> _known_processes;
     Clock::duration _delay;
     std::vector<Pending> _pending;
+};
+
+// Declare it after the Model and the VisualizerCloser of a simulation: if the
+// simulation ends with an exception, the model's current window (the one that
+// closeLater() has not been called for yet) is closed with the exception, so a
+// failed run does not leave a window open.
+class VisualizerCloseOnError {
+public:
+    VisualizerCloseOnError(VisualizerCloser& closer, Model& model)
+        : _closer(closer), _model(model),
+          _exceptions(std::uncaught_exceptions()) {}
+    VisualizerCloseOnError(const VisualizerCloseOnError&) = delete;
+    VisualizerCloseOnError& operator=(const VisualizerCloseOnError&) = delete;
+    ~VisualizerCloseOnError() {
+        if (std::uncaught_exceptions() > _exceptions) {
+            try { _closer.closeNow(_model); } catch (...) {}
+        }
+    }
+
+private:
+    VisualizerCloser& _closer;
+    Model& _model;
+    int _exceptions;
 };
 
 // seconds a window stays open after its simulation is done (auto_close_visualizer)

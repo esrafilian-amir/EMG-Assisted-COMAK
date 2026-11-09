@@ -282,9 +282,9 @@ public:
 
     OpenSim_DECLARE_PROPERTY(auto_close_visualizer, bool,
         "Close the visualizer window of the settling simulation and of each "
-        "sweep simulation 10 seconds after that simulation is done (the "
-        "window of the inverse kinematics is not closed). Only used if "
-        "use_visualizer is true. "
+        "sweep simulation 10 seconds after that simulation is done, and the "
+        "window of a simulation that fails at once (the inverse kinematics "
+        "that follows has no window). Only used if use_visualizer is true. "
         "The default value is false.")
 
     OpenSim_DECLARE_PROPERTY(show_solver_info_in_visualizer, bool,

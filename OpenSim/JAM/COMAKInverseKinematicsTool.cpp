@@ -441,6 +441,8 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
     VisualizerCloser visualizer_closer(
             get_use_visualizer() && get_auto_close_visualizer(),
             kAutoCloseVisualizerDelay);
+    // Closes the current window if the simulation ends with an exception.
+    VisualizerCloseOnError visualizer_close_on_error(visualizer_closer, model);
     // The visualizer is switched on just before the settling simulation
     // (below). Opening it here as well only creates an empty first window.
     model.setUseVisualizer(false);

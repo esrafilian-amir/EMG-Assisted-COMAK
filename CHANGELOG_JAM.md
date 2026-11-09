@@ -176,6 +176,10 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
   can be changed are listed (commented) before `comak.run()`.
 
 ## Inverse kinematics (COMAKInverseKinematicsTool)
+- `auto_close_visualizer` also closes the window of a settling or sweep simulation that ends with an
+  exception (it stayed open before, because a window was only registered for closing once its simulation was
+  done). The inverse kinematics after the sweeps opens no window (since the earlier "no blank IK window"
+  change), so there is no IK window to close.
 - `show_solver_info_in_visualizer` (default true) on the IK tool: the window of each sweep simulation shows
   text rows: the sweep direction and target, the time, the coupled coordinate, the integrator time step and
   step counts, and the contact forces (medial and lateral tibia, patella, per knee). The text classes and the
