@@ -322,8 +322,9 @@ public:
         "no penalty.")
 
     OpenSim_DECLARE_PROPERTY(show_solver_info_in_visualizer, bool,
-        "Show the frame, time, time step, iteration and force residual in the "
-        "title bar of the visualizer window. The default value is true.")
+        "Show the frame, time step, iteration, residual, status and the "
+        "contact forces (medial and lateral tibia, patella) as text in the "
+        "visualizer window. The default value is true.")
     OpenSim_DECLARE_PROPERTY(max_cutback_levels, int,
         "Automatic time step cutback, as in Abaqus. When a time step does not "
         "converge, it is solved again from the previous converged time step "

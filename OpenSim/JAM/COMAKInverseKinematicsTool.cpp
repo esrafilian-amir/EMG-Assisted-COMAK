@@ -27,6 +27,7 @@
 #include "COMAKInverseKinematicsTool.h"
 #include "JAMUtilities.h"
 #include "VisualizerCloser.h"
+#include "VisualizerInfo.h"
 
 
 #include <OpenSim/Common/Adapters.h>
@@ -129,6 +130,7 @@ void COMAKInverseKinematicsTool::constructProperties()
     constructProperty_geometry_folder("");
     constructProperty_use_visualizer(false);
     constructProperty_auto_close_visualizer(false);
+    constructProperty_show_solver_info_in_visualizer(true);
     constructProperty_verbose(0);
 }
 
@@ -673,6 +675,10 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
     // The ligament lengths, strains and forces during the sweep are written
     // only if print_secondary_constraint_sim_results is true
     StatesTrajectory sweep_states;
+    // the text in the window of the sweeps (show_solver_info_in_visualizer)
+    std::shared_ptr<SolverInfo> sweep_info = std::make_shared<SolverInfo>();
+    std::vector<KneeForces> sweep_knees;
+    bool sweep_contact_failed = false;
     std::vector<const Blankevoort1991Ligament*> sweep_ligaments;
     TimeSeriesTable lig_table;
     int n_lig_columns = 0;
@@ -726,6 +732,11 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
             viz.setBackgroundColor(SimTK::White);
             viz.setShowSimTime(true);
             viz.setDesiredFrameRate(100);
+            if (get_show_solver_info_in_visualizer()) {
+                // The rows are updated after every output step of the sweep
+                viz.addDecorationGenerator(
+                        new SolverInfoDecorator(sweep_info, 2.0 / 3.0));
+            }
         }
 
         //prescribe muscle force
@@ -808,6 +819,37 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
                 throw;
             }
             state = sweep_timestepper.getState();
+
+            // Information as text in the window of the sweep
+            if (get_use_visualizer() && get_show_solver_info_in_visualizer()) {
+                const SimTK::Integrator& itg = sweep_timestepper.getIntegrator();
+                const bool rotational = coupled_coord.getMotionType() ==
+                        Coordinate::Rotational;
+                sweep_info->rows.clear();
+                addInfoRow(*sweep_info, "Sweep", "%s %.1f %s",
+                        record ? "up to" : "down to",
+                        rotational ? SimTK::convertRadiansToDegrees(
+                                target_value) : target_value,
+                        rotational ? "deg" : "m");
+                addInfoRow(*sweep_info, "Time", "%.3f / %.3f s",
+                        state.getTime(), Px);
+                addInfoRow(*sweep_info, coupled_coord.getName(), "%.2f %s",
+                        rotational ? SimTK::convertRadiansToDegrees(
+                                coupled_coord.getValue(state))
+                                : coupled_coord.getValue(state),
+                        rotational ? "deg" : "m");
+                addInfoRow(*sweep_info, "Time step", "%.2e s",
+                        itg.getPreviousStepSizeTaken());
+                addInfoRow(*sweep_info, "Steps", "%d (%d error test failures)",
+                        itg.getNumStepsTaken(), itg.getNumErrorTestFailures());
+                // contact forces per knee (see VisualizerInfo.h)
+                if (!sweep_contact_failed) {
+                    model.realizeDynamics(state);
+                    updateKneeForces(model, state, sweep_knees,
+                            sweep_contact_failed);
+                    addKneeForceRows(sweep_knees, *sweep_info);
+                }
+            }
 
             if (record && get_print_secondary_constraint_sim_results()) {
                 sweep_states.append(state);

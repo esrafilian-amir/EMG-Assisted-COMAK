@@ -287,6 +287,13 @@ public:
         "use_visualizer is true. "
         "The default value is false.")
 
+    OpenSim_DECLARE_PROPERTY(show_solver_info_in_visualizer, bool,
+        "Show information as text in the window of the sweep simulations: the "
+        "sweep direction, the time, the coupled coordinate, the integrator "
+        "time step and step counts, and the contact forces (medial and "
+        "lateral tibia, patella). Only used if use_visualizer is true. "
+        "The default value is true.")
+
     OpenSim_DECLARE_PROPERTY(verbose, int,
                             "Controling output detail.")
 

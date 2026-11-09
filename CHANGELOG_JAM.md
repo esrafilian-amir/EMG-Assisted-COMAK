@@ -176,6 +176,10 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
   can be changed are listed (commented) before `comak.run()`.
 
 ## Inverse kinematics (COMAKInverseKinematicsTool)
+- `show_solver_info_in_visualizer` (default true) on the IK tool: the window of each sweep simulation shows
+  text rows: the sweep direction and target, the time, the coupled coordinate, the integrator time step and
+  step counts, and the contact forces (medial and lateral tibia, patella, per knee). The text classes and the
+  contact force rows are shared with the COMAK tool in `VisualizerInfo.h`.
 - Two-pass smoothed IK (`smooth_ik_second_pass`, on by default): the first solution is low-pass filtered
   (`smooth_ik_lowpass_frequency`, use the `lowpass_filter_frequency` of the COMAK input kinematics; -1 uses
   40 Hz) and the second solution fits the markers with a soft pull (`smooth_ik_weight`, 1) of each free coordinate

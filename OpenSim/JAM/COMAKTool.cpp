@@ -23,6 +23,7 @@
 #include <memory>
 #include "JAMUtilities.h"
 #include "VisualizerCloser.h"
+#include "VisualizerInfo.h"
 #include <OpenSim/Analyses/ForceReporter.h>
 #include <OpenSim/Simulation/Model/ExternalForce.h>
 #include <cmath>
@@ -112,35 +113,6 @@ public:
 private:
     const Model& _model;
     double _meters_per_bw;
-};
-
-// Solver information as screen text in the visualizer: one line per row, the
-// label and the value in aligned columns.
-struct SolverInfo {
-    std::vector<std::pair<std::string, std::string>> rows;
-};
-
-class SolverInfoDecorator : public SimTK::DecorationGenerator {
-public:
-    SolverInfoDecorator(std::shared_ptr<SolverInfo> info, double scale)
-        : _info(info), _scale(scale) {}
-
-    void generateDecorations(const SimTK::State&,
-            SimTK::Array_<SimTK::DecorativeGeometry>& geometry) override {
-        for (const auto& row : _info->rows) {
-            std::string label = row.first;
-            if (label.size() < 12) { label.append(12 - label.size(), ' '); }
-            SimTK::DecorativeText text(label + row.second);
-            text.setIsScreenText(true);
-            text.setScaleFactors(SimTK::Vec3(_scale));
-            text.setColor(SimTK::Vec3(0.15, 0.15, 0.15));
-            geometry.push_back(text);
-        }
-    }
-
-private:
-    std::shared_ptr<SolverInfo> _info;
-    double _scale;
 };
 
 VisualizerCloser* visualizerCloserOf(const std::shared_ptr<void>& slot) {
@@ -1253,6 +1225,7 @@ void COMAKTool::performCOMAK() {
     const double dt_frame_for_title = _dt;
     int cutback_level_now = 0; // 0: the full time step
     bool contact_info_failed = false; // the contact force rows of the visualizer
+    std::vector<KneeForces> knee_rows; // contact forces per knee for those rows
     double slack_penalty_now = get_qp_slack_penalty(); // reduced when a time step does not converge
     // columns of the linearization, kept for jacobian_recompute_interval > 1
     SimTK::Matrix jac_msl, jac_non_muscle, jac_coord, jac_speed;
@@ -2008,71 +1981,10 @@ void COMAKTool::performCOMAK() {
                 solver_info->rows.emplace_back("Status",
                         max_udot_error < get_udot_tolerance() ? "converged"
                                                               : "iterating");
-                // Contact forces (N): medial and lateral tibial plateau (sum
-                // of the non-overlapping tibia regions) and patellofemoral
-                SimTK::Vec3 medial(0), lateral(0);
-                double patella = 0.0;
-                bool have_tibia = false, have_patella = false;
-                auto lower = [](std::string s) {
-                    for (auto& ch : s) { ch = (char)std::tolower(ch); }
-                    return s;
-                };
-                if (!contact_info_failed) try {
-                for (const auto& cf : _model.getComponentList<
-                                 Smith2018ArticularContactForce>()) {
-                    const auto& cast = cf.getSocket<Smith2018ContactMesh>(
-                            "casting_mesh").getConnectee();
-                    const auto& targ = cf.getSocket<Smith2018ContactMesh>(
-                            "target_mesh").getConnectee();
-                    const std::string cn = lower(cast.getName());
-                    const std::string tn = lower(targ.getName());
-                    if (cn.find("patella") != std::string::npos ||
-                            tn.find("patella") != std::string::npos) {
-                        patella += cf.getOutputValue<SimTK::Vec3>(
-                                state, "casting_total_contact_force").norm();
-                        have_patella = true;
-                        continue;
-                    }
-                    const bool tibia_cast = cn.find("tibia") != std::string::npos;
-                    const bool tibia_target = tn.find("tibia") != std::string::npos;
-                    // (the target regional force cache is not available during COMAK)
-                    if (!tibia_cast || tibia_target) { continue; }
-                    const SimTK::Vector_<SimTK::Vec3> regional = tibia_cast
-                            ? cf.getOutputValue<SimTK::Vector_<SimTK::Vec3>>(
-                                      state, "casting_regional_contact_force")
-                            : cf.getOutputValue<SimTK::Vector_<SimTK::Vec3>>(
-                                      state, "target_regional_contact_force");
-                    const std::vector<std::string>& names =
-                            (tibia_cast ? cast : targ).getRegionalNames();
-                    const int n = std::min((int)names.size(), 12);
-                    for (int r = 0; r < n && r < regional.size(); ++r) {
-                        if (names[r].rfind("medial", 0) == 0) {
-                            medial += regional[r];
-                        } else if (names[r].rfind("lateral", 0) == 0) {
-                            lateral += regional[r];
-                        }
-                    }
-                    have_tibia = true;
-                }
-                } catch (const std::exception& ex) {
-                    have_tibia = have_patella = false;
-                    contact_info_failed = true;
-                    log_warn("Contact forces not shown in the visualizer: {}",
-                            ex.what());
-                } catch (...) {
-                    have_tibia = have_patella = false;
-                    contact_info_failed = true;
-                }
-                if (have_tibia) {
-                    std::snprintf(v, sizeof(v), "%.0f N", medial.norm());
-                    solver_info->rows.emplace_back("Medial tibia contact force", v);
-                    std::snprintf(v, sizeof(v), "%.0f N", lateral.norm());
-                    solver_info->rows.emplace_back("Lateral tibia contact force", v);
-                }
-                if (have_patella) {
-                    std::snprintf(v, sizeof(v), "%.0f N", patella);
-                    solver_info->rows.emplace_back("Patella contact force", v);
-                }
+                // Contact forces (N) per knee (see VisualizerInfo.h)
+                updateKneeForces(_model, state, knee_rows,
+                        contact_info_failed);
+                addKneeForceRows(knee_rows, *solver_info);
                 viz->drawFrameNow(state);
             }
 
