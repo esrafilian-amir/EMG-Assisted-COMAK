@@ -14765,7 +14765,7 @@
 					<!--Coordinate value at which spring produces no force.-->
 					<rest_length>0</rest_length>
 					<!--Damping constant.-->
-					<viscosity>1</viscosity>
+					<viscosity>0.2</viscosity>
 				</SpringGeneralizedForce>
 				<SpringGeneralizedForce name="meniscus_medial_add_r">
 					<!--List of components that this component owns and serializes.-->
@@ -14779,7 +14779,7 @@
 					<!--Coordinate value at which spring produces no force.-->
 					<rest_length>0</rest_length>
 					<!--Damping constant.-->
-					<viscosity>1</viscosity>
+					<viscosity>0.2</viscosity>
 				</SpringGeneralizedForce>
 				<SpringGeneralizedForce name="meniscus_medial_rot_r">
 					<!--List of components that this component owns and serializes.-->
@@ -14793,7 +14793,7 @@
 					<!--Coordinate value at which spring produces no force.-->
 					<rest_length>0</rest_length>
 					<!--Damping constant.-->
-					<viscosity>1</viscosity>
+					<viscosity>0.2</viscosity>
 				</SpringGeneralizedForce>
 				<SpringGeneralizedForce name="meniscus_medial_tx_r">
 					<!--List of components that this component owns and serializes.-->
@@ -14849,7 +14849,7 @@
 					<!--Coordinate value at which spring produces no force.-->
 					<rest_length>0</rest_length>
 					<!--Damping constant.-->
-					<viscosity>1</viscosity>
+					<viscosity>0.2</viscosity>
 				</SpringGeneralizedForce>
 				<SpringGeneralizedForce name="meniscus_lateral_add_r">
 					<!--List of components that this component owns and serializes.-->
@@ -14863,7 +14863,7 @@
 					<!--Coordinate value at which spring produces no force.-->
 					<rest_length>0</rest_length>
 					<!--Damping constant.-->
-					<viscosity>1</viscosity>
+					<viscosity>0.2</viscosity>
 				</SpringGeneralizedForce>
 				<SpringGeneralizedForce name="meniscus_lateral_rot_r">
 					<!--List of components that this component owns and serializes.-->
@@ -14877,7 +14877,7 @@
 					<!--Coordinate value at which spring produces no force.-->
 					<rest_length>0</rest_length>
 					<!--Damping constant.-->
-					<viscosity>1</viscosity>
+					<viscosity>0.2</viscosity>
 				</SpringGeneralizedForce>
 				<SpringGeneralizedForce name="meniscus_lateral_tx_r">
 					<!--List of components that this component owns and serializes.-->
