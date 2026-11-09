@@ -13402,7 +13402,7 @@
 					<!--Coordinate value at which spring produces no force.-->
 					<rest_length>0</rest_length>
 					<!--Damping constant.-->
-					<viscosity>2</viscosity>
+					<viscosity>0.3</viscosity>
 				</SpringGeneralizedForce>
 				<SpringGeneralizedForce name="pf_rot_r">
 					<!--List of components that this component owns and serializes.-->
@@ -13416,7 +13416,7 @@
 					<!--Coordinate value at which spring produces no force.-->
 					<rest_length>0</rest_length>
 					<!--Damping constant.-->
-					<viscosity>2</viscosity>
+					<viscosity>0.07</viscosity>
 				</SpringGeneralizedForce>
 				<SpringGeneralizedForce name="pf_tilt_r">
 					<!--List of components that this component owns and serializes.-->
@@ -13430,7 +13430,7 @@
 					<!--Coordinate value at which spring produces no force.-->
 					<rest_length>0</rest_length>
 					<!--Damping constant.-->
-					<viscosity>2</viscosity>
+					<viscosity>0.3</viscosity>
 				</SpringGeneralizedForce>
 				<SpringGeneralizedForce name="pf_tx_r">
 					<!--List of components that this component owns and serializes.-->
