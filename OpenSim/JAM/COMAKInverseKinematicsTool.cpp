@@ -39,8 +39,13 @@
 #include <OpenSim/Common/GCVSpline.h>
 #include <OpenSim/Common/GCVSplineSet.h>
 
+#include <OpenSim/Actuators/SpringGeneralizedForce.h>
+#include <OpenSim/Simulation/SimbodyEngine/Body.h>
+
 #include <algorithm>
 #include <chrono>
+#include <exception>
+#include <memory>
 #include <set>
 #include <thread>
 #include <vector>
@@ -107,6 +112,22 @@ void COMAKInverseKinematicsTool::constructProperties()
     constructProperty_secondary_constraint_sim_integrator_accuracy(1e-6);
     constructProperty_settling_sim_integrator_accuracy(1e-10);
     constructProperty_secondary_constraint_sim_internal_step_limit(3000);
+    constructProperty_secondary_constraint_sim_recovery(false);
+    constructProperty_recovery_hold_outputs(20);
+    {
+        Array<double> mass_scales(6.0, 2);
+        mass_scales[1] = 18.0;
+        constructProperty_recovery_mass_scales(mass_scales);
+        Array<double> inertia_scales(50.0, 2);
+        inertia_scales[1] = 150.0;
+        constructProperty_recovery_inertia_scales(inertia_scales);
+        Array<double> damper_scales(2.0, 2);
+        damper_scales[1] = 6.0;
+        constructProperty_recovery_damper_scales(damper_scales);
+    }
+    constructProperty_recovery_contact_modulus_scale(0.3);
+    constructProperty_recovery_bodies();
+    constructProperty_recovery_hop_max_time(1.0);
     constructProperty_constraint_function_num_interpolation_points(20);
     constructProperty_secondary_constraint_function_file(
         "secondary_coordinate_constraint_functions.xml");
@@ -726,29 +747,38 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
         PolynomialFunction sweep_func = PolynomialFunction(coefficients);
         coupled_coord.set_prescribed_function(sweep_func);
 
-        state = model.initSystem();
-        if (get_use_visualizer()) {
-            SimTK::Visualizer& viz =
-                    model.updVisualizer().updSimbodyVisualizer();
-            viz.setWindowTitle("Sweeping: " + get_model_file());
-            viz.setBackgroundColor(SimTK::White);
-            viz.setShowSimTime(true);
-            viz.setDesiredFrameRate(100);
-            if (get_show_solver_info_in_visualizer()) {
-                // The rows are updated after every output step of the sweep
-                viz.addDecorationGenerator(
-                        new SolverInfoDecorator(sweep_info, 2.0 / 3.0));
+        // The window of the sweep (also after the system is rebuilt by a
+        // recovery step)
+        auto setup_sweep_viz = [&]() {
+            if (get_use_visualizer()) {
+                SimTK::Visualizer& viz =
+                        model.updVisualizer().updSimbodyVisualizer();
+                viz.setWindowTitle("Sweeping: " + get_model_file());
+                viz.setBackgroundColor(SimTK::White);
+                viz.setShowSimTime(true);
+                viz.setDesiredFrameRate(100);
+                if (get_show_solver_info_in_visualizer()) {
+                    // The rows are updated after every output step of the sweep
+                    viz.addDecorationGenerator(
+                            new SolverInfoDecorator(sweep_info, 2.0 / 3.0));
+                }
             }
-        }
+        };
+        auto prescribe_muscles = [&](SimTK::State& s) {
+            for (Muscle& msl : model.updComponentList<Muscle>()) {
+                msl.overrideActuation(s, true);
+                double value = msl.getMaxIsometricForce() *
+                        get_secondary_constraint_sim_muscle_activation();
+                msl.setOverrideActuation(s, value);
+            }
+            model.equilibrateMuscles(s);
+        };
+
+        state = model.initSystem();
+        setup_sweep_viz();
 
         //prescribe muscle force
-        for (Muscle& msl : model.updComponentList<Muscle>()) {
-            msl.overrideActuation(state, true);
-            double value = msl.getMaxIsometricForce() *
-                    get_secondary_constraint_sim_muscle_activation();
-            msl.setOverrideActuation(state, value);
-        }
-        model.equilibrateMuscles(state);
+        prescribe_muscles(state);
 
         //set settled secondary coordinate values
         for (int c = 0; c < _secondary_coord_path.getSize(); c++) {
@@ -782,49 +812,347 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
         q_table.setColumnLabels(q_names);
 
         //setup integrator
-        SimTK::CPodesIntegrator sweep_integrator(model.getSystem(),
-                SimTK::CPodes::BDF, SimTK::CPodes::Newton);
-        sweep_integrator.setAccuracy(
-                get_secondary_constraint_sim_integrator_accuracy());
-        if (get_secondary_constraint_sim_internal_step_limit() != -1) {
-            sweep_integrator.setInternalStepLimit(
-                get_secondary_constraint_sim_internal_step_limit());
-        }
-        SimTK::TimeStepper sweep_timestepper(model.getSystem(),
-                sweep_integrator);
-
-        sweep_timestepper.initialize(state);
-
-        for (int i = 0; i <= nSteps; ++i) {
-
-            visualizer_closer.closeDue();
-            try {
-                sweep_timestepper.stepTo(sweep_start + i*sweep_dt);
+        const bool recovery = get_secondary_constraint_sim_recovery();
+        const double base_accuracy =
+                get_secondary_constraint_sim_integrator_accuracy();
+        double itg_accuracy = base_accuracy;
+        double itg_max_step = SimTK::Infinity;
+        double itg_init_step = -1;
+        std::unique_ptr<SimTK::CPodesIntegrator> sweep_integrator;
+        std::unique_ptr<SimTK::TimeStepper> sweep_timestepper;
+        // (Re)starts the integrator from a state of the current system
+        auto start_integrator = [&](const SimTK::State& from) {
+            sweep_timestepper.reset();
+            sweep_integrator.reset(new SimTK::CPodesIntegrator(
+                    model.getSystem(), SimTK::CPodes::BDF,
+                    SimTK::CPodes::Newton));
+            sweep_integrator->setAccuracy(itg_accuracy);
+            if (get_secondary_constraint_sim_internal_step_limit() != -1) {
+                sweep_integrator->setInternalStepLimit(
+                    get_secondary_constraint_sim_internal_step_limit());
             }
-            catch (const std::exception&) {
+            if (itg_max_step < SimTK::Infinity) {
+                sweep_integrator->setMaximumStepSize(itg_max_step);
+            }
+            if (itg_init_step > 0) {
+                sweep_integrator->setInitialStepSize(itg_init_step);
+            }
+            sweep_timestepper.reset(new SimTK::TimeStepper(
+                    model.getSystem(), *sweep_integrator));
+            sweep_timestepper->initialize(from);
+        };
+        start_integrator(state);
+
+        // Recovery from an integrator failure (secondary_constraint_sim_recovery)
+        //--------------------------------------------------------------------
+        // The bodies, dampers and contact meshes that steps B and C change,
+        // with their original values
+        struct BodyOrig { std::string path; double mass; SimTK::Vec6 inertia; };
+        struct ValueOrig { std::string path; double value; };
+        std::set<std::string> rec_bodies;
+        std::vector<BodyOrig> body_orig;
+        std::vector<ValueOrig> damper_orig;
+        std::vector<ValueOrig> mesh_orig;
+        int cur_b = -1;          // scales of B1 (0) or B2 (1) applied, -1 none
+        bool cur_soft = false;   // softer contact (step C) applied
+        int active_rung = -1;    // recovery step in use, -1 none
+        int hold_left = 0;
+        static const char* rung_names[] = {"A1 restarted integrator",
+                "A2 small step size", "A3 looser accuracy",
+                "B1 heavier patella", "B2 heavier patella (more)",
+                "C softer patella contact", "D quasi-static settle"};
+        const int n_rungs = 7;
+
+        if (recovery) {
+            if (getProperty_recovery_bodies().size() > 0) {
+                for (int k = 0; k < getProperty_recovery_bodies().size(); ++k) {
+                    std::string p = get_recovery_bodies(k);
+                    if (p.empty() || p[0] != '/') p = "/bodyset/" + p;
+                    rec_bodies.insert(p);
+                }
+            } else {
+                auto add_body_of = [&](const std::string& path) {
+                    const Coordinate& c = model.getComponent<Coordinate>(path);
+                    const Joint& jt = c.getJoint();
+                    const Body* b = dynamic_cast<const Body*>(
+                            &jt.getChildFrame().findBaseFrame());
+                    if (!b) return;
+                    // the patella and the menisci, not the tibia
+                    std::string lower = b->getName();
+                    std::transform(lower.begin(), lower.end(), lower.begin(),
+                            [](unsigned char ch) { return std::tolower(ch); });
+                    if (lower.find("patella") != std::string::npos ||
+                            lower.find("menisc") != std::string::npos) {
+                        rec_bodies.insert(b->getAbsolutePathString());
+                    }
+                };
+                for (int c = 0; c < _secondary_coord_path.getSize(); ++c) {
+                    add_body_of(_secondary_coord_path[c]);
+                }
+                for (int c = 0; c < _n_constrained_coord; ++c) {
+                    add_body_of(_constrained_coord_path[c]);
+                }
+            }
+            for (const std::string& p : rec_bodies) {
+                const Body& body = model.getComponent<Body>(p);
+                body_orig.push_back({p, body.get_mass(), body.get_inertia()});
+            }
+            for (const SpringGeneralizedForce& sgf :
+                    model.getComponentList<SpringGeneralizedForce>()) {
+                const std::string cname = sgf.get_coordinate();
+                if (!model.getCoordinateSet().contains(cname)) continue;
+                const Body* b = dynamic_cast<const Body*>(
+                        &model.getCoordinateSet().get(cname).getJoint()
+                                .getChildFrame().findBaseFrame());
+                if (b && rec_bodies.count(b->getAbsolutePathString())) {
+                    damper_orig.push_back(
+                            {sgf.getAbsolutePathString(), sgf.get_viscosity()});
+                }
+            }
+            for (const Smith2018ContactMesh& m :
+                    model.getComponentList<Smith2018ContactMesh>()) {
+                if (rec_bodies.count(m.getMeshFrame().findBaseFrame()
+                        .getAbsolutePathString())) {
+                    mesh_orig.push_back(
+                            {m.getAbsolutePathString(), m.get_elastic_modulus()});
+                }
+            }
+            log_info("Sweep recovery is on: {} bodies, {} dampers and {} "
+                    "contact meshes can be changed.", (int)body_orig.size(),
+                    (int)damper_orig.size(), (int)mesh_orig.size());
+        }
+
+        // Sets the properties of steps B (scales b = 0 or 1, -1 original) and
+        // C (soft). The system has to be rebuilt after.
+        auto set_mods = [&](int b, bool soft) {
+            const double ds = b >= 0 ? get_recovery_damper_scales(b) : 1.0;
+            for (const BodyOrig& o : body_orig) {
+                Body& body = model.updComponent<Body>(o.path);
+                body.set_mass(o.mass *
+                        (b >= 0 ? get_recovery_mass_scales(b) : 1.0));
+                body.set_inertia(o.inertia *
+                        (b >= 0 ? get_recovery_inertia_scales(b) : 1.0));
+            }
+            for (const ValueOrig& o : damper_orig) {
+                model.updComponent<SpringGeneralizedForce>(o.path)
+                        .set_viscosity(o.value * ds);
+            }
+            for (const ValueOrig& o : mesh_orig) {
+                model.updComponent<Smith2018ContactMesh>(o.path)
+                        .set_elastic_modulus(o.value *
+                                (soft ? get_recovery_contact_modulus_scale()
+                                        : 1.0));
+            }
+            cur_b = b;
+            cur_soft = soft;
+        };
+
+        // Rebuilds the system (after properties changed) and returns the
+        // state of the new system with the time and the continuous states
+        // of old
+        auto rebuild_from = [&](const SimTK::State& old) -> SimTK::State {
+            sweep_timestepper.reset();
+            sweep_integrator.reset();
+            visualizer_closer.closeLater(model, "Sweeping: " + get_model_file());
+            SimTK::State s = model.initSystem();
+            setup_sweep_viz();
+            prescribe_muscles(s);
+            OPENSIM_THROW_IF(s.getNY() != old.getNY(), Exception,
+                    "The recovery of the sweep simulation changed the number "
+                    "of states.")
+            s.updY() = old.getY();
+            s.setTime(old.getTime());
+            return s;
+        };
+
+        // Integrator settings and scales of a recovery step (-1: normal)
+        auto configure = [&](int rung, int& b, bool& soft) {
+            itg_accuracy = base_accuracy;
+            itg_max_step = SimTK::Infinity;
+            itg_init_step = -1;
+            b = -1;
+            soft = false;
+            if (rung >= 1) {
+                itg_max_step = sweep_dt / 10;
+                itg_init_step = sweep_dt * 1e-3;
+            }
+            if (rung >= 2) {
+                itg_accuracy = std::max(base_accuracy,
+                        std::min(10 * base_accuracy, 1e-2));
+            }
+            if (rung == 3) b = 0;
+            if (rung >= 4) b = 1;
+            if (rung == 5) soft = true;
+        };
+
+        // Step D: the coupled coordinate is held at the next pose, the
+        // model settles there (like the settling simulation), then the
+        // sweep goes on from that state at t_target.
+        auto hop = [&](const SimTK::State& from, double t_target) {
+            const double q_target =
+                    sweep_func.calcValue(SimTK::Vector(1, t_target));
+            coupled_coord.set_prescribed_function(Constant(q_target));
+            SimTK::State s = rebuild_from(from);
+            s.updU() = 0;
+            start_integrator(s);
+
+            std::vector<std::string> paths;
+            for (int k = 0; k < _n_secondary_coord; ++k) {
+                paths.push_back(_secondary_coord_path[k]);
+            }
+            for (int k = 0; k < _n_constrained_coord; ++k) {
+                paths.push_back(_constrained_coord_path[k]);
+            }
+            std::vector<double> prev(paths.size());
+            for (size_t k = 0; k < paths.size(); ++k) {
+                prev[k] = model.getComponent<Coordinate>(paths[k]).getValue(s);
+            }
+            SettleMonitor monitor(
+                    get_secondary_constraint_sim_settle_threshold(),
+                    get_secondary_constraint_sim_settle_plateau_tolerance(),
+                    get_secondary_constraint_sim_settle_plateau_window());
+            const double dt = get_settling_sim_dt();
+            const int max_j = std::max(1,
+                    (int)std::ceil(get_recovery_hop_max_time() / dt));
+            const double t0 = s.getTime();
+            bool settled = false;
+            for (int j = 1; !settled && j <= max_j; ++j) {
+                sweep_timestepper->stepTo(t0 + j * dt);
+                const SimTK::State& cs = sweep_timestepper->getState();
+                double max_delta = 0;
+                for (size_t k = 0; k < paths.size(); ++k) {
+                    const double v =
+                            model.getComponent<Coordinate>(paths[k]).getValue(cs);
+                    max_delta = std::max(max_delta, std::abs(v - prev[k]));
+                    prev[k] = v;
+                }
+                settled = monitor.update(max_delta);
+            }
+            const SimTK::State settled_state = sweep_timestepper->getState();
+            coupled_coord.set_prescribed_function(sweep_func);
+            SimTK::State s2 = rebuild_from(settled_state);
+            s2.updU() = 0;
+            s2.setTime(t_target);
+            start_integrator(s2);
+        };
+
+        // Advances the sweep to t_target. Returns true if a recovery step was
+        // needed. Throws if the integrator fails and the recovery is off or
+        // every step of it fails.
+        auto advance = [&](double t_target) -> bool {
+            std::exception_ptr first_error;
+            std::string first_what;
+            try {
+                sweep_timestepper->stepTo(t_target);
+                return false;
+            }
+            catch (const std::exception& e) {
+                first_error = std::current_exception();
+                first_what = e.what();
                 // Keep the last output state and the state at which the
                 // integrator failed, to find out what the contact or ligament
                 // forces do there.
                 try {
                     StatesTrajectory failed;
                     failed.append(state);
-                    failed.append(sweep_timestepper.getState());
+                    failed.append(sweep_timestepper->getState());
                     const std::string path = get_results_directory() +
                             "/sweep_integrator_failure_states.sto";
                     STOFileAdapter::write(failed.exportToTable(model), path);
-                    log_error("The sweep integrator failed at t = {}. The "
-                              "last output state and the state at the "
+                    log_error("The sweep integrator failed at t = {} ({}). "
+                              "The last output state and the state at the "
                               "failure are in {}.",
-                              sweep_timestepper.getState().getTime(), path);
+                              sweep_timestepper->getState().getTime(),
+                              first_what, path);
                 }
                 catch (...) {}
-                throw;
+                if (!recovery) throw;
             }
-            state = sweep_timestepper.getState();
+
+            // Recovery
+            const SimTK::State last_good = state;
+            bool rebuilt = false; // last_good is then of the previous system
+            // Two passes of the steps. Pass 0: from the step after the one
+            // in use (from A1 if none is). Pass 1 (only if a change of the
+            // bodies, dampers or contact is on): all steps again, with these
+            // changes kept, and step D with the softer contact.
+            const int keep_b = cur_b;
+            const bool keep_soft = cur_soft;
+            const int first_rung = active_rung >= 1 ? active_rung + 1 : 0;
+            for (int pass = 0; pass < 2; ++pass) {
+              if (pass == 1 && keep_b == -1 && !keep_soft) break;
+              for (int rung = pass == 0 ? first_rung : 0; rung < n_rungs;
+                      ++rung) {
+                log_warn("Sweep recovery at t = {}: trying step {}{}.",
+                        last_good.getTime(), rung_names[rung],
+                        pass == 1 ? " (changes kept)" : "");
+                try {
+                    int b; bool soft;
+                    configure(rung == 6 ? (pass == 1 ? 5 : 4) : rung, b, soft);
+                    if (pass == 1) {
+                        b = std::max(b, keep_b);
+                        soft = soft || keep_soft;
+                    }
+                    SimTK::State s = last_good;
+                    if (b != cur_b || soft != cur_soft || rebuilt) {
+                        set_mods(b, soft);
+                        rebuilt = true;
+                        s = rebuild_from(last_good);
+                    }
+                    if (rung == 6) {
+                        hop(s, t_target);
+                    }
+                    else {
+                        start_integrator(s);
+                        sweep_timestepper->stepTo(t_target);
+                    }
+                    active_rung = (rung >= 1 || cur_b != -1 || cur_soft)
+                            ? std::max(rung, 1) : -1;
+                    hold_left = get_recovery_hold_outputs();
+                    log_warn("Sweep recovery step {} worked at t = {}.",
+                            rung_names[rung], t_target);
+                    return true;
+                }
+                catch (const std::exception& e) {
+                    log_warn("Sweep recovery step {} failed: {}",
+                            rung_names[rung], e.what());
+                }
+              }
+            }
+
+            // E: nothing worked. Keep what is done.
+            try {
+                if (q_table.getNumRows() > 0) {
+                    const std::string path = get_results_directory() +
+                            "/sweep_partial_coordinates.sto";
+                    STOFileAdapter::write(q_table, path);
+                    double reached = q_table.getDependentColumn(
+                            get_secondary_coupled_coordinate() + "/value")
+                            (int(q_table.getNumRows()) - 1);
+                    if (coupled_coord.getMotionType() ==
+                            Coordinate::Rotational) {
+                        reached = SimTK::convertRadiansToDegrees(reached);
+                    }
+                    log_error("Every sweep recovery step failed at t = {}. "
+                              "The {} outputs done (up to {} of {}) are in "
+                              "{}.", t_target, (int)q_table.getNumRows(),
+                              reached, get_secondary_coupled_coordinate(),
+                              path);
+                }
+            }
+            catch (...) {}
+            std::rethrow_exception(first_error);
+        };
+
+        for (int i = 0; i <= nSteps; ++i) {
+
+            visualizer_closer.closeDue();
+            const bool recovered = advance(sweep_start + i*sweep_dt);
+            state = sweep_timestepper->getState();
 
             // Information as text in the window of the sweep
             if (get_use_visualizer() && get_show_solver_info_in_visualizer()) {
-                const SimTK::Integrator& itg = sweep_timestepper.getIntegrator();
+                const SimTK::Integrator& itg = sweep_timestepper->getIntegrator();
                 const bool rotational = coupled_coord.getMotionType() ==
                         Coordinate::Rotational;
                 sweep_info->rows.clear();
@@ -844,6 +1172,10 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
                         itg.getPreviousStepSizeTaken());
                 addInfoRow(*sweep_info, "Steps", "%d (%d error test failures)",
                         itg.getNumStepsTaken(), itg.getNumErrorTestFailures());
+                if (active_rung >= 1) {
+                    addInfoRow(*sweep_info, "Recovery", "%s",
+                            rung_names[active_rung]);
+                }
                 // contact forces per knee (see VisualizerInfo.h)
                 if (!sweep_contact_failed) {
                     model.realizeDynamics(state);
@@ -885,6 +1217,28 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
 
             log_info("{}",state.getTime());
             if (get_verbose() > 0) printDebugInfo(model, state);
+
+            // The recovery change is undone after recovery_hold_outputs
+            // outputs without a failure.
+            if (recovery && active_rung >= 1 && !recovered &&
+                    --hold_left <= 0) {
+                log_info("Sweep recovery: back to the normal settings at "
+                        "t = {}.", state.getTime());
+                int b; bool soft;
+                configure(-1, b, soft);
+                SimTK::State s = state;
+                if (cur_b != -1 || cur_soft) {
+                    set_mods(-1, false);
+                    s = rebuild_from(state);
+                }
+                start_integrator(s);
+                state = sweep_timestepper->getState();
+                active_rung = -1;
+            }
+        }
+        // the properties are back to the original values for the next sweep
+        if (recovery && (cur_b != -1 || cur_soft)) {
+            set_mods(-1, false);
         }
         // this sweep is done
         visualizer_closer.closeLater(model, "Sweeping: " + get_model_file());

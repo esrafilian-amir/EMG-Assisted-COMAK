@@ -89,6 +89,14 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
 
 ## New options
 
+- `COMAKInverseKinematicsTool.secondary_constraint_sim_recovery` (false default): when the sweep integrator fails
+  (CPodes corrector failure at a stiff contact), the interval is retried from the last good output through a ladder:
+  restart, small step, looser accuracy, heavier patella and menisci (mass, inertia, damper scales), softer contact, and
+  a quasi-static settle at the next pose. The changes are undone after `recovery_hold_outputs` clean outputs. Tuning:
+  `recovery_mass_scales`, `recovery_inertia_scales`, `recovery_damper_scales`, `recovery_contact_modulus_scale`,
+  `recovery_bodies`, `recovery_hop_max_time`. If every step fails, `sweep_partial_coordinates.sto` holds the outputs
+  reached and the tool rethrows; `sweep_integrator_failure_states.sto` is written on every failure. 13 of 15 failed
+  test sweeps finish with it.
 - `Smith2018ArticularContactForce.contact_method` (`distance_field` default, or `ray_cast`, the original ray method) and
   `field_voxel_size` (0.001 m): `distance_field` reads the depth of each casting triangle center below the
   target surface from a signed distance grid of the target mesh (pseudo-normal sign, works for open and closed

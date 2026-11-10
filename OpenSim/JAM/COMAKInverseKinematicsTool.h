@@ -177,6 +177,54 @@ public:
         "for minutes at a stiff contact. If -1, then there is no limit. The "
         "default value is 3000.")
 
+    OpenSim_DECLARE_PROPERTY(secondary_constraint_sim_recovery, bool,
+        "If true, a sweep simulation whose integrator fails (e.g. the step "
+        "size collapses at a stiff patellofemoral contact) does not stop. The "
+        "interval that failed is retried from the last output state with a "
+        "ladder of recovery steps: A1 a restarted integrator, A2 a small "
+        "step size, A3 a looser accuracy, B1 and B2 a heavier patella "
+        "(mass, inertia and damper scales below), C a softer patella "
+        "contact, D a quasi-static settle at the next pose. A change stays for "
+        "recovery_hold_outputs outputs and is then undone, so the rest of the "
+        "sweep is as without it. If every step fails (E), the coordinates "
+        "of the outputs done so far are written to "
+        "sweep_partial_coordinates.sto in the results directory and the "
+        "tool stops with the integrator error. Nothing changes while the "
+        "sweep does not fail. The default value is false.")
+
+    OpenSim_DECLARE_PROPERTY(recovery_hold_outputs, int,
+        "Number of sweep outputs (sweep_dt) a recovery change (step A2 and "
+        "above) is kept after the sweep passed the failure. The default value "
+        "is 20.")
+
+    OpenSim_DECLARE_LIST_PROPERTY_SIZE(recovery_mass_scales, double, 2,
+        "Mass scale of the recovery bodies in steps B1 and B2. The default "
+        "values are 6 and 18.")
+
+    OpenSim_DECLARE_LIST_PROPERTY_SIZE(recovery_inertia_scales, double, 2,
+        "Inertia scale of the recovery bodies in steps B1 and B2. The default "
+        "values are 50 and 150.")
+
+    OpenSim_DECLARE_LIST_PROPERTY_SIZE(recovery_damper_scales, double, 2,
+        "Scale of the viscosity of the SpringGeneralizedForce dampers of the "
+        "coordinates of the recovery bodies in steps B1 and B2. The default "
+        "values are 2 and 6.")
+
+    OpenSim_DECLARE_PROPERTY(recovery_contact_modulus_scale, double,
+        "Scale of the elastic modulus of the contact meshes of the recovery "
+        "bodies in step C. The default value is 0.3.")
+
+    OpenSim_DECLARE_LIST_PROPERTY(recovery_bodies, std::string,
+        "Bodies (path, e.g. /bodyset/patella_r, or name) that get the heavier "
+        "mass, inertia, dampers and softer contact in steps B and C. If empty, "
+        "these are the child bodies of the joints of the secondary and "
+        "constrained coordinates whose name contains 'patella' or 'menisc' "
+        "(not the tibia).")
+
+    OpenSim_DECLARE_PROPERTY(recovery_hop_max_time, double,
+        "Maximum time in seconds of the quasi-static settle of step D. The "
+        "default value is 1.0.")
+
      OpenSim_DECLARE_PROPERTY(
          secondary_constraint_function_file, std::string, 
         "Name for .xml results file where secondary constraint functions "
