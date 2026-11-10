@@ -13273,7 +13273,7 @@
 					<!--Coordinate value at which spring produces no force.-->
 					<rest_length>0</rest_length>
 					<!--Damping constant.-->
-					<viscosity>0.07</viscosity>
+					<viscosity>0.05</viscosity>
 				</SpringGeneralizedForce>
 				<SpringGeneralizedForce name="pf_tilt_l">
 					<!--List of components that this component owns and serializes.-->
