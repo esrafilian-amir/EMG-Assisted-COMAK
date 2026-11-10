@@ -106,7 +106,7 @@ void COMAKInverseKinematicsTool::constructProperties()
     constructProperty_secondary_coupled_coordinate_stop_value(110.0);
     constructProperty_secondary_constraint_sim_integrator_accuracy(1e-6);
     constructProperty_settling_sim_integrator_accuracy(1e-10);
-    constructProperty_secondary_constraint_sim_internal_step_limit(-1);
+    constructProperty_secondary_constraint_sim_internal_step_limit(3000);
     constructProperty_constraint_function_num_interpolation_points(20);
     constructProperty_secondary_constraint_function_file(
         "secondary_coordinate_constraint_functions.xml");

@@ -171,8 +171,11 @@ public:
 
     OpenSim_DECLARE_PROPERTY(
         secondary_constraint_sim_internal_step_limit, int,
-        "Limit on the number of internal steps that can be taken by BDF "
-        "integrator. If -1, then there is no limit. The Default value is -1")
+        "Limit on the number of internal steps that the BDF integrator of the "
+        "settling and sweep simulations can take between two outputs. A "
+        "simulation that reaches it stops with an error instead of crawling "
+        "for minutes at a stiff contact. If -1, then there is no limit. The "
+        "default value is 3000.")
 
      OpenSim_DECLARE_PROPERTY(
          secondary_constraint_function_file, std::string, 

@@ -6,6 +6,10 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
 ## Behaviour changes (defaults)
 
 - `Smith2018ArticularContactForce.contact_method` now defaults to `distance_field` (was `ray_cast`) for every model that does not set it; set `ray_cast` in the model (or `set_contact_method("ray_cast")`) to get the original ray method. Results of such models change by about 0.5 %.
+- `COMAKInverseKinematicsTool.secondary_constraint_sim_internal_step_limit` is 3000 (was -1, no limit): a settling
+  or sweep simulation that needs more internal steps than that between two outputs stops with the integrator
+  error (the run goes on as for any failed sweep) instead of crawling for minutes at a stiff contact. Set -1 for
+  no limit.
 - `COMAKTool.convergence_criterion` is `force`: a time step has converged when the unbalanced
   generalized force `M (udot - observed)` is below `force_tolerance_rotation` (0.1 N*m) and
   `force_tolerance_translation` (2 N; the residual of the models with menisci stalls just above 1 N). Use `acceleration` for the previous test.
