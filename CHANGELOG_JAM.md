@@ -94,7 +94,7 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
   restart, small step, looser accuracy, heavier patella and menisci (mass, inertia, damper scales), softer contact, and
   a quasi-static settle at the next pose. The changes are undone after `recovery_hold_outputs` clean outputs. Tuning:
   `recovery_mass_scales`, `recovery_inertia_scales`, `recovery_damper_scales`, `recovery_contact_modulus_scale`,
-  `recovery_bodies`, `recovery_hop_max_time`. If every step fails, `sweep_partial_coordinates.sto` holds the outputs
+  `recovery_bodies`, `recovery_hop_max_time`. If every step fails, `sweep_partial_coordinates.sto` and `<function file>_partial.xml` (constraint functions, valid only up to the angle reached) hold the outputs
   reached and the tool rethrows; `sweep_integrator_failure_states.sto` is written on every failure. 13 of 15 failed
   test sweeps finish with it.
 - `Smith2018ArticularContactForce.contact_method` (`distance_field` default, or `ray_cast`, the original ray method) and

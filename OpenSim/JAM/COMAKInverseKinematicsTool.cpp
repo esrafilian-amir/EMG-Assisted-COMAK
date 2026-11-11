@@ -726,6 +726,138 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
     // target_value (quadratic in time, starting at rest) from the settled
     // state. The coordinates are recorded in the returned table; the states
     // and ligament outputs only if record is true.
+    // Fits the constraint functions of a table of sweep results (the
+    // coupled coordinate must increase) and prints them to file.
+    auto fit_constraint_functions = [&](const TimeSeriesTable& table,
+            const std::string& file) {
+        //Compute Coupled Constraint Functions
+        std::vector<double> time = table.getIndependentColumn();
+    
+        SimTK::Vector ind_data = table.getDependentColumn(get_secondary_coupled_coordinate() + "/value");
+    
+        SimTK::Matrix data((int)time.size(), _n_secondary_coord + _n_constrained_coord);
+    
+        for (int j = 0; j < _n_secondary_coord; ++j) {
+            std::string path = _secondary_coord_path[j];
+            SimTK::Vector col_data = table.getDependentColumn(path + "/value");
+    
+            for (int i = 0; i < (int)time.size(); ++i) {
+                data(i, j) = col_data(i);
+    
+            }
+        }
+        for (int j = 0; j < _n_constrained_coord; ++j) {
+            std::string path = _constrained_coord_path[j];
+            SimTK::Vector col_data = table.getDependentColumn(path + "/value");
+    
+            for (int i = 0; i < (int)time.size(); ++i) {
+                data(i, j + _n_secondary_coord) = col_data(i);
+            }
+        }
+    
+        for (int i = 1; i < ind_data.size(); ++i) {
+            OPENSIM_THROW_IF(ind_data(i) <= ind_data(i - 1), Exception,
+                    "The secondary_coupled_coordinate must increase during the "
+                    "sweep simulation to compute the constraint functions. Set "
+                    "secondary_coupled_coordinate_stop_value greater than "
+                    "secondary_coupled_coordinate_start_value.")
+        }
+    
+        for (int j = 0; j < _n_constrained_coord; ++j) {
+            const int last = data.nrow() - 1;
+            const double ind_range = ind_data(last) - ind_data(0);
+            const double change =
+                    data(last, j + _n_secondary_coord) - data(0, j + _n_secondary_coord);
+            const double ratio = (ind_range != 0) ? change / ind_range : 0.0;
+            log_info("Constrained coordinate {} changed by {} over the sweep, "
+                    "{} x the change of {}.",
+                    _constrained_coord_path[j], change, ratio,
+                    get_secondary_coupled_coordinate());
+            if (std::abs(ratio) < 0.25) {
+                log_warn("Constrained coordinate {} barely moved with {}. Check "
+                        "the ligament slack lengths and the contact geometry "
+                        "(set print_secondary_constraint_sim_results to write "
+                        "the ligament lengths and strains of the sweep).",
+                        _constrained_coord_path[j],
+                        get_secondary_coupled_coordinate());
+            }
+        }
+    
+        double ind_max = SimTK::max(ind_data);
+        double ind_min = SimTK::min(ind_data);
+    
+        int npts = get_constraint_function_num_interpolation_points();
+        OPENSIM_THROW_IF(npts < 2, Exception,
+                "constraint_function_num_interpolation_points must be at least 2.")
+        double step = (ind_max - ind_min) / (npts - 1);
+    
+        SimTK::Vector ind_pt_data(npts);
+    
+        for (int i = 0; i < npts; ++i) {
+            ind_pt_data(i) = ind_min + i * step;
+        }
+    
+        _secondary_constraint_functions.clearAndDestroy();
+    
+        for (int j = 0; j < _n_secondary_coord; ++j) {
+            std::string path = _secondary_coord_path[j];
+    
+            SimTK::Vector secondary_data = data(j);
+    
+            SimmSpline data_fit = SimmSpline(secondary_data.size(), &ind_data[0], &secondary_data[0]);
+            //GCVSpline* spline = new GCVSpline(5, secondary_data.nrow(), &ind_data[0], &secondary_data[0], path, -1);
+            //GCVSpline* spline = new GCVSpline();
+            //spline->setDegree(5);
+            //spline->set
+            //SimmSpline* spline = new SimmSpline();
+            //spline->setName(path);
+    
+            SimTK::Vector dep_interp_pts(npts);
+    
+            for (int i = 0; i < npts; ++i) {
+                //spline->addPoint(ind_pt_data(i), data_fit.calcValue(SimTK::Vector(1, ind_pt_data(i))));
+                dep_interp_pts(i) = data_fit.calcValue(SimTK::Vector(1, ind_pt_data(i)));
+            }
+            SimmSpline* spline = new SimmSpline(npts, &ind_pt_data[0], &dep_interp_pts[0],path);
+            
+            //GCVSpline* spline = new GCVSpline(5, npts, &ind_data[0], &dep_interp_pts[0], path, -1);
+    
+            _secondary_constraint_functions.adoptAndAppend(spline);
+        }
+    
+        for (int j = 0; j < _n_constrained_coord; ++j) {
+            std::string path = _constrained_coord_path[j];
+    
+             SimTK::Vector secondary_data = data(j + _n_secondary_coord);
+    
+            SimmSpline data_fit = SimmSpline(
+                    secondary_data.size(), &ind_data[0], &secondary_data[0]);
+            // GCVSpline* spline = new GCVSpline(5, secondary_data.nrow(),
+            // &ind_data[0], &secondary_data[0], path, -1); GCVSpline* spline = new
+            // GCVSpline(); spline->setDegree(5); spline->set SimmSpline* spline =
+            // new SimmSpline(); spline->setName(path);
+    
+            SimTK::Vector dep_interp_pts(npts);
+    
+            for (int i = 0; i < npts; ++i) {
+                // spline->addPoint(ind_pt_data(i),
+                // data_fit.calcValue(SimTK::Vector(1, ind_pt_data(i))));
+                dep_interp_pts(i) =
+                        data_fit.calcValue(SimTK::Vector(1, ind_pt_data(i)));
+            }
+            SimmSpline* spline =
+                    new SimmSpline(npts, &ind_pt_data[0], &dep_interp_pts[0], path);
+    
+            // GCVSpline* spline = new GCVSpline(5, npts, &ind_data[0],
+            // &dep_interp_pts[0], path, -1);
+    
+            _secondary_constraint_functions.adoptAndAppend(spline);
+        }
+    
+        //Print Secondardy Constraint Functions to file
+        _secondary_constraint_functions.print(file);
+    };
+
     auto run_sweep = [&](double target_value, double sweep_time,
             bool record) -> TimeSeriesTable {
         //setup quadratic sweep function
@@ -1138,9 +1270,29 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
                               "{}.", t_target, (int)q_table.getNumRows(),
                               reached, get_secondary_coupled_coordinate(),
                               path);
+
+                    // The constraint functions up to the angle reached, in
+                    // a file of their own (not the usual file name, so a
+                    // partial result is not taken for a complete one).
+                    // Only for the sweep up, which starts at the settled
+                    // pose; they are valid up to the angle reached.
+                    if (record && q_table.getNumRows() > 2) {
+                        std::string fn = get_secondary_constraint_function_file();
+                        const size_t dot = fn.rfind('.');
+                        fn = (dot == std::string::npos) ? fn + "_partial"
+                                : fn.substr(0, dot) + "_partial" + fn.substr(dot);
+                        fit_constraint_functions(q_table, fn);
+                        log_error("The constraint functions up to {} of {} "
+                                  "are in {}. They are valid only up to "
+                                  "that angle.", reached,
+                                  get_secondary_coupled_coordinate(), fn);
+                    }
                 }
             }
-            catch (...) {}
+            catch (const std::exception& e) {
+                log_warn("The partial constraint functions were not "
+                         "written: {}", e.what());
+            }
             std::rethrow_exception(first_error);
         };
 
@@ -1279,132 +1431,7 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
         q_table = joined;
     }
 
-    //Compute Coupled Constraint Functions
-    std::vector<double> time = q_table.getIndependentColumn();
-
-    SimTK::Vector ind_data = q_table.getDependentColumn(get_secondary_coupled_coordinate() + "/value");
-
-    SimTK::Matrix data((int)time.size(), _n_secondary_coord + _n_constrained_coord);
-
-    for (int j = 0; j < _n_secondary_coord; ++j) {
-        std::string path = _secondary_coord_path[j];
-        SimTK::Vector col_data = q_table.getDependentColumn(path + "/value");
-
-        for (int i = 0; i < (int)time.size(); ++i) {
-            data(i, j) = col_data(i);
-
-        }
-    }
-    for (int j = 0; j < _n_constrained_coord; ++j) {
-        std::string path = _constrained_coord_path[j];
-        SimTK::Vector col_data = q_table.getDependentColumn(path + "/value");
-
-        for (int i = 0; i < (int)time.size(); ++i) {
-            data(i, j + _n_secondary_coord) = col_data(i);
-        }
-    }
-
-    for (int i = 1; i < ind_data.size(); ++i) {
-        OPENSIM_THROW_IF(ind_data(i) <= ind_data(i - 1), Exception,
-                "The secondary_coupled_coordinate must increase during the "
-                "sweep simulation to compute the constraint functions. Set "
-                "secondary_coupled_coordinate_stop_value greater than "
-                "secondary_coupled_coordinate_start_value.")
-    }
-
-    for (int j = 0; j < _n_constrained_coord; ++j) {
-        const int last = data.nrow() - 1;
-        const double ind_range = ind_data(last) - ind_data(0);
-        const double change =
-                data(last, j + _n_secondary_coord) - data(0, j + _n_secondary_coord);
-        const double ratio = (ind_range != 0) ? change / ind_range : 0.0;
-        log_info("Constrained coordinate {} changed by {} over the sweep, "
-                "{} x the change of {}.",
-                _constrained_coord_path[j], change, ratio,
-                get_secondary_coupled_coordinate());
-        if (std::abs(ratio) < 0.25) {
-            log_warn("Constrained coordinate {} barely moved with {}. Check "
-                    "the ligament slack lengths and the contact geometry "
-                    "(set print_secondary_constraint_sim_results to write "
-                    "the ligament lengths and strains of the sweep).",
-                    _constrained_coord_path[j],
-                    get_secondary_coupled_coordinate());
-        }
-    }
-
-    double ind_max = SimTK::max(ind_data);
-    double ind_min = SimTK::min(ind_data);
-
-    int npts = get_constraint_function_num_interpolation_points();
-    OPENSIM_THROW_IF(npts < 2, Exception,
-            "constraint_function_num_interpolation_points must be at least 2.")
-    double step = (ind_max - ind_min) / (npts - 1);
-
-    SimTK::Vector ind_pt_data(npts);
-
-    for (int i = 0; i < npts; ++i) {
-        ind_pt_data(i) = ind_min + i * step;
-    }
-
-    _secondary_constraint_functions.clearAndDestroy();
-
-    for (int j = 0; j < _n_secondary_coord; ++j) {
-        std::string path = _secondary_coord_path[j];
-
-        SimTK::Vector secondary_data = data(j);
-
-        SimmSpline data_fit = SimmSpline(secondary_data.size(), &ind_data[0], &secondary_data[0]);
-        //GCVSpline* spline = new GCVSpline(5, secondary_data.nrow(), &ind_data[0], &secondary_data[0], path, -1);
-        //GCVSpline* spline = new GCVSpline();
-        //spline->setDegree(5);
-        //spline->set
-        //SimmSpline* spline = new SimmSpline();
-        //spline->setName(path);
-
-        SimTK::Vector dep_interp_pts(npts);
-
-        for (int i = 0; i < npts; ++i) {
-            //spline->addPoint(ind_pt_data(i), data_fit.calcValue(SimTK::Vector(1, ind_pt_data(i))));
-            dep_interp_pts(i) = data_fit.calcValue(SimTK::Vector(1, ind_pt_data(i)));
-        }
-        SimmSpline* spline = new SimmSpline(npts, &ind_pt_data[0], &dep_interp_pts[0],path);
-        
-        //GCVSpline* spline = new GCVSpline(5, npts, &ind_data[0], &dep_interp_pts[0], path, -1);
-
-        _secondary_constraint_functions.adoptAndAppend(spline);
-    }
-
-    for (int j = 0; j < _n_constrained_coord; ++j) {
-        std::string path = _constrained_coord_path[j];
-
-         SimTK::Vector secondary_data = data(j + _n_secondary_coord);
-
-        SimmSpline data_fit = SimmSpline(
-                secondary_data.size(), &ind_data[0], &secondary_data[0]);
-        // GCVSpline* spline = new GCVSpline(5, secondary_data.nrow(),
-        // &ind_data[0], &secondary_data[0], path, -1); GCVSpline* spline = new
-        // GCVSpline(); spline->setDegree(5); spline->set SimmSpline* spline =
-        // new SimmSpline(); spline->setName(path);
-
-        SimTK::Vector dep_interp_pts(npts);
-
-        for (int i = 0; i < npts; ++i) {
-            // spline->addPoint(ind_pt_data(i),
-            // data_fit.calcValue(SimTK::Vector(1, ind_pt_data(i))));
-            dep_interp_pts(i) =
-                    data_fit.calcValue(SimTK::Vector(1, ind_pt_data(i)));
-        }
-        SimmSpline* spline =
-                new SimmSpline(npts, &ind_pt_data[0], &dep_interp_pts[0], path);
-
-        // GCVSpline* spline = new GCVSpline(5, npts, &ind_data[0],
-        // &dep_interp_pts[0], path, -1);
-
-        _secondary_constraint_functions.adoptAndAppend(spline);
-    }
-
-    //Print Secondardy Constraint Functions to file
-    _secondary_constraint_functions.print(get_secondary_constraint_function_file());
+    fit_constraint_functions(q_table, get_secondary_constraint_function_file());
 
     //Write Outputs
     if (get_print_secondary_constraint_sim_results()) {
