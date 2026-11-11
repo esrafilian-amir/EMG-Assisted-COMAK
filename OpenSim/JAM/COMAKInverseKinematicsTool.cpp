@@ -44,6 +44,9 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
+#include <cstdio>
+#include <cmath>
 #include <exception>
 #include <memory>
 #include <set>
@@ -726,6 +729,14 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
     // target_value (quadratic in time, starting at rest) from the settled
     // state. The coordinates are recorded in the returned table; the states
     // and ligament outputs only if record is true.
+    // The values written to the file have 8 significant digits (the full
+    // double precision is only rounding noise).
+    auto round_sig = [](double v) {
+        if (v == 0 || !std::isfinite(v)) { return v; }
+        char buf[40];
+        std::snprintf(buf, sizeof(buf), "%.7e", v);
+        return std::strtod(buf, nullptr);
+    };
     // Fits the constraint functions of a table of sweep results (the
     // coupled coordinate must increase) and prints them to file.
     auto fit_constraint_functions = [&](const TimeSeriesTable& table,
@@ -794,7 +805,7 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
         SimTK::Vector ind_pt_data(npts);
     
         for (int i = 0; i < npts; ++i) {
-            ind_pt_data(i) = ind_min + i * step;
+            ind_pt_data(i) = round_sig(ind_min + i * step);
         }
     
         _secondary_constraint_functions.clearAndDestroy();
@@ -816,7 +827,8 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
     
             for (int i = 0; i < npts; ++i) {
                 //spline->addPoint(ind_pt_data(i), data_fit.calcValue(SimTK::Vector(1, ind_pt_data(i))));
-                dep_interp_pts(i) = data_fit.calcValue(SimTK::Vector(1, ind_pt_data(i)));
+                dep_interp_pts(i) = round_sig(data_fit.calcValue(
+                    SimTK::Vector(1, ind_pt_data(i))));
             }
             SimmSpline* spline = new SimmSpline(npts, &ind_pt_data[0], &dep_interp_pts[0],path);
             
@@ -843,7 +855,8 @@ void COMAKInverseKinematicsTool::performIKSecondaryConstraintSimulation() {
                 // spline->addPoint(ind_pt_data(i),
                 // data_fit.calcValue(SimTK::Vector(1, ind_pt_data(i))));
                 dep_interp_pts(i) =
-                        data_fit.calcValue(SimTK::Vector(1, ind_pt_data(i)));
+                        round_sig(data_fit.calcValue(
+                    SimTK::Vector(1, ind_pt_data(i))));
             }
             SimmSpline* spline =
                     new SimmSpline(npts, &ind_pt_data[0], &dep_interp_pts[0], path);
