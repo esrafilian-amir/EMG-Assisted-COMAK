@@ -89,7 +89,7 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
 
 ## New options
 
-- `COMAKInverseKinematicsTool.secondary_constraint_sim_recovery` (false default): when the sweep integrator fails
+- `COMAKInverseKinematicsTool.secondary_constraint_sim_recovery` (true default; set false to stop at the first integrator failure): when the sweep integrator fails
   (CPodes corrector failure at a stiff contact), the interval is retried from the last good output through a ladder:
   restart, small step, looser accuracy, heavier patella and menisci (mass, inertia, damper scales), softer contact, and
   a quasi-static settle at the next pose. The changes are undone after `recovery_hold_outputs` clean outputs. Tuning:

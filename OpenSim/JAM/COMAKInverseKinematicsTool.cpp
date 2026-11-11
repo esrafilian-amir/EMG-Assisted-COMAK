@@ -112,7 +112,7 @@ void COMAKInverseKinematicsTool::constructProperties()
     constructProperty_secondary_constraint_sim_integrator_accuracy(1e-6);
     constructProperty_settling_sim_integrator_accuracy(1e-10);
     constructProperty_secondary_constraint_sim_internal_step_limit(3000);
-    constructProperty_secondary_constraint_sim_recovery(false);
+    constructProperty_secondary_constraint_sim_recovery(true);
     constructProperty_recovery_hold_outputs(20);
     {
         Array<double> mass_scales(6.0, 2);

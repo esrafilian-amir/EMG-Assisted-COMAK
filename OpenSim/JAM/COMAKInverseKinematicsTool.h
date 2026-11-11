@@ -190,7 +190,7 @@ public:
         "of the outputs done so far are written to "
         "sweep_partial_coordinates.sto in the results directory and the "
         "tool stops with the integrator error. Nothing changes while the "
-        "sweep does not fail. The default value is false.")
+        "sweep does not fail. The default value is true.")
 
     OpenSim_DECLARE_PROPERTY(recovery_hold_outputs, int,
         "Number of sweep outputs (sweep_dt) a recovery change (step A2 and "
