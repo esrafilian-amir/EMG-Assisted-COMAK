@@ -11,15 +11,15 @@ Run `exampleContactModels.m` (OpenSim configured for MATLAB, as for the other ex
 script, or set the variable before running it:
 
 ```
-models_to_run = {'lenhart2015','lenhart2015_contact_tuned'};   % default {}: all five models
+models_to_run = {'lenhart2015','lenhart2015_SDF'};   % default {}: all five models
 stages = 'report';        % 'all' (default), 'pipeline', 'analyze' or 'report'
 skip_existing = true;     % do not run again a model that already has a COMAK states file
 results_dir = 'C:/my/results';   % default: the results folder next to the script
 exampleContactModels
 ```
 
-Models: `lenhart2015`, `lenhart2015_contact_tuned` (distance field in `tf_contact` and `pf_contact`, thickness smoothing 10),
-`smith2019`, `smith2019_contact_tuned`, `smith2019_contact_tuned_nonlinear` (the tuned models are next to the originals in
+Models: `lenhart2015`, `lenhart2015_SDF` (distance field in `tf_contact` and `pf_contact`, thickness smoothing 10),
+`smith2019`, `smith2019_SDF`, `smith2019_SDF_nonlinear` (the tuned models are next to the originals in
 `../models/healthy`). The workflow reuses the scripts `exampleWalking.m` and `exampleWalkingMeniscus.m` (the model and the paths are
 replaced, the visualizer is off, and the joint mechanics settings are added), so it stays identical to them.
 

@@ -17,8 +17,8 @@ Results (default: the results folder next to this script), one folder per model:
   results/contact_report.pdf, results/summary.csv
   results/<model>/inputs, comak-inverse-kinematics, comak, joint-mechanics, contact-analysis, log
 
-Models (see CASES): lenhart2015 and lenhart2015_contact_tuned (walking, no menisci),
-smith2019, smith2019_contact_tuned and smith2019_contact_tuned_nonlinear (walking with menisci).
+Models (see CASES): lenhart2015 and lenhart2015_SDF (walking, no menisci),
+smith2019, smith2019_SDF and smith2019_SDF_nonlinear (walking with menisci).
 OpenSim 4.6 with the JAM classes and its python package (opensim) must be importable.
 """
 import argparse
@@ -46,16 +46,16 @@ MEN = ("exampleWalkingMeniscus/exampleWalkingMeniscus.py", "healthy/smith2019/")
 CASES = {
     "lenhart2015": dict(example=WALK[0], model=WALK[1] + "lenhart2015.osim",
                         title="Walking, lenhart2015 (original)", pair=None),
-    "lenhart2015_contact_tuned": dict(
-        example=WALK[0], model=WALK[1] + "lenhart2015_contact_tuned.osim",
+    "lenhart2015_SDF": dict(
+        example=WALK[0], model=WALK[1] + "lenhart2015_SDF.osim",
         title="Walking, lenhart2015 (tuned contact)", pair="lenhart2015"),
     "smith2019": dict(example=MEN[0], model=MEN[1] + "smith2019.osim",
                       title="Walking with menisci, smith2019 (original, linear)", pair=None),
-    "smith2019_contact_tuned": dict(
-        example=MEN[0], model=MEN[1] + "smith2019_contact_tuned.osim",
+    "smith2019_SDF": dict(
+        example=MEN[0], model=MEN[1] + "smith2019_SDF.osim",
         title="Walking with menisci, smith2019 (tuned contact, linear)", pair="smith2019"),
-    "smith2019_contact_tuned_nonlinear": dict(
-        example=MEN[0], model=MEN[1] + "smith2019_contact_tuned_nonlinear.osim",
+    "smith2019_SDF_nonlinear": dict(
+        example=MEN[0], model=MEN[1] + "smith2019_SDF_nonlinear.osim",
         title="Walking with menisci, smith2019 (tuned contact, nonlinear)", pair="smith2019"),
 }
 FIELDS = ("force_x", "force_y", "force_z", "force_mag", "cop_x", "cop_y", "cop_z",
