@@ -31,7 +31,8 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
   contact force -25%, secondary coordinates moved by 4 mm; 0.01 reproduces the old behaviour).
 
 ## Added
-- New model `models/healthy/lenhart2015_Left_Knee/lenhart2015_Left_fixed.osim` (with `_contact_tuned`, `_reserve_actuators.xml`, `build_lenhart2015_Left_fixed.py` and `check_symmetry_lenhart2015_Left_fixed.py`): a left only knee that is the exact mirror of the right knee of `lenhart2015.osim` (checked element by element and by sweeping frames, ligaments and contact). The older `lenhart2015_Left.osim` is NOT a mirror (patella frame 8 mm off, patellofemoral contact force about 100 % different) and is kept only for compatibility; use `lenhart2015_Left_fixed.osim`.
+- Models renamed: the tuned models are now `lenhart2015_SDF.osim`, `smith2019_SDF.osim` and `smith2019_SDF_nonlinear.osim` (SDF = signed distance field contact; they were `_contact_tuned`), the left only knee model is `lenhart2015_Left.osim` (was `lenhart2015_Left_fixed.osim`) with `lenhart2015_Left_SDF.osim` (was `lenhart2015_Left_fixed_contact_tuned.osim`), and the build and check scripts lost `_fixed`. The not mirrored original left knee model is removed (git history; `build_lenhart2015_Left.py --base`). In the smith2019 and current models all muscle and ligament paths are visible when the model is opened (135 of 136 were hidden). The unused meshes of `lenhart2015_Left_Knee/Geometry` are removed.
+- New model `models/healthy/lenhart2015_Left_Knee/lenhart2015_Left.osim` (with `_SDF`, `_reserve_actuators.xml`, `build_lenhart2015_Left.py` and `check_symmetry_lenhart2015_Left.py`): a left only knee that is the exact mirror of the right knee of `lenhart2015.osim` (checked element by element and by sweeping frames, ligaments and contact). The original left knee model (the file of this name before the rename, see the git history) was NOT a mirror (patella frame 8 mm off, patellofemoral contact force about 100 % different) and was removed.
 
 
 - `COMAKTool` automatic time step cutback (like Abaqus): `max_cutback_levels` (4, 0 = off),
@@ -79,8 +80,8 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
   `pf_contact` with `thickness_smoothing_iterations` 10. End to end (IK sweep + COMAK, walking and walking with menisci,
   linear and nonlinear contact) the contact force, maximum pressure and center of pressure stay within 10% of the default
   (the center of pressure within 1% of the contact patch on average), all frames converge, and the IK sweep is 1.4 to 3.7
-  times faster. The tuned models are `lenhart2015_contact_tuned.osim`, `smith2019_contact_tuned.osim` and
-  `smith2019_contact_tuned_nonlinear.osim`.
+  times faster. The tuned models are `lenhart2015_SDF.osim`, `smith2019_SDF.osim` and
+  `smith2019_SDF_nonlinear.osim`.
 - `COMAKInverseKinematicsTool` writes `sweep_integrator_failure_states.sto` (the last output state and the state at the
   failure) to the results folder when the sweep integrator fails. `scripts/contact_tuning` has the tools to find which
   force has a jump there, and `scripts/contact_tuning/RESULTS.md` the walking trial comparison of the contact settings

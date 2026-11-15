@@ -1,9 +1,12 @@
-"""Builds lenhart2015_Left_fixed.osim (left-only knee model: the detailed left knee is the exact mirror of the detailed
-right knee of lenhart2015.osim; the right knee is the simple knee of lenhart2015_Left.osim) and
-lenhart2015_Left_fixed_contact_tuned.osim (contact tuning of the dual knee model: tune() of
+"""Builds lenhart2015_Left.osim (left-only knee model: the detailed left knee is the exact mirror of the detailed
+right knee of lenhart2015.osim; the right knee is the simple knee of the ORIGINAL left knee model) and
+lenhart2015_Left_SDF.osim (contact tuning of the dual knee model: tune() of
 ../lenhart2015_BothKnees/build_lenhart2015_BothKnees.py, imported).
 
-The left knee of lenhart2015_Left.osim is not a mirror of the right knee of lenhart2015.osim (see the header of
+The ORIGINAL left knee model (the former lenhart2015_Left.osim, 886680 bytes) is no longer in this folder: the name
+lenhart2015_Left.osim now belongs to the fixed model this script writes. The original is in the git history (the
+version of lenhart2015_Left_Knee/lenhart2015_Left.osim before the commit "Models: rename tuned models to _SDF"); pass
+it with --base. The left knee of the original is not a mirror of the right knee of lenhart2015.osim (see the header of
 build_lenhart2015_BothKnees.py): this script applies the same fixes to the left knee elements of this model:
   - patella joint pf_l: the extra offset frame femur_distal_l_offset (z = -0.008 m) is removed, the default of
     pf_tz_l is minus the default of pf_tz_r;
@@ -13,23 +16,26 @@ build_lenhart2015_BothKnees.py): this script applies the same fixes to the left 
 Every other left knee element is copied from the right one when it differs (the leaf values, except attachment points).
 Names in this model: the left forces have no prefix (tf_contact, pf_contact, MCLd1, ...), as in lenhart2015.osim.
 
-Usage: python build_lenhart2015_Left_fixed.py   (the base is lenhart2015_Left.osim; the output files are overwritten)
+Usage: python build_lenhart2015_Left.py --base original_left_knee_model.osim
+(the output files lenhart2015_Left.osim, lenhart2015_Left_SDF.osim and lenhart2015_Left_reserve_actuators.xml are
+overwritten; the base must not be one of them)
 """
 import importlib.util
 import os
 import re
+import sys
 import xml.etree.ElementTree as ET
 
 import opensim as osim
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 HEALTHY = os.path.dirname(HERE)
-BASE = os.path.join(HERE, 'lenhart2015_Left.osim')
+BASE = sys.argv[sys.argv.index('--base') + 1] if '--base' in sys.argv[:-1] else None
 RIGHT_MODEL = os.path.join(HEALTHY, 'lenhart2015', 'lenhart2015.osim')
-OUT = os.path.join(HERE, 'lenhart2015_Left_fixed.osim')
-OUT_TUNED = os.path.join(HERE, 'lenhart2015_Left_fixed_contact_tuned.osim')
+OUT = os.path.join(HERE, 'lenhart2015_Left.osim')
+OUT_TUNED = os.path.join(HERE, 'lenhart2015_Left_SDF.osim')
 RESERVES_RIGHT = os.path.join(HEALTHY, 'lenhart2015', 'lenhart2015_reserve_actuators.xml')
-OUT_RESERVES = os.path.join(HERE, 'lenhart2015_Left_fixed_reserve_actuators.xml')
+OUT_RESERVES = os.path.join(HERE, 'lenhart2015_Left_reserve_actuators.xml')
 
 _spec = importlib.util.spec_from_file_location(
     'build_both', os.path.join(HEALTHY, 'lenhart2015_BothKnees', 'build_lenhart2015_BothKnees.py'))
@@ -121,6 +127,11 @@ def write_reserves():
 
 
 def main():
+    if BASE is None or not os.path.isfile(BASE):
+        sys.exit('The original left knee model is needed: python build_lenhart2015_Left.py --base <file.osim> '
+                 '(see the header of this script; it is in the git history)')
+    if os.path.normcase(os.path.abspath(BASE)) in (os.path.normcase(OUT), os.path.normcase(OUT_TUNED)):
+        sys.exit('The base must not be an output file (%s would be overwritten)' % BASE)
     osim.Logger.setLevelString('Error')
     tmp_work = os.path.join(HERE, '_work.osim')
     try:
@@ -128,7 +139,7 @@ def main():
         print('\n'.join(log))
         print('%d changes' % len(log))
         model = osim.Model(tmp_work)
-        model.setName('lenhart2015_Left_fixed')
+        model.setName('lenhart2015_Left')
         model.initSystem()
         model.printToXML(OUT)
         print('wrote', OUT)

@@ -16,9 +16,9 @@ one in the frames above 10% of the peak force, as % of the contact patch diamete
 
 ## Models saved with the recommended settings (next to the originals, other file name)
 
-- `models/healthy/lenhart2015/lenhart2015_contact_tuned.osim`: smoothing 10 on the three cartilage meshes, `distance_field` (voxel 1 mm, taper 3 mm) in `tf_contact` and `pf_contact`.
-- `models/healthy/smith2019/smith2019_contact_tuned.osim` (menisci, linear contact as shipped): the same; the four meniscus contacts stay ray cast.
-- `models/healthy/smith2019/smith2019_contact_tuned_nonlinear.osim`: the same with `elastic_foundation_formulation` nonlinear in all six contacts.
+- `models/healthy/lenhart2015/lenhart2015_SDF.osim`: smoothing 10 on the three cartilage meshes, `distance_field` (voxel 1 mm, taper 3 mm) in `tf_contact` and `pf_contact`.
+- `models/healthy/smith2019/smith2019_SDF.osim` (menisci, linear contact as shipped): the same; the four meniscus contacts stay ray cast.
+- `models/healthy/smith2019/smith2019_SDF_nonlinear.osim`: the same with `elastic_foundation_formulation` nonlinear in all six contacts.
 - `OpenSim_Model_Atlas/Unscaled_Model_contact_tuned.osim`: `max_proximity` of `pf_bone_contact` 0.005 instead of 0.0005 (the sweep runs, see below).
 
 ## End to end: whole pipeline (IK sweep + COMAK) with the tuned settings against the default

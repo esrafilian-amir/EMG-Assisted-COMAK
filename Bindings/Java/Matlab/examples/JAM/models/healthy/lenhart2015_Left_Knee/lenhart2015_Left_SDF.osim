@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <OpenSimDocument Version="40600">
-	<Model name="lenhart2015_Left_fixed">
+	<Model name="lenhart2015_Left">
 		<defaults>
 			<Millard2012EquilibriumMuscle name="default">
 				<!--The path of the actuator which defines length and lengthening speed.-->

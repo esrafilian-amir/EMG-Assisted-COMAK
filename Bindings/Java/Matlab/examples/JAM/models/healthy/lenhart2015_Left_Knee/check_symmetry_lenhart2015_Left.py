@@ -1,6 +1,6 @@
-"""Right knee of lenhart2015.osim versus left knee of lenhart2015_Left_fixed(.osim) symmetry check.
+"""Right knee of lenhart2015.osim versus left knee of lenhart2015_Left(.osim) symmetry check.
 
-Usage: python check_symmetry_lenhart2015_Left_fixed.py [left_model.osim] [constraint_functions.xml] [right_model.osim]
+Usage: python check_symmetry_lenhart2015_Left.py [left_model.osim] [constraint_functions.xml] [right_model.osim]
 
 For knee flexion 0, 30, 60, 90, 120 deg (and the default pose) the other 10 knee/patella coordinates of the
 right knee are taken from the single knee constraint functions; the left knee gets the same values with the
@@ -16,7 +16,7 @@ import opensim as osim
 
 osim.Logger.setLevelString('Error')
 here = os.path.dirname(os.path.abspath(__file__))
-left_file = sys.argv[1] if len(sys.argv) > 1 else os.path.join(here, 'lenhart2015_Left_fixed.osim')
+left_file = sys.argv[1] if len(sys.argv) > 1 else os.path.join(here, 'lenhart2015_Left.osim')
 func_file = sys.argv[2] if len(sys.argv) > 2 else r'C:\Users\amires\Desktop\Subject03_JAM\Model\secondary_coordinate_constraint_functions.xml'
 right_file = sys.argv[3] if len(sys.argv) > 3 else os.path.join(os.path.dirname(here), 'lenhart2015', 'lenhart2015.osim')
 
