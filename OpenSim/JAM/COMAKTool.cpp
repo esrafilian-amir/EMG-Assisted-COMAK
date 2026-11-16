@@ -188,6 +188,7 @@ void COMAKTool::constructProperties() {
     constructProperty_max_iterations(50);
     constructProperty_udot_tolerance(1.0);
     constructProperty_udot_worse_case_tolerance(50.0);
+    constructProperty_use_least_bad_iteration(true);
     constructProperty_convergence_criterion("force");
     constructProperty_force_tolerance_rotation(0.1);
     constructProperty_force_tolerance_translation(2.0);
@@ -2056,10 +2057,17 @@ void COMAKTool::performCOMAK() {
             _consecutive_bad_frame++;
 
             // Reset to best iteration solution
-            double min_val = get_udot_worse_case_tolerance();
+            // use_least_bad_iteration: the iteration with the smallest error
+            // is used whatever its error (udot_worse_case_tolerance then only
+            // marks it with a warning); otherwise only an iteration below
+            // udot_worse_case_tolerance is used.
+            const double worst_case = get_udot_worse_case_tolerance();
+            double min_val = get_use_least_bad_iteration() ? SimTK::Infinity
+                                                           : worst_case;
             int min_iter = -1;
             std::string bad_coord;
-            for (int m = 0; m < get_max_iterations(); ++m) {
+            // (only the iterations that were done)
+            for (int m = 0; m < std::min(n_iter, (int)get_max_iterations()); ++m) {
                 if (iter_max_udot_error(m) < min_val) {
                     min_val = iter_max_udot_error(m);
                     min_iter = m;
@@ -2072,6 +2080,11 @@ void COMAKTool::performCOMAK() {
 
                 log_info("########################## Using best iteration ({}) with max udot error: {} ##########################",
                         min_iter, min_val);
+                if (min_val > worst_case) {
+                    log_warn("The error of the best iteration ({}) is above "
+                             "udot_worse_case_tolerance ({}): the solution of "
+                             "this time step is poor.", min_val, worst_case);
+                }
             } else {
                 _optim_parameters = _prev_parameters;
 

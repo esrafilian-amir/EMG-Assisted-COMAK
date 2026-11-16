@@ -5,6 +5,7 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
 
 ## Behaviour changes (defaults)
 
+- `COMAKTool.use_least_bad_iteration` (new, true): a time step that does not converge (after the cutback) uses the COMAK iteration with the smallest error, whatever it is, and not the solution of the previous time step. `udot_worse_case_tolerance` then only marks such a solution with a warning. `false` keeps the old rule (an iteration below `udot_worse_case_tolerance`, otherwise the previous time step). Only the iterations that were done are considered (the old loop also read the unused entries).
 - `Smith2018ArticularContactForce.contact_method` now defaults to `distance_field` (was `ray_cast`) for every model that does not set it; set `ray_cast` in the model (or `set_contact_method("ray_cast")`) to get the original ray method. Results of such models change by about 0.5 %.
 - `COMAKInverseKinematicsTool.secondary_constraint_sim_internal_step_limit` is 3000 (was -1, no limit): a settling
   or sweep simulation that needs more internal steps than that between two outputs stops with the integrator

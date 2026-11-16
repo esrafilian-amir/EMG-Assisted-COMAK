@@ -268,9 +268,22 @@ public:
         "converge. If the max difference between the udots for all iterations "
         "is greater than udot_worse_case_tolerance then no acceptable COMAK "
         "solution was found, and the solution from previous time step is used "
-        "for the current time step. With convergence_criterion 'force' the "
+        "for the current time step (only if use_least_bad_iteration is "
+        "false, otherwise it only marks a poor solution). With "
+        "convergence_criterion 'force' the "
         "value is in multiples of the force tolerances, as for "
         "udot_tolerance. The default value is 50.0.")
+
+    OpenSim_DECLARE_PROPERTY(use_least_bad_iteration, bool,
+        "If a time step does not converge (after the cutback), use the COMAK "
+        "iteration with the smallest error, whatever that error is. "
+        "udot_worse_case_tolerance then only marks such a solution: the log "
+        "shows a warning if its error is above it. If no iteration has a "
+        "finite error, the solution of the previous time step is used. If "
+        "false, only an iteration with an error below "
+        "udot_worse_case_tolerance is used, and otherwise the solution of the "
+        "previous time step. The failed time steps are listed in the "
+        "convergence summary in both cases. The default value is true.")
 
     OpenSim_DECLARE_PROPERTY(use_central_difference_jacobian, bool,
         "Compute the secondary coordinate columns of the linearized "
