@@ -90,6 +90,9 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
 
 ## New options
 
+- Visualizer of the COMAK tools (`show_solver_info_in_visualizer`): besides the contact forces, the total force of
+  the ACL, PCL, LCL, MCL and the patellar tendon (the sum of the forces of their bundles, `ACLam*`, `ACLpl*`,
+  `PCLal*`, `PCLpm*`, `LCL*`, `MCLs*`, `MCLd*`, `MCLp*`, `PT*`) is shown per knee.
 - `COMAKInverseKinematicsTool.secondary_constraint_sim_recovery` (true default; set false to stop at the first integrator failure): when the sweep integrator fails
   (CPodes corrector failure at a stiff contact), the interval is retried from the last good output through a ladder:
   restart, small step, looser accuracy, heavier patella and menisci (mass, inertia, damper scales), softer contact, and

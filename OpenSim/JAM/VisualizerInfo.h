@@ -11,6 +11,7 @@
  * -------------------------------------------------------------------------- */
 
 #include <OpenSim/Common/Logger.h>
+#include <OpenSim/Simulation/Model/Blankevoort1991Ligament.h>
 #include <OpenSim/Simulation/Model/Model.h>
 #include <OpenSim/Simulation/Model/Smith2018ArticularContactForce.h>
 #include <OpenSim/Simulation/Model/Smith2018ContactMesh.h>
@@ -79,13 +80,45 @@ inline std::string contactSide(const std::string& name) {
     return "";
 }
 
-// Contact forces (N) of one knee for the rows of the visualizer.
+// The ligament families of the rows of the visualizer: the total force of a
+// family is the sum of the forces of its bundles (ACLam1..., ACLpl1... are the
+// ACL), from the names of the Blankevoort1991Ligament components.
+enum LigamentFamily { kACL = 0, kPCL, kLCL, kMCL, kPatellarTendon,
+        kNumLigamentFamilies };
+
+// The family of a ligament from its name ("ACLpl3", "ACLpl3_r", "PT2", ...),
+// or -1 if it is none of them.
+inline int ligamentFamily(std::string name) {
+    // the side at the end of the name
+    const size_t k = name.size();
+    if (k >= 2 && name[k - 2] == '_' &&
+            (name[k - 1] == 'r' || name[k - 1] == 'l')) {
+        name.resize(k - 2);
+    }
+    // the number of the bundle
+    while (!name.empty() && std::isdigit((unsigned char)name.back())) {
+        name.pop_back();
+    }
+    if (name == "ACL" || name == "ACLam" || name == "ACLpl") { return kACL; }
+    if (name == "PCL" || name == "PCLal" || name == "PCLpm") { return kPCL; }
+    if (name == "LCL") { return kLCL; }
+    if (name == "MCL" || name == "MCLs" || name == "MCLd" ||
+            name == "MCLp") { return kMCL; }
+    if (name == "PT") { return kPatellarTendon; }
+    return -1;
+}
+
+// Forces (N) of one knee for the rows of the visualizer: contact forces and
+// the total forces of the ligament families.
 struct KneeForces {
     std::string side;
     SimTK::Vec3 medial = SimTK::Vec3(0);
     SimTK::Vec3 lateral = SimTK::Vec3(0);
     double patella = 0.0;
     bool have_tibia = false, have_patella = false;
+    double ligament[kNumLigamentFamilies] = {0, 0, 0, 0, 0};
+    bool have_ligament[kNumLigamentFamilies] = {false, false, false, false,
+            false};
 };
 
 // Contact forces (N): medial and lateral tibial plateau (sum of the
@@ -126,9 +159,11 @@ inline void updateKneeForces(const Model& model, const SimTK::State& state,
                 knee = &knees.back();
             }
             if (knees_updated.insert(side).second) {
-                const std::string keep_side = knee->side;
-                *knee = KneeForces();
-                knee->side = keep_side;
+                knee->medial = SimTK::Vec3(0);
+                knee->lateral = SimTK::Vec3(0);
+                knee->patella = 0.0;
+                knee->have_tibia = false;
+                knee->have_patella = false;
             }
             if (cn.find("patella") != std::string::npos ||
                     tn.find("patella") != std::string::npos) {
@@ -157,6 +192,36 @@ inline void updateKneeForces(const Model& model, const SimTK::State& state,
                 }
             }
             knee->have_tibia = true;
+        }
+
+        // Total forces of the ligament families (the sum of the forces of the
+        // bundles; the ligaments of a knee that are switched off keep their
+        // last values)
+        std::set<std::string> ligaments_updated;
+        for (const auto& lig :
+                model.getComponentList<Blankevoort1991Ligament>()) {
+            const int family = ligamentFamily(lig.getName());
+            if (family < 0 || !lig.appliesForce(state)) { continue; }
+            std::string side = contactSide(lig.getName());
+            if (side.empty()) { side = contactSide(lig.getAbsolutePathString()); }
+            KneeForces* knee = nullptr;
+            for (auto& k : knees) {
+                if (k.side == side) { knee = &k; }
+            }
+            if (!knee) {
+                knees.emplace_back();
+                knees.back().side = side;
+                knee = &knees.back();
+            }
+            if (ligaments_updated.insert(side).second) {
+                for (int f = 0; f < kNumLigamentFamilies; ++f) {
+                    knee->ligament[f] = 0.0;
+                    knee->have_ligament[f] = false;
+                }
+            }
+            knee->ligament[family] +=
+                    lig.getOutputValue<double>(state, "total_force");
+            knee->have_ligament[family] = true;
         }
     } catch (const std::exception& ex) {
         knees.clear();
@@ -190,6 +255,17 @@ inline void addKneeForceRows(const std::vector<KneeForces>& knees,
         }
         if (knee.have_patella) {
             addInfoRow(info, prefix + patella_label, "%.0f N", knee.patella);
+        }
+        static const char* ligament_labels[kNumLigamentFamilies] = {
+                "ACL force", "PCL force", "LCL force", "MCL force",
+                "Patellar tendon force"};
+        for (int f = 0; f < kNumLigamentFamilies; ++f) {
+            if (!knee.have_ligament[f]) { continue; }
+            std::string label = ligament_labels[f];
+            // (the first letter is lower case after the side, except the
+            // names of the ligaments)
+            if (f == kPatellarTendon && named) { label[0] = 'p'; }
+            addInfoRow(info, prefix + label, "%.0f N", knee.ligament[f]);
         }
     }
 }

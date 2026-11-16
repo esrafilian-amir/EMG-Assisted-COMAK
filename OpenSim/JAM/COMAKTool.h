@@ -323,7 +323,7 @@ public:
 
     OpenSim_DECLARE_PROPERTY(show_solver_info_in_visualizer, bool,
         "Show the frame, time step, iteration, residual, status and the "
-        "contact forces (medial and lateral tibia, patella) as text in the "
+        "contact forces (medial and lateral tibia, patella) and the total forces of the ACL, PCL, LCL, MCL and patellar tendon as text in the "
         "visualizer window. The default value is true.")
     OpenSim_DECLARE_PROPERTY(max_cutback_levels, int,
         "Automatic time step cutback, as in Abaqus. When a time step does not "
