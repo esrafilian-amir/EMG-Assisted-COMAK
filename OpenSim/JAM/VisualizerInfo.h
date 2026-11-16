@@ -116,6 +116,10 @@ struct KneeForces {
     SimTK::Vec3 lateral = SimTK::Vec3(0);
     double patella = 0.0;
     bool have_tibia = false, have_patella = false;
+    // The other contact forces of the model (not the tibial plateau or the
+    // patella ones above): the name of the force in the model file and its
+    // total contact force (N)
+    std::vector<std::pair<std::string, double>> other;
     double ligament[kNumLigamentFamilies] = {0, 0, 0, 0, 0};
     bool have_ligament[kNumLigamentFamilies] = {false, false, false, false,
             false};
@@ -164,6 +168,7 @@ inline void updateKneeForces(const Model& model, const SimTK::State& state,
                 knee->patella = 0.0;
                 knee->have_tibia = false;
                 knee->have_patella = false;
+                knee->other.clear();
             }
             if (cn.find("patella") != std::string::npos ||
                     tn.find("patella") != std::string::npos) {
@@ -175,7 +180,13 @@ inline void updateKneeForces(const Model& model, const SimTK::State& state,
             const bool tibia_cast = cn.find("tibia") != std::string::npos;
             const bool tibia_target = tn.find("tibia") != std::string::npos;
             // (the target regional force cache is not available during COMAK)
-            if (!tibia_cast || tibia_target) { continue; }
+            if (!tibia_cast || tibia_target) {
+                // any other contact force: a row with the name of the force
+                knee->other.emplace_back(cf.getName(),
+                        cf.getOutputValue<SimTK::Vec3>(
+                                state, "casting_total_contact_force").norm());
+                continue;
+            }
             const SimTK::Vector_<SimTK::Vec3> regional = tibia_cast
                     ? cf.getOutputValue<SimTK::Vector_<SimTK::Vec3>>(
                               state, "casting_regional_contact_force")
@@ -255,6 +266,9 @@ inline void addKneeForceRows(const std::vector<KneeForces>& knees,
         }
         if (knee.have_patella) {
             addInfoRow(info, prefix + patella_label, "%.0f N", knee.patella);
+        }
+        for (const auto& other : knee.other) {
+            addInfoRow(info, other.first, "%.0f N", other.second);
         }
         static const char* ligament_labels[kNumLigamentFamilies] = {
                 "ACL force", "PCL force", "LCL force", "MCL force",
