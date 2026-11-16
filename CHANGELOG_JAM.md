@@ -13,6 +13,8 @@ Changes to the COMAK, COMAK inverse kinematics and contact code relative to the 
 - `COMAKTool.convergence_criterion` is `force`: a time step has converged when the unbalanced
   generalized force `M (udot - observed)` is below `force_tolerance_rotation` (0.1 N*m) and
   `force_tolerance_translation` (2 N; the residual of the models with menisci stalls just above 1 N). Use `acceleration` for the previous test.
+  The convergence test covers the secondary coordinates only; the primary coordinates (hip, ankle, ...) stay in the
+  optimization as acceleration constraints, and their largest residual is only logged.
 - `COMAKTool.solver` is `casadi_ipopt` (IPOPT through CasADi with the exact Hessian). `ipopt` is the
   previous solver, `casadi_qrqp` an active-set QP solver. Without CasADi, `ipopt` is used.
 - `COMAKSecondaryCoordinate.max_change` is the limit on the total change in a time step (it was

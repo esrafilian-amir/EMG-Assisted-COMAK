@@ -1908,14 +1908,31 @@ void COMAKTool::performCOMAK() {
             SimTK::Vector force_residual;
             _model.getMatterSubsystem().multiplyByM(
                     state, udot_error_by_u, force_residual);
+            // The convergence test covers the secondary coordinates. The
+            // primary coordinates (hip, ankle, ...) are still in the
+            // optimization as acceleration constraints (the muscles and
+            // reserve actuators absorb their error), but nothing in this
+            // loop moves them, so their residual is only reported.
             double max_force_ratio = 0.0;
             double max_force = 0.0;
             std::string max_force_coord = "";
+            double other_force_ratio = 0.0, other_force = 0.0;
+            std::string other_force_coord = "";
             for (size_t r = 0; r < residual_u.size(); ++r) {
                 const double force = std::abs(force_residual[residual_u[r]]);
                 const double tolerance = residual_rotational[r]
                         ? get_force_tolerance_rotation()
                         : get_force_tolerance_translation();
+                if (_n_secondary_coord > 0 &&
+                        get_convergence_criterion() == "force" &&
+                        _secondary_coord_name.findIndex(residual_name[r]) < 0) {
+                    if (force / tolerance > other_force_ratio) {
+                        other_force_ratio = force / tolerance;
+                        other_force = force;
+                        other_force_coord = residual_name[r];
+                    }
+                    continue;
+                }
                 if (!std::isfinite(force)) {
                     // NaN fails every comparison, so it would count as converged
                     max_force_ratio = SimTK::Infinity;
@@ -1932,6 +1949,13 @@ void COMAKTool::performCOMAK() {
             log_info("Max force residual: {} (N or N*m)      Coord: {}      "
                      "Times its tolerance: {}",
                     max_force, max_force_coord, max_force_ratio);
+            if (get_convergence_criterion() == "force" &&
+                    _n_secondary_coord > 0) {
+                log_info("Other coordinates (primary, not secondary), not "
+                         "used for convergence: max force residual {} (N or "
+                         "N*m)  Coord: {}  Times its tolerance: {}",
+                        other_force, other_force_coord, other_force_ratio);
+            }
             if (get_convergence_criterion() == "force") {
                 log_info("Max acceleration error: {} (Coord: {}), not used "
                          "for convergence", max_udot_error, max_udot_coord);
